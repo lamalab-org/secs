@@ -1,54 +1,84 @@
+"""
+Sources: https://towardsdatascience.com/adding-custom-layers-on-top-of-a-hugging-face-model-f1ccdfc257bd
+"""
+
+from types import SimpleNamespace
 import torch
-from torch import nn
+import torch.nn as nn
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from typing import Dict
+import os
 
 
-class SimpleDenseNet(nn.Module):
-    """A simple fully-connected neural net for computing predictions."""
+ModalityType = SimpleNamespace(
+    SMILES="smiles",
+    SELFIES="selfies",
+    TEXT="text",
+    NMR="nmr",
+    STRUCTURES_3D="structures_3d",
+    IMAGES_2D="images_2d",
+    IR="ir"
+)
 
-    def __init__(
-        self,
-        input_size: int = 784,
-        lin1_size: int = 256,
-        lin2_size: int = 256,
-        lin3_size: int = 256,
-        output_size: int = 10,
-    ) -> None:
-        """Initialize a `SimpleDenseNet` module.
+torch.set_float32_matmul_precision('medium')
+torch.cuda.empty_cache()
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-        :param input_size: The number of input features.
-        :param lin1_size: The number of output features of the first linear layer.
-        :param lin2_size: The number of output features of the second linear layer.
-        :param lin3_size: The number of output features of the third linear layer.
-        :param output_size: The number of output features of the final linear layer.
-        """
+
+class MolBind(nn.Module):
+    def __init__(self, model_opt_params : Dict):
         super().__init__()
-
-        self.model = nn.Sequential(
-            nn.Linear(input_size, lin1_size),
-            nn.BatchNorm1d(lin1_size),
-            nn.ReLU(),
-            nn.Linear(lin1_size, lin2_size),
-            nn.BatchNorm1d(lin2_size),
-            nn.ReLU(),
-            nn.Linear(lin2_size, lin3_size),
-            nn.BatchNorm1d(lin3_size),
-            nn.ReLU(),
-            nn.Linear(lin3_size, output_size),
+    
+        # SMILES is the central modality
+        self.modality_pair = (ModalityType.SMILES, self.config.modality_2)
+    
+        # SMILES model
+        self.smiles_model = AutoModelForCausalLM.from_pretrained("seyonec/ChemBERTa-zinc-base-v1").requires_grad_(False)
+        self.tokenizer_smiles = AutoTokenizer.from_pretrained("seyonec/ChemBERTa-zinc-base-v1")
+        self.dropout_smiles = nn.Dropout(0.1)
+        self.fc_smiles = nn.Sequential(
+            nn.Linear(768, 256), 
+            nn.LeakyReLU(),
+            nn.Linear(256, 1024)
         )
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Perform a single forward pass through the network.
-
-        :param x: The input tensor.
-        :return: A tensor of predictions.
-        """
-        batch_size, channels, width, height = x.size()
-
-        # (batch, 1, width, height) -> (batch, 1*width*height)
-        x = x.view(batch_size, -1)
-
-        return self.model(x)
-
-
-if __name__ == "__main__":
-    _ = SimpleDenseNet()
+        
+        # SELFIES model
+        self.selfies_model = AutoModelForCausalLM.from_pretrained("HUBioDataLab/SELFormer").requires_grad_(False)
+        self.tokenizer = AutoTokenizer.from_pretrained("HUBioDataLab/SELFormer")
+        self.dropout = nn.Dropout(0.1)
+        self.fc = nn.Sequential(
+            nn.Linear(768, 256),
+            nn.LeakyReLU(),
+            nn.Linear(256, 1024)
+        )
+        # NMR model
+        
+        # IR model
+        
+        # Text model (IUPAC names, etc.)
+        
+        # Image model (2D structures)
+        
+        # 3D model (3D structures)
+        
+    def forward(self, input_ids_modality_1, attention_mask_modality_1, input_ids_modality_2, attention_mask_modality_2):
+        
+        output_chemberta = self.smiles_model(input_ids=input_ids_modality_1, 
+                                            attention_mask=attention_mask_modality_1,
+                                            output_hidden_states=True)
+        hidden_states_chemberta = output_chemberta.hidden_states[1][:, -1]
+        x_chemberta = self.fc_smiles(hidden_states_chemberta)
+        
+        if self.modality_pair[1] == "selfies":
+            outputs_selformer = self.selfies_model(
+                input_ids=input_ids_modality_2, 
+                attention_mask=attention_mask_modality_2,  
+                output_hidden_states=True
+                )
+            # RETURNED HIDDEN STATES
+            hidden_states_selformer = outputs_selformer.hidden_states[1][:, -1]
+            x = self.fc(hidden_states_selformer)
+        return x, x_chemberta
+    
+    def load_from_checkpoint(self, path: str):
+        return torch.load(path)
