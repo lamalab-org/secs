@@ -1,25 +1,142 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "molbind"
+description="A package for binding molecular embeddings."
+version = "0.0.1"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Adrian Mirza", email = "andrian.mirza@uni-jena.de" }]
+keywords = ["embeddings", "contrastive learning"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: Unix",
+    "Operating System :: MacOS",
+]
+requires-python = ">=3.9, <3.13"
+dependencies = ["numpy"]
+
+[project.optional-dependencies]
+dev = ["codecov-cli>=0.4.1", "pytest>=7.4.0", "pytest-cov>=3.0.0", "ruff>=0.0.285"]
+docs = [
+    "mkdocs-material>=9.4.0",
+    "mkdocstrings[python]>=0.22.0",
+    "mkdocs-gen-files>=0.5.0",
+    "mkdocs-literate-nav>=0.6.0",
+    "pillow>=10.0.0",
+    "cairosvg>=2.7.1"
+]
+
+[project.urls]
+repository = "https://github.com/Quantum-Accelerators/template"
+documentation = "https://quantum-accelerators.github.io/template/"
+changelog = "https://github.com/Quantum-Accelerators/template/blob/main/CHANGELOG.md"
+
+[tool.setuptools.package-data]
+template = ["py.typed"]
+
+[tool.pyright]
+include = ["template"]
+exclude = ["**/__pycache__"]
+
 [tool.pytest.ini_options]
-addopts = [
-  "--color=yes",
-  "--durations=0",
-  "--strict-markers",
-  "--doctest-modules",
-]
-filterwarnings = [
-  "ignore::DeprecationWarning",
-  "ignore::UserWarning",
-]
-log_cli = "True"
-markers = [
-  "slow: slow tests",
-]
 minversion = "6.0"
-testpaths = "tests/"
+addopts = ["-p no:warnings", "--import-mode=importlib"]
+xfail_strict = true
+log_cli_level = "warn"
+pythonpath = "src"
+testpaths = ["tests"]
+
+[tool.black]
+exclude = '''
+/(
+    \.git
+  | \.tox
+)/
+'''
+skip-magic-trailing-comma = true
+
+[tool.isort]
+profile = 'black'
+skip_gitignore = true
+
+[tool.coverage.run]
+source = ["src"]
 
 [tool.coverage.report]
-exclude_lines = [
-    "pragma: nocover",
-    "raise NotImplementedError",
-    "raise NotImplementedError()",
+exclude_also = [
+    "if TYPE_CHECKING:",
     "if __name__ == .__main__.:",
+    "except ImportError",
 ]
+
+[tool.ruff]
+lint.select = [
+  "E", "F", "W", # flake8
+  "B",           # flake8-bugbear
+  "I",           # isort
+  "ARG",         # flake8-unused-arguments
+  "C4",          # flake8-comprehensions
+  "EM",          # flake8-errmsg
+  "ICN",         # flake8-import-conventions
+  "ISC",         # flake8-implicit-str-concat
+  "G",           # flake8-logging-format
+  "PGH",         # pygrep-hooks
+  "PIE",         # flake8-pie
+  "PL",          # pylint
+  "PT",          # flake8-pytest-style
+  "PTH",         # flake8-use-pathlib
+  "RET",         # flake8-return
+  "RUF",         # Ruff-specific
+  "SIM",         # flake8-simplify
+  "T20",         # flake8-print
+  "UP",          # pyupgrade
+  "YTT",         # flake8-2020
+  "EXE",         # flake8-executable
+  "NPY",         # NumPy specific rules
+  "PD",          # pandas-vet
+]
+lint.extend-ignore = [
+  "PLR",    # Design related pylint codes
+  "E501",   # Line too long
+  "B028",   # No explicit stacklevel
+  "EM101",  # Exception must not use a string literal
+  "EM102",  # Exception must not use an f-string literal
+  "G004",   # f-string in Logging statement
+  "RUF015", # Prefer next(iter())
+  "RET505", # Unnecessary `elif` after `return`
+]
+lint.typing-modules = ["mypackage._compat.typing"]
+lint.unfixable = [
+  "T20",  # Removes print statements
+  "F841", # Removes unused variables
+]
+lint.flake8-unused-arguments.ignore-variadic-names = true
+lint.pydocstyle.convention = "numpy"
+lint.isort.required-imports = ["from __future__ import annotations"]
+lint.isort.known-first-party = ["template"]
+src = ["src"]
+exclude = []
+extend-exclude = ["tests"]
+
+[tool.docformatter]
+pre-summary-newline = true
+black = true
+
+[tool.mypy]
+ignore_missing_imports = true
+namespace_packages = true
+explicit_package_bases = true
+no_implicit_optional = false
+disable_error_code = "annotation-unchecked"
