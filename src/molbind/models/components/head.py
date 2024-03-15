@@ -8,7 +8,7 @@ class ProjectionHead(nn.Module):
         # build projection head
         self.projection_head = self.build_projection_head(dims, activation)
 
-    
+
     def build_projection_head(self, dims, activation):
         # Build projection head dynamically based on the length of dims
         layers = []
@@ -16,8 +16,8 @@ class ProjectionHead(nn.Module):
             layers.append(nn.Linear(dims[i], dims[i + 1]))
             layers.append(nn.BatchNorm1d(dims[i + 1]))  # Optional: add batch normalization
             layers.append(self._get_activation(activation))  # Apply activation function
-        
-        self.projection = nn.Sequential(*layers)
+
+        return nn.Sequential(*layers)
 
     def _get_activation(self, activation):
             if isinstance(activation, str):
@@ -32,6 +32,9 @@ class ProjectionHead(nn.Module):
                 else:
                     raise NotImplementedError(f"Activation {activation} is not implemented.")
             elif isinstance(activation, list):
+                # TODO: is this compatible with the call above?
+                # why more than one nonlinearity after the other?
+
                 # In case you want multiple activation functions in sequence
                 return nn.Sequential(*[self._get_activation(act) for act in activation])
             else:
