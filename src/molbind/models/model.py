@@ -24,7 +24,13 @@ class MolBind(nn.Module):
         
         # Instantiate projection head and pooler
         self.pooler = EmbedPooler(cfg.model.pooler)
-        self.projection_head = ProjectionHead(cfg.model.projection_head)
+        
+        self.projection_heads = {
+            "smiles" : ProjectionHead(cfg.model.projection_head.smiles),
+            "selfies" : ProjectionHead(cfg.model.projection_head.selfies),
+            "graph" : ProjectionHead(cfg.model.projection_head.graph),
+            "nmr" : ProjectionHead(cfg.model.projection_head.nmr)
+        }
         
     def forward(self, input) -> Tensor:
         store_embeddings = {}
@@ -33,6 +39,6 @@ class MolBind(nn.Module):
             # forward through respective encoder
             store_embeddings[modality] = self.dict_encoders[modality](input[modality]).last_hidden_state
             # projection head
-            store_embeddings[modality] = self.projection_head(store_embeddings[modality])
+            store_embeddings[modality] = self.projection_heads[modality](store_embeddings[modality])
         return store_embeddings
 
