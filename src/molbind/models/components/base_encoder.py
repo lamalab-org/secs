@@ -5,18 +5,16 @@ import torch.nn as nn
     
 class BaseModalityEncoder(nn.Module):
     def __init__(self, 
-                projection_head_type : Literal["linear", "non-linear"] = "non-linear",
+                freeze_encoder: bool = False,
                 pretrained=True,
+                *args,
                 **kwargs):
-       self.pretrained = pretrained
-       self.encoder = self.build_encoder() 
+        super(BaseModalityEncoder, self).__init__()
+        self.pretrained = pretrained
+        self.freeze_encoder = freeze_encoder
 
-    
     def build_encoder(self):
         pass
     
     def forward(self, x):
-        x = self.encoder(x)
-        x = self.projection_head(x)
-        # pooling
-        return x
+        return self.encoder(x)

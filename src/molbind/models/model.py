@@ -1,43 +1,56 @@
 from molbind.models.components.custom_encoders import SmilesEncoder, SelfiesEncoder, GraphEncoder
 from molbind.models.components.head import ProjectionHead
-from molbind.models.component.pooler import EmbedPooler
-from molbind.data.dataloaders import MolBindDataModule
-import pytorch_lightning as pl
 from torch import Tensor
+import torch.nn as nn
+import torch
+
+
+AVAILABLE_ENCODERS = {
+    "smiles" : SmilesEncoder,
+    "selfies" : SelfiesEncoder,
+    "graph" : GraphEncoder,
+    "nmr" : None
+}
 
 
 class MolBind(nn.Module):
     def __init__(self, cfg):
         super(MolBind, self).__init__()
-        # Instantiate all encoders
-        self.smiles_encoder = SmilesEncoder(cfg.model.smiles_encoder)
-        self.selfies_encoder = SelfiesEncoder(cfg.model.selfies_encoder)
-        self.graph_encoder = GraphEncoder(cfg.model.graph_encoder)
-        self.nmr_encoder = None
         
-        self.dict_encoders = {
-            "smiles" : self.smiles_encoder,
-            "selfies" : self.selfies_encoder,
-            "graph" : self.graph_encoder,
-            "nmr" : self.nmr_encoder
-        }
+        modalities = cfg.data.modalities
+        # Instantiate all encoders in modalities
+
+        self.dict_encoders = {"smiles" : SmilesEncoder()}
+        self.dict_projection_heads = {"smiles" : ProjectionHead(cfg.model.projection_heads["smiles"])}
+
+        for modality in modalities:
+            if modality not in AVAILABLE_ENCODERS.keys():
+                raise ValueError(f"Modality {modality} not supported yet.")
+            self.dict_encoders[modality] = AVAILABLE_ENCODERS[modality]() # cfg.model.encoders[modality]
+            self.dict_projection_heads[modality] = ProjectionHead(cfg.model.projection_heads[modality])
         
+        # convert to nn.ModuleDict
+        self.dict_encoders = nn.ModuleDict(self.dict_encoders)
+        self.dict_projection_heads = nn.ModuleDict(self.dict_projection_heads)
         # Instantiate projection head and pooler
-        self.pooler = EmbedPooler(cfg.model.pooler)
-        
-        self.dict_projection_heads = {
-            "smiles" : ProjectionHead(cfg.model.projection_head.smiles),
-            "selfies" : ProjectionHead(cfg.model.projection_head.selfies),
-            "graph" : ProjectionHead(cfg.model.projection_head.graph),
-            "nmr" : ProjectionHead(cfg.model.projection_head.nmr)
-        }
-        
+        # self.pooler = EmbedPooler(cfg.model.pooler)
+
     def forward(self, input) -> Tensor:
         store_embeddings = {}
         # dataloader keys are other modalities
-        for modality in input.keys():
+        _, modality = [*input[0]]
+            # input is a dictionary with (smiles, modality) pairs
+            # store embeddings as store_embeddings[modality] = (smiles_embedding, modality_embedding)
             # forward through respective encoder
-            store_embeddings[modality] = self.dict_encoders[modality](input[modality]).last_hidden_state
-            # projection head
-            store_embeddings[modality] = self.dict_projection_heads[modality](store_embeddings[modality])
+
+        smiles_embedding = self.dict_encoders["smiles"].forward(input[0]["smiles"])
+        modality_embedding = self.dict_encoders[modality].forward(input[0][modality])
+        smiles_embedding_projected = self.dict_projection_heads["smiles"](smiles_embedding)
+        modality_embedding_projected = self.dict_projection_heads[modality](modality_embedding)
+        # projection head
+        store_embeddings["smiles"] = smiles_embedding_projected
+        store_embeddings[modality] = modality_embedding_projected
         return store_embeddings
+    
+    def load_from_checkpoint(self, path: str):
+        return torch.load(path)

@@ -8,7 +8,6 @@ class ProjectionHead(nn.Module):
         # build projection head
         self.projection_head = self.build_projection_head(dims, activation)
 
-    
     def build_projection_head(self, dims, activation):
         # Build projection head dynamically based on the length of dims
         layers = []
@@ -17,22 +16,25 @@ class ProjectionHead(nn.Module):
             layers.append(nn.BatchNorm1d(dims[i + 1]))  # Optional: add batch normalization
             layers.append(self._get_activation(activation))  # Apply activation function
         
-        self.projection = nn.Sequential(*layers)
+        return nn.Sequential(*layers)
 
     def _get_activation(self, activation):
-            if isinstance(activation, str):
-                if activation.lower() == 'relu':
-                    return nn.ReLU(inplace=True)
-                elif activation.lower() == 'leakyrelu':
-                    return nn.LeakyReLU(inplace=True)
-                elif activation.lower() == 'sigmoid':
-                    return nn.Sigmoid()
-                elif activation.lower() == 'tanh':
-                    return nn.Tanh()
-                else:
-                    raise NotImplementedError(f"Activation {activation} is not implemented.")
-            elif isinstance(activation, list):
-                # In case you want multiple activation functions in sequence
-                return nn.Sequential(*[self._get_activation(act) for act in activation])
+        if isinstance(activation, str):
+            if activation.lower() == 'relu':
+                return nn.ReLU(inplace=True)
+            elif activation.lower() == 'leakyrelu':
+                return nn.LeakyReLU(inplace=True)
+            elif activation.lower() == 'sigmoid':
+                return nn.Sigmoid()
+            elif activation.lower() == 'tanh':
+                return nn.Tanh()
             else:
-                raise ValueError("Activation should be either a string or a list of strings.")
+                raise NotImplementedError(f"Activation {activation} is not implemented.")
+        elif isinstance(activation, list):
+            # In case you want multiple activation functions in sequence
+            return nn.Sequential(*[self._get_activation(act) for act in activation])
+        else:
+            raise ValueError("Activation should be either a string or a list of strings.")
+        
+    def forward(self, x):
+        return self.projection_head(x)
