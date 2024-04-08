@@ -6,12 +6,11 @@ from molbind.utils.utils import reinitialize_weights
 
 
 class SmilesEncoder(BaseModalityEncoder):
-    def __init__(self,
-                freeze_encoder : bool = False,
-                pretrained=True,
-                **kwargs) -> None:
+    def __init__(self, freeze_encoder: bool = False, pretrained=True, **kwargs) -> None:
         super().__init__(freeze_encoder, pretrained, **kwargs)
-        self.encoder = AutoModelForCausalLM.from_pretrained("seyonec/ChemBERTa-zinc-base-v1")
+        self.encoder = AutoModelForCausalLM.from_pretrained(
+            "seyonec/ChemBERTa-zinc-base-v1"
+        )
         if freeze_encoder:
             for param in self.encoder.parameters():
                 param.requires_grad = False
@@ -23,8 +22,8 @@ class SmilesEncoder(BaseModalityEncoder):
         return self.encoder(
             input_ids=token_ids,
             attention_mask=attention_mask,
-            output_hidden_states=True
-            ).hidden_states[-1].sum(dim=1)/attention_mask.sum(dim=1).unsqueeze(1)
+            output_hidden_states=True,
+        ).hidden_states[-1].sum(dim=1) / attention_mask.sum(dim=1).unsqueeze(1)
 
 
 class SelfiesEncoder(BaseModalityEncoder):
@@ -37,14 +36,14 @@ class SelfiesEncoder(BaseModalityEncoder):
         if not pretrained:
             self.encoder = reinitialize_weights(self.encoder)
 
-    def forward(self, x : Dict[str, torch.Tensor]) -> torch.Tensor:
+    def forward(self, x: Dict[str, torch.Tensor]) -> torch.Tensor:
         token_ids, attention_mask = x
 
         return self.encoder(
             input_ids=token_ids,
             attention_mask=attention_mask,
-            output_hidden_states=True
-            ).hidden_states[-1].sum(dim=1)/attention_mask.sum(dim=1).unsqueeze(1)
+            output_hidden_states=True,
+        ).hidden_states[-1].sum(dim=1) / attention_mask.sum(dim=1).unsqueeze(1)
 
 
 class IUPACNameEncoder(BaseModalityEncoder):
@@ -52,7 +51,9 @@ class IUPACNameEncoder(BaseModalityEncoder):
 
 
 class IREncoder(BaseModalityEncoder):
-    def __init__(self, freeze_encoder: bool = False, pretrained: bool = False, **kwargs) -> None:
+    def __init__(
+        self, freeze_encoder: bool = False, pretrained: bool = False, **kwargs
+    ) -> None:
         super().__init__(freeze_encoder, pretrained, **kwargs)
         self.encoder = None
         if freeze_encoder:
@@ -66,8 +67,8 @@ class IREncoder(BaseModalityEncoder):
         return self.encoder(
             input_ids=token_ids,
             attention_mask=attention_mask,
-            output_hidden_states=True
-            ).hidden_states[-1].sum(dim=1)/attention_mask.sum(dim=1).unsqueeze(1)
+            output_hidden_states=True,
+        ).hidden_states[-1].sum(dim=1) / attention_mask.sum(dim=1).unsqueeze(1)
 
 
 class GraphEncoder(BaseModalityEncoder):
@@ -83,11 +84,11 @@ class NMREncoder(BaseModalityEncoder):
                 param.requires_grad = False
         if not pretrained:
             self.encoder = reinitialize_weights(self.encoder)
-    
+
     def forward(self, x):
         token_ids, attention_mask = x
         return self.encoder(
             input_ids=token_ids,
             attention_mask=attention_mask,
-            output_hidden_states=True
-            ).hidden_states[-1].sum(dim=1)/attention_mask.sum(dim=1).unsqueeze(1)
+            output_hidden_states=True,
+        ).hidden_states[-1].sum(dim=1) / attention_mask.sum(dim=1).unsqueeze(1)
