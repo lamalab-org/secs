@@ -5,6 +5,8 @@ import torch
 from torch.nn.functional import cosine_similarity
 import pytorch_lightning as L
 import hydra
+from molbind.data.dataloaders import load_combined_loader, MODALITY_DATA_TYPES
+import polars as pl
 
 
 class MolBindModule(LightningModule):
@@ -44,54 +46,80 @@ class MolBindModule(LightningModule):
         )
 
 
-from molbind.data.dataloaders import load_combined_loader
-import polars as pl
-
-
 def train_molbind(config: dict = None):
-    wandb_logger = L.loggers.WandbLogger(project="embedbind", entity="adrianmirza")
+    wandb_logger = L.loggers.WandbLogger(
+        project=config.wandb.project_name, entity=config.wandb.entity
+    )
 
     device_count = torch.cuda.device_count()
     trainer = L.Trainer(
         max_epochs=100,
         accelerator="cuda",
-        log_every_n_steps=50,
+        log_every_n_steps=10,
         logger=wandb_logger,
         devices=device_count if device_count > 1 else "auto",
         strategy="ddp" if device_count > 1 else "auto",
     )
 
+    train_modality_data = {}
+    valid_modality_data = {}
+
     # Example SMILES - SELFIES modality pair:
-    data = pl.read_csv("selfies_smiles_data.csv")[:1000]
-    shuffled_selfies = data.sample(fraction=1, shuffle=True, seed=42)
-    train_selfies = shuffled_selfies.head(int(0.8 * len(shuffled_selfies)))
-    valid_selfies = shuffled_selfies.tail(int(0.2 * len(shuffled_selfies)))
+    data = pl.read_csv(config.data.dataset_path)[:4096]
+    shuffled_data = data.sample(fraction=1, shuffle=True, seed=42)
+    dataset_length = len(shuffled_data)
+    valid_shuffled_data = shuffled_data.tail(
+        int(config.data.valid_frac * dataset_length)
+    )
+    train_shuffled_data = shuffled_data.head(
+        int(config.data.train_frac * dataset_length)
+    )
+
+    columns = shuffled_data.columns
+
+    for column in columns:
+        if column in [*MODALITY_DATA_TYPES] and column != "smiles":
+            # drop nan for specific pair
+            train_modality_smiles_pair = train_shuffled_data[
+                ["smiles", column]
+            ].drop_nulls()
+            valid_modality_smiles_pair = valid_shuffled_data[
+                ["smiles", column]
+            ].drop_nulls()
+
+            train_modality_data[column] = [
+                train_modality_smiles_pair["smiles"].to_list(),
+                train_modality_smiles_pair[column].to_list(),
+            ]
+            valid_modality_data[column] = [
+                valid_modality_smiles_pair["smiles"].to_list(),
+                valid_modality_smiles_pair[column].to_list(),
+            ]
 
     combined_loader = load_combined_loader(
-        data_modalities={
-            "selfies": [
-                train_selfies["smiles"].to_list(),
-                train_selfies["selfies"].to_list(),
-            ],
-        },
+        data_modalities=train_modality_data,
+        batch_size=256,
+        shuffle=True,
+        num_workers=1,
+    )
+
+    valid_dataloader = load_combined_loader(
+        data_modalities=valid_modality_data,
         batch_size=256,
         shuffle=False,
         num_workers=1,
     )
 
-    valid_dataloader = load_combined_loader(
-        data_modalities={
-            "selfies": [
-                valid_selfies["smiles"].to_list(),
-                valid_selfies["selfies"].to_list(),
-            ]
-        },
-        batch_size=100,
-        shuffle=False,
-        num_workers=1,
+    trainer.fit(
+        MolBindModule(config),
+        train_dataloaders=combined_loader,
+        val_dataloaders=valid_dataloader,
     )
 
+
+if __name__ == "__main__":
     config = {
+        "wandb": {"entity": "wandb_username", "project_name": "embedbind"},
         "model": {
             "projection_heads": {
                 "selfies": {"dims": [256, 128]},
@@ -100,16 +128,15 @@ def train_molbind(config: dict = None):
         },
         "loss": {"temperature": 0.1},
         "optimizer": {"lr": 1e-4, "weight_decay": 1e-4},
-        "data": {"modalities": ["selfies"]},
+        "data": {
+            "modalities": ["selfies"],
+            "dataset_path": "selfies_smiles_data.csv",
+            "train_frac": 0.8,
+            "valid_frac": 0.2,
+        },
     }
 
     from omegaconf import DictConfig
 
     config = DictConfig(config)
-    trainer.fit(
-        MolBindModule(config), combined_loader, val_dataloaders=valid_dataloader
-    )
-
-
-if __name__ == "__main__":
-    train_molbind()
+    train_molbind(config)
