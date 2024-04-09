@@ -3,7 +3,8 @@ from lightning.pytorch.utilities.combined_loader import CombinedLoader
 from molbind.data.components.tokenizers import SMILES_TOKENIZER, SELFIES_TOKENIZER
 import networkx as nx
 from networkx import Graph
-from typing import List, Dict
+from typing import List, Dict, Tuple
+from torch import Tensor
 
 
 MODALITY_DATA_TYPES = {
@@ -22,8 +23,14 @@ STRING_TOKENIZERS = {
 
 
 class StringDataset(Dataset):
-    def __init__(self, dataset, modality, context_length=256):
-        self.dataset = dataset
+    def __init__(self, dataset : Tuple[Tensor, Tensor], modality : str, context_length=256):
+        """_summary_
+
+        Args:
+            dataset (Tuple[Tensor, Tensor]): pair of SMILES and data for the modality (smiles always index 0, modality index 1)
+            modality (str): name of data modality as found in MODALITY_DATA_TYPES
+            context_length (int, optional): _description_. Defaults to 256.
+        """
         self.modality = modality
         self.tokenized_smiles = STRING_TOKENIZERS["smiles"](
             dataset[0],
