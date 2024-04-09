@@ -1,8 +1,4 @@
-from typing import Dict, Tuple
-import torch
-from transformers import AutoModelForCausalLM
 from molbind.models.components.base_encoder import BaseModalityEncoder
-from molbind.utils.utils import reinitialize_weights
 
 
 class SmilesEncoder(BaseModalityEncoder):
