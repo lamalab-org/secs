@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Tuple
 import torch
 from transformers import AutoModelForCausalLM
 from molbind.models.components.base_encoder import BaseModalityEncoder
@@ -17,7 +17,7 @@ class SmilesEncoder(BaseModalityEncoder):
         if not pretrained:
             self.encoder = reinitialize_weights(self.encoder)
 
-    def forward(self, x):
+    def forward(self, x: Tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
         token_ids, attention_mask = x
         last_hidden_state = self.encoder(
             input_ids=token_ids,
@@ -41,7 +41,7 @@ class SelfiesEncoder(BaseModalityEncoder):
         if not pretrained:
             self.encoder = reinitialize_weights(self.encoder)
 
-    def forward(self, x: Dict[str, torch.Tensor]) -> torch.Tensor:
+    def forward(self, x: Tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
         token_ids, attention_mask = x
         last_hidden_state = self.encoder(
             input_ids=token_ids,
