@@ -76,9 +76,11 @@ def train_molbind(config: dict = None):
     )
 
     columns = shuffled_data.columns
+    # extract non-central modalities (i.e. not the central modality smiles)
+    non_central_modalities = config.data.modalities
 
     for column in columns:
-        if column in [*MODALITY_DATA_TYPES] and column != "smiles":
+        if column in non_central_modalities:
             # drop nan for specific pair
             train_modality_smiles_pair = train_shuffled_data[
                 ["smiles", column]
