@@ -22,7 +22,7 @@ STRING_TOKENIZERS = {
 
 
 class StringDataset(Dataset):
-    def __init__(self, dataset, modality, context_length=128):
+    def __init__(self, dataset, modality, context_length=256):
         self.dataset = dataset
         self.modality = modality
         self.tokenized_smiles = STRING_TOKENIZERS["smiles"](

@@ -19,11 +19,16 @@ class SmilesEncoder(BaseModalityEncoder):
 
     def forward(self, x):
         token_ids, attention_mask = x
-        return self.encoder(
+        last_hidden_state = self.encoder(
             input_ids=token_ids,
             attention_mask=attention_mask,
             output_hidden_states=True,
-        ).hidden_states[-1].sum(dim=1) / attention_mask.sum(dim=1).unsqueeze(1)
+        ).hidden_states[-1]
+            
+        attention_mask = attention_mask.float().unsqueeze(-1)
+        return (last_hidden_state * attention_mask).sum(dim=1) / attention_mask.squeeze(
+            -1
+        ).sum(dim=1).unsqueeze(1)
 
 
 class SelfiesEncoder(BaseModalityEncoder):
@@ -38,12 +43,16 @@ class SelfiesEncoder(BaseModalityEncoder):
 
     def forward(self, x: Dict[str, torch.Tensor]) -> torch.Tensor:
         token_ids, attention_mask = x
-
-        return self.encoder(
+        last_hidden_state = self.encoder(
             input_ids=token_ids,
             attention_mask=attention_mask,
             output_hidden_states=True,
-        ).hidden_states[-1].sum(dim=1) / attention_mask.sum(dim=1).unsqueeze(1)
+        ).hidden_states[-1]
+
+        attention_mask = attention_mask.float().unsqueeze(-1)
+        return (last_hidden_state * attention_mask).sum(dim=1) / attention_mask.squeeze(
+            -1
+        ).sum(dim=1).unsqueeze(1)
 
 
 class IUPACNameEncoder(BaseModalityEncoder):
