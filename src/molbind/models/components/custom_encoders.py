@@ -6,53 +6,15 @@ from molbind.utils.utils import reinitialize_weights
 
 
 class SmilesEncoder(BaseModalityEncoder):
-    def __init__(self, freeze_encoder: bool = False, pretrained=True, **kwargs) -> None:
-        super().__init__(freeze_encoder, pretrained, **kwargs)
-        self.encoder = AutoModelForCausalLM.from_pretrained(
-            "seyonec/ChemBERTa-zinc-base-v1"
+    def __init__(self, freeze_encoder: bool = False, pretrained: bool = True, **kwargs):
+        super().__init__(
+            "seyonec/ChemBERTa-zinc-base-v1", freeze_encoder, pretrained, **kwargs
         )
-        if freeze_encoder:
-            for param in self.encoder.parameters():
-                param.requires_grad = False
-        if not pretrained:
-            self.encoder = reinitialize_weights(self.encoder)
-
-    def forward(self, x: Tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
-        token_ids, attention_mask = x
-        last_hidden_state = self.encoder(
-            input_ids=token_ids,
-            attention_mask=attention_mask,
-            output_hidden_states=True,
-        ).hidden_states[-1]
-            
-        attention_mask = attention_mask.float().unsqueeze(-1)
-        return (last_hidden_state * attention_mask).sum(dim=1) / attention_mask.squeeze(
-            -1
-        ).sum(dim=1).unsqueeze(1)
 
 
 class SelfiesEncoder(BaseModalityEncoder):
-    def __init__(self, freeze_encoder: bool = False, pretrained=True, **kwargs) -> None:
-        super().__init__(freeze_encoder, pretrained, **kwargs)
-        self.encoder = AutoModelForCausalLM.from_pretrained("HUBioDataLab/SELFormer")
-        if freeze_encoder:
-            for param in self.encoder.parameters():
-                param.requires_grad = False
-        if not pretrained:
-            self.encoder = reinitialize_weights(self.encoder)
-
-    def forward(self, x: Tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
-        token_ids, attention_mask = x
-        last_hidden_state = self.encoder(
-            input_ids=token_ids,
-            attention_mask=attention_mask,
-            output_hidden_states=True,
-        ).hidden_states[-1]
-
-        attention_mask = attention_mask.float().unsqueeze(-1)
-        return (last_hidden_state * attention_mask).sum(dim=1) / attention_mask.squeeze(
-            -1
-        ).sum(dim=1).unsqueeze(1)
+    def __init__(self, freeze_encoder: bool = False, pretrained: bool = True, **kwargs):
+        super().__init__("HUBioDataLab/SELFormer", freeze_encoder, pretrained, **kwargs)
 
 
 class IUPACNameEncoder(BaseModalityEncoder):
@@ -60,24 +22,7 @@ class IUPACNameEncoder(BaseModalityEncoder):
 
 
 class IREncoder(BaseModalityEncoder):
-    def __init__(
-        self, freeze_encoder: bool = False, pretrained: bool = False, **kwargs
-    ) -> None:
-        super().__init__(freeze_encoder, pretrained, **kwargs)
-        self.encoder = None
-        if freeze_encoder:
-            for param in self.encoder.parameters():
-                param.requires_grad = False
-        if pretrained:
-            self.encoder = reinitialize_weights(self.encoder)
-
-    def forward(self, x):
-        token_ids, attention_mask = x
-        return self.encoder(
-            input_ids=token_ids,
-            attention_mask=attention_mask,
-            output_hidden_states=True,
-        ).hidden_states[-1].sum(dim=1) / attention_mask.sum(dim=1).unsqueeze(1)
+    pass
 
 
 class GraphEncoder(BaseModalityEncoder):
@@ -85,19 +30,4 @@ class GraphEncoder(BaseModalityEncoder):
 
 
 class NMREncoder(BaseModalityEncoder):
-    def __init__(self, freeze_encoder: bool = False, pretrained=True, **kwargs):
-        super().__init__(freeze_encoder, pretrained, **kwargs)
-        self.encoder = None
-        if freeze_encoder:
-            for param in self.encoder.parameters():
-                param.requires_grad = False
-        if not pretrained:
-            self.encoder = reinitialize_weights(self.encoder)
-
-    def forward(self, x):
-        token_ids, attention_mask = x
-        return self.encoder(
-            input_ids=token_ids,
-            attention_mask=attention_mask,
-            output_hidden_states=True,
-        ).hidden_states[-1].sum(dim=1) / attention_mask.sum(dim=1).unsqueeze(1)
+    pass
