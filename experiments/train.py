@@ -3,7 +3,7 @@ from molbind.models.lightning_module import train_molbind
 
 if __name__ == "__main__":
     config = {
-        "wandb": {"entity": "adrianmirza", "project_name": "embedbind"},
+        "wandb": {"entity": "wandb_username", "project_name": "embedbind"},
         "model": {
             "projection_heads": {
                 "selfies": {"dims": [256, 128]},
