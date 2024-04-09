@@ -65,8 +65,10 @@ def train_molbind(config: dict = None):
     valid_modality_data = {}
 
     # Example SMILES - SELFIES modality pair:
-    data = pl.read_csv(config.data.dataset_path)[:4096]
-    shuffled_data = data.sample(fraction=1, shuffle=True, seed=42)
+    data = pl.read_csv(config.data.dataset_path)
+    shuffled_data = data.sample(
+        fraction=config.data.fraction_data, shuffle=True, seed=config.data.seed
+    )
     dataset_length = len(shuffled_data)
     valid_shuffled_data = shuffled_data.tail(
         int(config.data.valid_frac * dataset_length)
@@ -100,14 +102,14 @@ def train_molbind(config: dict = None):
 
     combined_loader = load_combined_loader(
         data_modalities=train_modality_data,
-        batch_size=256,
+        batch_size=config.data.batch_size,
         shuffle=True,
         num_workers=1,
     )
 
     valid_dataloader = load_combined_loader(
         data_modalities=valid_modality_data,
-        batch_size=256,
+        batch_size=config.data.batch_size,
         shuffle=False,
         num_workers=1,
     )
@@ -121,7 +123,7 @@ def train_molbind(config: dict = None):
 
 if __name__ == "__main__":
     config = {
-        "wandb": {"entity": "wandb_username", "project_name": "embedbind"},
+        "wandb": {"entity": "adrianmirza", "project_name": "embedbind"},
         "model": {
             "projection_heads": {
                 "selfies": {"dims": [256, 128]},
@@ -135,6 +137,9 @@ if __name__ == "__main__":
             "dataset_path": "selfies_smiles_data.csv",
             "train_frac": 0.8,
             "valid_frac": 0.2,
+            "seed": 42,
+            "fraction_data": 0.004,
+            "batch_size": 64,
         },
     }
 
