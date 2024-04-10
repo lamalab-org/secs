@@ -1,14 +1,22 @@
 from torch import nn
 from typing import Union, List
+from class_resolver import ClassResolver
+
+ACTIVATION_RESOLVER = ClassResolver(
+    [nn.ReLU, nn.LeakyReLU, nn.Sigmoid, nn.Tanh], base=nn.Module, default=nn.ReLU
+)
 
 
 class ProjectionHead(nn.Module):
-    def __init__(self, dims, activation: Union[str, List[str]] = "leakyrelu", batch_norm : bool =False):
+    def __init__(
+        self,
+        dims,
+        activation: Union[str, List[str]] = "leakyrelu",
+        batch_norm: bool = False,
+    ):
         super(ProjectionHead, self).__init__()
         # build projection head
-        self.projection_head = self.build_projection_head(
-            dims, activation, batch_norm
-        )
+        self.projection_head = self.build_projection_head(dims, activation, batch_norm)
 
     def build_projection_head(
         self, dims, activation, batch_norm=False
@@ -25,20 +33,9 @@ class ProjectionHead(nn.Module):
 
         return nn.Sequential(*layers)
 
-    def _get_activation(self, activation):
+    def _get_activation(self, activation: Union[str, List[str]]):
         if isinstance(activation, str):
-            if activation.lower() == "relu":
-                return nn.ReLU(inplace=True)
-            elif activation.lower() == "leakyrelu":
-                return nn.LeakyReLU(inplace=True)
-            elif activation.lower() == "sigmoid":
-                return nn.Sigmoid()
-            elif activation.lower() == "tanh":
-                return nn.Tanh()
-            else:
-                raise NotImplementedError(
-                    f"Activation {activation} is not implemented."
-                )
+            return ACTIVATION_RESOLVER.resolve(activation)
         elif isinstance(activation, list):
             # In case you want multiple activation functions in sequence
             return nn.Sequential(*[self._get_activation(act) for act in activation])
