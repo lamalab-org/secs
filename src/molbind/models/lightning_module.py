@@ -2,10 +2,9 @@ from info_nce import InfoNCE
 from pytorch_lightning import LightningModule
 from molbind.models.model import MolBind
 import torch
-from torch.nn.functional import cosine_similarity
 import pytorch_lightning as L
-import hydra
-from molbind.data.dataloaders import load_combined_loader, MODALITY_DATA_TYPES
+from molbind.data.dataloaders import load_combined_loader
+from typing import Dict
 import polars as pl
 
 
@@ -41,12 +40,12 @@ class MolBindModule(LightningModule):
     def configure_optimizers(self):
         return torch.optim.AdamW(
             self.model.parameters(),
-            lr=self.config.optimizer.lr,
-            weight_decay=self.config.optimizer.weight_decay,
+            lr=self.config.model.optimizer.lr,
+            weight_decay=self.config.model.optimizer.weight_decay,
         )
 
 
-def train_molbind(config: dict = None):
+def train_molbind(config: Dict = None):
     wandb_logger = L.loggers.WandbLogger(
         project=config.wandb.project_name, entity=config.wandb.entity
     )
@@ -119,31 +118,3 @@ def train_molbind(config: dict = None):
         train_dataloaders=combined_loader,
         val_dataloaders=valid_dataloader,
     )
-
-
-if __name__ == "__main__":
-    config = {
-        "wandb": {"entity": "adrianmirza", "project_name": "embedbind"},
-        "model": {
-            "projection_heads": {
-                "selfies": {"dims": [256, 128]},
-                "smiles": {"dims": [256, 128]},
-            }
-        },
-        "loss": {"temperature": 0.1},
-        "optimizer": {"lr": 1e-4, "weight_decay": 1e-4},
-        "data": {
-            "modalities": ["selfies"],
-            "dataset_path": "selfies_smiles_data.csv",
-            "train_frac": 0.8,
-            "valid_frac": 0.2,
-            "seed": 42,
-            "fraction_data": 0.004,
-            "batch_size": 64,
-        },
-    }
-
-    from omegaconf import DictConfig
-
-    config = DictConfig(config)
-    train_molbind(config)
