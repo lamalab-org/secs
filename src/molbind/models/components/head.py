@@ -3,18 +3,23 @@ from typing import Union, List
 
 
 class ProjectionHead(nn.Module):
-    def __init__(self, dims, activation: Union[str, List[str]] = "leakyrelu"):
+    def __init__(self, dims, activation: Union[str, List[str]] = "leakyrelu", batch_norm : bool =False):
         super(ProjectionHead, self).__init__()
         # build projection head
-        self.projection_head = self.build_projection_head(dims, activation)
+        self.projection_head = self.build_projection_head(
+            dims, activation, batch_norm
+        )
 
-    def build_projection_head(self, dims, activation):
+    def build_projection_head(
+        self, dims, activation, batch_norm=False
+    ) -> nn.Sequential:
         # Build projection head dynamically based on the length of dims
         layers = []
         for i in range(len(dims) - 1):
             layers.append(nn.Linear(dims[i], dims[i + 1]))
             # Optional: add batch normalization
-            layers.append(nn.BatchNorm1d(dims[i + 1]))
+            if batch_norm:
+                layers.append(nn.BatchNorm1d(dims[i + 1]))
             # Apply activation function
             layers.append(self._get_activation(activation))
 
