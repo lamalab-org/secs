@@ -1,18 +1,24 @@
 from molbind.models.lightning_module import train_molbind
+from omegaconf import DictConfig
 
 
 if __name__ == "__main__":
     config = {
-        "wandb": {"entity": "wandb_username", "project_name": "embedbind"},
+        "wandb": {"entity": "adrianmirza", "project_name": "embedbind"},
         "model": {
             "projection_heads": {
-                "selfies": {"dims": [256, 128]},
-                "smiles": {"dims": [256, 128]},
-            }
+                "selfies": {"dims": [256, 128], "activation": "leakyrelu", "batch_norm": False},
+                "smiles": {"dims": [256, 128], "activation": "leakyrelu", "batch_norm": False},
+            },
+            "encoders": {
+                "smiles": {"pretrained": True, "freeze_encoder": False},
+                "selfies": {"pretrained": True, "freeze_encoder": False},
+            },
+            "optimizer": {"lr": 1e-4, "weight_decay": 1e-4},
         },
         "loss": {"temperature": 0.1},
-        "optimizer": {"lr": 1e-4, "weight_decay": 1e-4},
         "data": {
+            "central_modality": "smiles",
             "modalities": ["selfies"],
             "dataset_path": "subset.csv",
             "train_frac": 0.8,
@@ -22,8 +28,6 @@ if __name__ == "__main__":
             "batch_size": 64,
         },
     }
-
-    from omegaconf import DictConfig
 
     config = DictConfig(config)
     train_molbind(config)
