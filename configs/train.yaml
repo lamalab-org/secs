@@ -8,8 +8,8 @@ defaults:
   - model: molbind
   - logger: wandb
   - paths: default
+  - trainer: mps
   # - callbacks: default
-  # - trainer: default
   # - extras: default
   # - hydra: default
 

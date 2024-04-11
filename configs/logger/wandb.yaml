@@ -1,4 +1,4 @@
 wandb:
   offline: False
-  project: "molbind"
-  entity: "wandb_username"
+  project: "${oc.env.WANDB_PROJECT}"
+  entity: "${oc.env.WANDB_ENTITY}"

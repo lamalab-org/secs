@@ -21,9 +21,9 @@ def train_molbind(config: DictConfig):
 
     device_count = torch.cuda.device_count()
     trainer = L.Trainer(
-        max_epochs=100,
-        accelerator="mps",
-        log_every_n_steps=10,
+        max_epochs=config.trainer.max_epochs,
+        accelerator=config.trainer.accelerator,
+        log_every_n_steps=config.trainer.log_every_n_steps,
         logger=wandb_logger,
         devices=device_count if device_count > 1 else "auto",
         strategy="ddp" if device_count > 1 else "auto",

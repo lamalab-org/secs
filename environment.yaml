@@ -1,12 +1,14 @@
 name: molbind
 
 channels:
-  - pytorch
   - conda-forge
+  - pytorch
+  - pyg
   - defaults
 
 dependencies:
   - python>=3.9
   - pip
+  - faiss-cpu
   - pip:
     - --editable "."
