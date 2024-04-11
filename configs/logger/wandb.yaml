@@ -1,7 +1,4 @@
-# https://wandb.ai
-
 wandb:
-  _target_: lightning.pytorch.loggers.wandb.WandbLogger
   offline: False
   project: "molbind"
-  entity: "adrianmirza"
+  entity: "wandb_username"

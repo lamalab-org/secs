@@ -1,10 +1,9 @@
-_target_: molbind.data.dataloaders.load_combined_loader
 central_modality: "smiles"
 modalities: 
   - "selfies"
 train_frac : 0.8
-val_frac : 0.2
+valid_frac : 0.2
 seed: 42
 fraction_data: 1.0
-dataset_path: "subset.csv"
+dataset_path: "${paths.data_dir}/subset.csv"
 batch_size: 64
