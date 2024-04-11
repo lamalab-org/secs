@@ -6,7 +6,6 @@ from molbind.models.lightning_module import MolBindModule
 from omegaconf import DictConfig
 import torch
 import rootutils
-from hydra.utils import instantiate
 
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 
@@ -87,7 +86,7 @@ def train_molbind(config: DictConfig):
     )
 
 
-@hydra.main(config_path="../configs", config_name="train.yaml")
+@hydra.main(version_base="1.3", config_path="../configs", config_name="train.yaml")
 def main(config: DictConfig):
     train_molbind(config)
 
