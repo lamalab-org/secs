@@ -1,5 +1,3 @@
-_target_: lightning.pytorch.loggers.wandb.WandbLogger
-
 wandb:
   offline: False
   project: "molbind"
