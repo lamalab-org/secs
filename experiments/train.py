@@ -5,6 +5,9 @@ from molbind.data.dataloaders import load_combined_loader
 from molbind.models.lightning_module import MolBindModule
 from omegaconf import DictConfig
 import torch
+import rootutils
+
+rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 
 
 def train_molbind(config: DictConfig):
@@ -37,26 +40,27 @@ def train_molbind(config: DictConfig):
     )
 
     columns = shuffled_data.columns
-    # extract non-central modalities (i.e. not the central modality smiles)
+    # extract non-central modalities
     non_central_modalities = config.data.modalities
+    central_modality = config.data.central_modality
 
     for column in columns:
         if column in non_central_modalities:
             # drop nan for specific pair
-            train_modality_smiles_pair = train_shuffled_data[
-                ["smiles", column]
+            train_modality_pair = train_shuffled_data[
+                [central_modality, column]
             ].drop_nulls()
-            valid_modality_smiles_pair = valid_shuffled_data[
-                ["smiles", column]
+            valid_modality_pair = valid_shuffled_data[
+                [central_modality, column]
             ].drop_nulls()
 
             train_modality_data[column] = [
-                train_modality_smiles_pair["smiles"].to_list(),
-                train_modality_smiles_pair[column].to_list(),
+                train_modality_pair[central_modality].to_list(),
+                train_modality_pair[column].to_list(),
             ]
             valid_modality_data[column] = [
-                valid_modality_smiles_pair["smiles"].to_list(),
-                valid_modality_smiles_pair[column].to_list(),
+                valid_modality_pair[central_modality].to_list(),
+                valid_modality_pair[column].to_list(),
             ]
 
     combined_loader = load_combined_loader(
