@@ -1,4 +1,3 @@
-_target_: molbind.data.dataloaders.load_combined_loader
 central_modality: "smiles"
 modalities: 
   - "selfies"
