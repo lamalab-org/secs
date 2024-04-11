@@ -6,11 +6,13 @@ from molbind.models.lightning_module import MolBindModule
 from omegaconf import DictConfig
 import torch
 import rootutils
+from hydra.utils import instantiate
 
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 
 
 def train_molbind(config: DictConfig):
+    config = instantiate(config)
     wandb_logger = L.loggers.WandbLogger(**config.logger.wandb)
 
     device_count = torch.cuda.device_count()
@@ -86,7 +88,9 @@ def train_molbind(config: DictConfig):
 
 @hydra.main(config_path="../configs", config_name="train.yaml")
 def main(config: DictConfig):
-    train_molbind(config)
+    # train_molbind(config)
+    import pdb; pdb.set_trace()
+    config = instantiate(config)
 
 
 if __name__ == "__main__":
