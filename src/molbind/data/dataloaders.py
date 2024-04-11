@@ -23,7 +23,11 @@ STRING_TOKENIZERS = {
 
 class StringDataset(Dataset):
     def __init__(
-        self, dataset: Tuple[Tensor, Tensor], central_modality : str, modality: str, context_length=256
+        self,
+        dataset: Tuple[Tensor, Tensor],
+        central_modality: str,
+        modality: str,
+        context_length=256,
     ):
         """Dataset for string modalities.
 
@@ -34,12 +38,16 @@ class StringDataset(Dataset):
         """
         assert len(dataset) == 2
         assert len(dataset[0]) == len(dataset[1])
-        assert MODALITY_DATA_TYPES[central_modality] == str, "Only string modalities are supported as the central modality for now."
-        assert MODALITY_DATA_TYPES[modality] == str, "This dataset supports string modalities only."
+        assert (
+            MODALITY_DATA_TYPES[central_modality] == str
+        ), "Only string modalities are supported as the central modality for now."
+        assert (
+            MODALITY_DATA_TYPES[modality] == str
+        ), "This dataset supports string modalities only."
 
         self.modality = modality
         self.central_modality = central_modality
-        
+
         self.tokenized_central_modality = STRING_TOKENIZERS[central_modality](
             dataset[0],
             padding="max_length",
@@ -47,7 +55,7 @@ class StringDataset(Dataset):
             return_tensors="pt",
             max_length=context_length,
         )
-        
+
         self.tokenized_string = STRING_TOKENIZERS[modality](
             dataset[1],
             padding="max_length",
@@ -100,14 +108,17 @@ def load_combined_loader(
 
     for modality in [*data_modalities]:
         if MODALITY_DATA_TYPES[modality] == str:
-            dataset_instance = StringDataset(central_modality=central_modality, modality=data_modalities[modality], context_length=256)
+            dataset_instance = StringDataset(
+                central_modality=central_modality,
+                modality=data_modalities[modality],
+                context_length=256,
+            )
             loaders[modality] = DataLoader(
                 dataset_instance,
                 batch_size=batch_size,
                 shuffle=shuffle,
                 num_workers=num_workers,
                 drop_last=drop_last,
-                central_modality
             )
         elif MODALITY_DATA_TYPES[modality] == Graph:
             graph_dataset_instance = GraphDataset(data_modalities[modality])
