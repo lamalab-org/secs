@@ -4,14 +4,15 @@
 # order of defaults determines the order in which configs override each other
 defaults:
   - _self_
-  - data: mnist
-  - model: mnist
-  - callbacks: default
-  - logger: null # set logger here or use command line (e.g. `python train.py logger=tensorboard`)
-  - trainer: default
-  - paths: default
-  - extras: default
-  - hydra: default
+  - data: molbind
+  - model: molbind
+  - logger: wandb
+  # - callbacks: default
+  # - logger: null # set logger here or use command line (e.g. `python train.py logger=tensorboard`)
+  # - trainer: default
+  # - paths: default
+  # - extras: default
+  # - hydra: default
 
   # experiment configs allow for version control of specific hyperparameters
   # e.g. best hyperparameters for given model and datamodule
@@ -46,4 +47,4 @@ test: True
 ckpt_path: null
 
 # seed for random number generators in pytorch, numpy and python.random
-seed: null
+seed: 42

@@ -13,7 +13,7 @@ rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 # the setup_root above is equivalent to:
 # - adding project root dir to PYTHONPATH
 #       (so you don't need to force user to install project as a package)
-#       (necessary before importing any local modules e.g. `from src import utils`)
+#       (necessary before importing any local modules e.g. `from molbind import utils`)
 # - setting up PROJECT_ROOT environment variable
 #       (which is used as a base for paths in "configs/paths/default.yaml")
 #       (this way all filepaths are the same no matter where you run the code)
@@ -26,7 +26,7 @@ rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 # more info: https://github.com/ashleve/rootutils
 # ------------------------------------------------------------------------------------ #
 
-from src.utils import (
+from molbind.utils import (
     RankedLogger,
     extras,
     get_metric_value,
@@ -67,7 +67,9 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     logger: List[Logger] = instantiate_loggers(cfg.get("logger"))
 
     log.info(f"Instantiating trainer <{cfg.trainer._target_}>")
-    trainer: Trainer = hydra.utils.instantiate(cfg.trainer, callbacks=callbacks, logger=logger)
+    trainer: Trainer = hydra.utils.instantiate(
+        cfg.trainer, callbacks=callbacks, logger=logger
+    )
 
     object_dict = {
         "cfg": cfg,

@@ -1,38 +1,51 @@
 from torch import nn
 from typing import Union, List
+from class_resolver import ClassResolver
+
+ACTIVATION_RESOLVER = ClassResolver(
+    [nn.ReLU, nn.LeakyReLU, nn.Sigmoid, nn.Tanh], base=nn.Module, default=nn.ReLU
+)
 
 
 class ProjectionHead(nn.Module):
-    def __init__(self, dims, activation : Union[str, List[str]] = "leakyrelu"):
+    def __init__(
+        self,
+        dims,
+        activation: Union[str, List[str]] = "leakyrelu",
+        batch_norm: bool = False,
+    ):
         super(ProjectionHead, self).__init__()
         # build projection head
-        self.projection_head = self.build_projection_head(dims, activation)
+        self.projection_head = self._build_projection_head(dims, activation, batch_norm)
 
-    
-    def build_projection_head(self, dims, activation):
+    def _build_projection_head(
+        self,
+        dims: List[int],
+        activation: Union[str, List[str]],
+        batch_norm: bool = False,
+    ) -> nn.Sequential:
         # Build projection head dynamically based on the length of dims
         layers = []
         for i in range(len(dims) - 1):
             layers.append(nn.Linear(dims[i], dims[i + 1]))
-            layers.append(nn.BatchNorm1d(dims[i + 1]))  # Optional: add batch normalization
-            layers.append(self._get_activation(activation))  # Apply activation function
-        
-        self.projection = nn.Sequential(*layers)
+            # Optional: add batch normalization
+            if batch_norm:
+                layers.append(nn.BatchNorm1d(dims[i + 1]))
+            # Apply activation function
+            layers.append(self._get_activation(activation))
 
-    def _get_activation(self, activation):
-            if isinstance(activation, str):
-                if activation.lower() == 'relu':
-                    return nn.ReLU(inplace=True)
-                elif activation.lower() == 'leakyrelu':
-                    return nn.LeakyReLU(inplace=True)
-                elif activation.lower() == 'sigmoid':
-                    return nn.Sigmoid()
-                elif activation.lower() == 'tanh':
-                    return nn.Tanh()
-                else:
-                    raise NotImplementedError(f"Activation {activation} is not implemented.")
-            elif isinstance(activation, list):
-                # In case you want multiple activation functions in sequence
-                return nn.Sequential(*[self._get_activation(act) for act in activation])
-            else:
-                raise ValueError("Activation should be either a string or a list of strings.")
+        return nn.Sequential(*layers)
+
+    def _get_activation(self, activation: Union[str, List[str]]):
+        if isinstance(activation, str):
+            return ACTIVATION_RESOLVER.make(activation)
+        elif isinstance(activation, list):
+            # In case you want multiple activation functions in sequence
+            return nn.Sequential(*[self._get_activation(act) for act in activation])
+        else:
+            raise ValueError(
+                "Activation should be either a string or a list of strings."
+            )
+
+    def forward(self, x):
+        return self.projection_head(x)
