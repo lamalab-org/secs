@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "molbind"
-description="A package for binding molecular embeddings."
+description="A package for binding molecular embeddings across modalities."
 version = "0.0.1"
 readme = "README.md"
 license = { text = "MIT" }
@@ -25,7 +25,26 @@ classifiers = [
     "Operating System :: MacOS",
 ]
 requires-python = ">=3.9, <3.13"
-dependencies = ["numpy", "transformers", "pandas", "polars"]
+dependencies = [
+  "numpy",
+  "transformers",
+  "pandas",
+  "polars",
+  "info-nce-pytorch",
+  "hydra-core==1.3.2",
+  "torch>=2.0.0",
+  "lightning>=2.0.0",
+  "torchmetrics>=0.11.4",
+  "rootutils",
+  "pre-commit",
+  "class_resolver",
+  "rich",
+  "wandb",
+  "hydra-colorlog==1.2.0",
+  "hydra-optuna-sweeper==1.2.0",
+  "omegaconf",
+  "torch_geometric",
+  ]
 
 [project.optional-dependencies]
 dev = ["codecov-cli>=0.4.1", "pytest>=7.4.0", "pytest-cov>=3.0.0", "ruff>=0.0.285"]
@@ -37,11 +56,6 @@ docs = [
     "pillow>=10.0.0",
     "cairosvg>=2.7.1"
 ]
-
-[project.urls]
-repository = "https://github.com/Quantum-Accelerators/template"
-documentation = "https://quantum-accelerators.github.io/template/"
-changelog = "https://github.com/Quantum-Accelerators/template/blob/main/CHANGELOG.md"
 
 [tool.setuptools.package-data]
 template = ["py.typed"]

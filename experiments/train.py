@@ -6,18 +6,24 @@ from molbind.models.lightning_module import MolBindModule
 from omegaconf import DictConfig
 import torch
 import rootutils
+from dotenv import load_dotenv
+import os
+load_dotenv(".env")
 
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 
 
 def train_molbind(config: DictConfig):
-    wandb_logger = L.loggers.WandbLogger(**config.logger.wandb)
+    wandb_logger = L.loggers.WandbLogger(
+        project=os.getenv("WANDB_PROJECT"),
+        entity=os.getenv("WANDB_ENTITY"),
+    )
 
     device_count = torch.cuda.device_count()
     trainer = L.Trainer(
-        max_epochs=100,
-        accelerator="cuda",
-        log_every_n_steps=10,
+        max_epochs=config.trainer.max_epochs,
+        accelerator=config.trainer.accelerator,
+        log_every_n_steps=config.trainer.log_every_n_steps,
         logger=wandb_logger,
         devices=device_count if device_count > 1 else "auto",
         strategy="ddp" if device_count > 1 else "auto",
