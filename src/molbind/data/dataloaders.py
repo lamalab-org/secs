@@ -39,9 +39,6 @@ class StringDataset(Dataset):
         assert len(dataset) == 2
         assert len(dataset[0]) == len(dataset[1])
         assert (
-            MODALITY_DATA_TYPES[central_modality] == str
-        ), "Only string modalities are supported as the central modality for now."
-        assert (
             MODALITY_DATA_TYPES[modality] == str
         ), "This dataset supports string modalities only."
 
@@ -109,8 +106,9 @@ def load_combined_loader(
     for modality in [*data_modalities]:
         if MODALITY_DATA_TYPES[modality] == str:
             dataset_instance = StringDataset(
+                dataset=data_modalities,
                 central_modality=central_modality,
-                modality=data_modalities[modality],
+                modality=modality,
                 context_length=256,
             )
             loaders[modality] = DataLoader(
