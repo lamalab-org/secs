@@ -6,17 +6,11 @@
 
 ## Installation guide
 
-It is recommmended using a `mamba` or `conda` for creating a virtual environment.
+It is recommmended using `mamba` or `conda` for creating a virtual environment.
 
 ```conda
-conda env create -n molbind
-conda activate conda
-```
-
-Then, install `MolBind` using `pip` in the `parent` directory.
-
-```pip
-pip install -e .
+conda env create -f environment.yaml
+conda activate molbind
 ```
 
 ## Train a model
