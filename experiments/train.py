@@ -12,7 +12,6 @@ rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 
 
 def train_molbind(config: DictConfig):
-    config = instantiate(config)
     wandb_logger = L.loggers.WandbLogger(**config.logger.wandb)
 
     device_count = torch.cuda.device_count()
