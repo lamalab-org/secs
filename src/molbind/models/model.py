@@ -23,13 +23,15 @@ class MolBind(nn.Module):
         super(MolBind, self).__init__()
 
         modalities = cfg.data.modalities
-        # Instantiate all encoders in modalities
+        central_modality = cfg.data.central_modality
+        self.central_modality = central_modality
 
-        self.dict_encoders = {"smiles": SmilesEncoder(**cfg.model.encoders["smiles"])}
+        # Instantiate all encoders and projection heads
+        self.dict_encoders = {central_modality: SmilesEncoder(**cfg.model.encoders[central_modality])}
         self.dict_projection_heads = {
-            "smiles": ProjectionHead(**cfg.model.projection_heads["smiles"])
+            central_modality: ProjectionHead(**cfg.model.projection_heads[central_modality])
         }
-
+        # Add other modalities to `dict_encoders` and `dict_projection_heads
         for modality in modalities:
             if modality not in [*AVAILABLE_ENCODERS]:
                 raise ValueError(f"Modality {modality} not supported yet.")
@@ -40,7 +42,7 @@ class MolBind(nn.Module):
                 **cfg.model.projection_heads[modality]
             )
 
-        # convert to nn.ModuleDict
+        # convert dicts to nn.ModuleDict
         self.dict_encoders = nn.ModuleDict(self.dict_encoders)
         self.dict_projection_heads = nn.ModuleDict(self.dict_projection_heads)
 
@@ -51,19 +53,20 @@ class MolBind(nn.Module):
         # input_data = [data, batch_index, dataloader_index]
         input_data, _, _ = input_data
         # input_data is a dictionary with (smiles, modality) pairs (where the central modality is at index 0)
+        central_modality = [*input_data][0]
         modality = [*input_data][1]
         # store embeddings as store_embeddings[modality] = (smiles_embedding, modality_embedding)
         # forward through respective encoder
-        smiles_embedding = self.dict_encoders["smiles"].forward(input_data["smiles"])
+        smiles_embedding = self.dict_encoders[central_modality].forward(input_data[central_modality])
         modality_embedding = self.dict_encoders[modality].forward(input_data[modality])
-        smiles_embedding_projected = self.dict_projection_heads["smiles"](
+        central_modality_embedding_projected = self.dict_projection_heads[central_modality](
             smiles_embedding
         )
         modality_embedding_projected = self.dict_projection_heads[modality](
             modality_embedding
         )
-        # projection head
-        store_embeddings["smiles"] = smiles_embedding_projected
+        # projection heads
+        store_embeddings[central_modality] = central_modality_embedding_projected
         store_embeddings[modality] = modality_embedding_projected
         return store_embeddings
 

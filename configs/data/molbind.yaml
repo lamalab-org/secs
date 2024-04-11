@@ -1,6 +1,10 @@
 _target_: molbind.data.dataloaders.load_combined_loader
-data_dir: ${paths.data_dir}
-batch_size: 128 # Needs to be divisible by the number of devices (e.g., if in a distributed setup)
-train_val_test_split: [55_000, 5_000, 10_000]
-num_workers: 0
-pin_memory: False
+central_modality: "smiles"
+modalities: 
+  - "selfies"
+train_frac : 0.8
+val_frac : 0.2
+seed: 42
+fraction_data: 1.0
+dataset_path: "subset.csv"
+batch_size: 64

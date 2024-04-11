@@ -16,10 +16,13 @@ class ProjectionHead(nn.Module):
     ):
         super(ProjectionHead, self).__init__()
         # build projection head
-        self.projection_head = self.build_projection_head(dims, activation, batch_norm)
+        self.projection_head = self._build_projection_head(dims, activation, batch_norm)
 
-    def build_projection_head(
-        self, dims, activation, batch_norm=False
+    def _build_projection_head(
+        self,
+        dims: List[int],
+        activation: Union[str, List[str]],
+        batch_norm: bool = False,
     ) -> nn.Sequential:
         # Build projection head dynamically based on the length of dims
         layers = []
@@ -35,7 +38,7 @@ class ProjectionHead(nn.Module):
 
     def _get_activation(self, activation: Union[str, List[str]]):
         if isinstance(activation, str):
-            return ACTIVATION_RESOLVER.resolve(activation)
+            return ACTIVATION_RESOLVER.make(activation)
         elif isinstance(activation, list):
             # In case you want multiple activation functions in sequence
             return nn.Sequential(*[self._get_activation(act) for act in activation])
