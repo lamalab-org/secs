@@ -7,7 +7,9 @@ from omegaconf import DictConfig
 import torch
 import rootutils
 from dotenv import load_dotenv
+import pickle as pkl
 import os
+
 load_dotenv(".env")
 
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
@@ -32,8 +34,14 @@ def train_molbind(config: DictConfig):
     train_modality_data = {}
     valid_modality_data = {}
 
-    # Example SMILES - SELFIES modality pair:
-    data = pl.read_csv(config.data.dataset_path)
+    # check format of config.data.dataset_path
+    data_format = config.data.dataset_path.split(".")[-1]
+
+    if data_format == "csv":
+        data = pl.read_csv(config.data.dataset_path)
+    elif data_format == "pkl":
+        data = pkl.load(open(config.data.dataset_path, "rb"))
+        data = pl.from_pandas(data)
     shuffled_data = data.sample(
         fraction=config.data.fraction_data, shuffle=True, seed=config.data.seed
     )
