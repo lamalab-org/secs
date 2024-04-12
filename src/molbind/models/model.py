@@ -10,7 +10,7 @@ from molbind.models.components.head import ProjectionHead
 
 class MolBind(nn.Module):
     def __init__(self, cfg):
-        super(MolBind, self).__init__()
+        super().__init__()
 
         modalities = cfg.data.modalities
         central_modality = cfg.data.central_modality
@@ -27,7 +27,7 @@ class MolBind(nn.Module):
                 **cfg.model.projection_heads[central_modality]
             )
         }
-        # Add other modalities to `dict_encoders` and `dict_projection_heads
+        # Add other modalities to `dict_encoders` and `dict_projection_heads`
         for modality in modalities:
             if modality not in [*AVAILABLE_ENCODERS]:
                 raise ValueError(f"Modality {modality} not supported yet.")
