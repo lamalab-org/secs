@@ -1,21 +1,11 @@
-from molbind.models.components.custom_encoders import (
-    SmilesEncoder,
-    SelfiesEncoder,
-    GraphEncoder,
-)
-from molbind.models.components.head import ProjectionHead
-from torch import Tensor
-import torch.nn as nn
+from typing import Dict, Tuple, Union
+
 import torch
-from typing import Dict, Union, Tuple
+import torch.nn as nn
+from torch import Tensor
 
-
-AVAILABLE_ENCODERS = {
-    "smiles": SmilesEncoder,
-    "selfies": SelfiesEncoder,
-    "graph": GraphEncoder,
-    "nmr": None,
-}
+from molbind.data.available import AVAILABLE_ENCODERS
+from molbind.models.components.head import ProjectionHead
 
 
 class MolBind(nn.Module):
