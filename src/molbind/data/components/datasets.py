@@ -63,16 +63,28 @@ class StringDataset(Dataset):
 
 
 class FingerprintDataset(Dataset):
-    def __init__(self, dataset: Tuple[Tensor, Tensor]):
+    def __init__(self, dataset: Tuple[Tensor, Tensor], central_modality: str = "smiles", context_length: Optional[int] = 256):
         self.dataset = dataset
-
+        self.modality = "fingerprint"
+        self.central_modality = central_modality
+        self.context_length = context_length
+        self.tokenized_central_modality = STRING_TOKENIZERS[central_modality](
+            dataset[0],
+            padding="max_length",
+            truncation=True,
+            return_tensors="pt",
+            max_length=context_length,
+        )
+        
+        self.fingerprints = dataset[1]
+        
     def __len__(self):
         return len(self.dataset)
 
     def __getitem__(self, idx):
         return {
-            self.central_modality: self.dataset[idx],
-            self.modality: self.dataset[idx],
+            self.central_modality: self.central_modality[idx],
+            self.modality: self.fingerprints[idx],
         }
 
 
