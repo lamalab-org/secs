@@ -1,7 +1,8 @@
 from typing import Tuple
-from transformers import AutoModelForCausalLM
+
 import torch.nn as nn
 from torch import Tensor
+from transformers import AutoModelForCausalLM
 
 
 def xavier_init(model: nn.Module):
@@ -19,7 +20,7 @@ class BaseModalityEncoder(nn.Module):
         pretrained: bool = True,
         **kwargs,
     ):
-        super(BaseModalityEncoder, self).__init__()
+        super().__init__()
         self.model_name = model_name
         self.freeze_encoder = freeze_encoder
         self.pretrained = pretrained
@@ -54,3 +55,11 @@ class BaseModalityEncoder(nn.Module):
         sum_ = (last_hidden_state * attention_mask).sum(dim=1)
         norm = attention_mask.squeeze(-1).sum(dim=1).unsqueeze(1)
         return sum_ / norm
+
+
+class FingerprintEncoder(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x: Tensor) -> Tensor:
+        return x
