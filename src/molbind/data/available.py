@@ -16,7 +16,6 @@ AVAILABLE_ENCODERS = {
     "fingerprint": FingerprintEncoder,
 }
 
-
 MODALITY_DATA_TYPES = {
     "fingerprint": list,
     "iupac_name": str,
