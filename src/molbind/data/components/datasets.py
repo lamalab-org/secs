@@ -3,10 +3,9 @@ from typing import Optional, Tuple
 from torch import Tensor
 from torch.utils.data import Dataset
 
-from molbind.data.available import MODALITY_DATA_TYPES, STRING_TOKENIZERS
-
 
 class StringDataset(Dataset):
+
     def __init__(
         self,
         dataset: Tuple[Tensor, Tensor],
@@ -21,6 +20,8 @@ class StringDataset(Dataset):
             modality (str): name of data modality as found in MODALITY_DATA_TYPES
             context_length (int, optional): _description_. Defaults to 256.
         """
+        from molbind.data.available import MODALITY_DATA_TYPES, STRING_TOKENIZERS
+
         assert len(dataset) == 2
         assert len(dataset[0]) == len(dataset[1])
 
