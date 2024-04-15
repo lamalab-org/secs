@@ -16,6 +16,32 @@ if __name__ == "__main__":
     with open("fingerprint.pkl", "rb") as f:
         data = pkl.load(f)
 
+    cfg = {
+        "model": {
+            "input_dim": [2048, 1024, 512],
+            "output_dim": [512, 1024, 2048],
+            "latent_dim": 512,
+            "optimizer": {
+                "lr": 1e-4,
+                "weight_decay": 1e-5,
+            },
+            "loss": {
+                "beta_kl_loss": 1e-3,
+            },
+        },
+        "trainer": {
+            "max_epochs": 30,
+            "log_every_n_steps": 5,
+            "accelerator": "mps",
+            "devices": 1,
+        },
+        "warmup_epochs": 2,
+        "data": {
+            "batch_size": 128,
+        },
+    }
+    cfg = DictConfig(cfg)
+
     data = data.sample(frac=1, random_state=42)
     fingerprints = data["fingerprint"].to_list()
     fingerprints = np.vstack(fingerprints).astype(np.float32)
@@ -29,34 +55,22 @@ if __name__ == "__main__":
     )
 
     trainer = Trainer(
-        max_epochs=10,
-        accelerator="mps",
-        log_every_n_steps=5,
+        max_epochs=cfg.trainer.max_epochs,
+        accelerator=cfg.trainer.accelerator,
+        log_every_n_steps=cfg.trainer.log_every_n_steps,
         logger=wandb_logger,
-        devices=1,
+        devices=cfg.trainer.devices,
     )
 
-    val_dataset = FingerprintDataset(fingerprints[:1000])
-    train_dataset = FingerprintDataset(fingerprints[1000:])
+    val_dataset = FingerprintDataset(fingerprints[:500])
+    train_dataset = FingerprintDataset(fingerprints[500:])
     val_dataloader = torch.utils.data.DataLoader(
-        val_dataset, batch_size=128, shuffle=False, num_workers=1, drop_last=True
+        val_dataset, batch_size=cfg.data.batch_size, shuffle=False, num_workers=1, drop_last=True
     )
     train_dataloader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=128, shuffle=True, num_workers=1, drop_last=True
+        train_dataset, batch_size=cfg.data.batch_size, shuffle=True, num_workers=1, drop_last=True
     )
 
-    cfg = {
-        "model": {
-            "input_dim": [2048, 1024, 512],
-            "output_dim": [512, 512, 2048],
-            "latent_dim": 512,
-            "optimizer": {
-                "lr": 1e-4,
-                "weight_decay": 1e-5,
-            },
-        }
-    }
-    cfg = DictConfig(cfg)
     trainer.fit(
         model=FingerprintEncoderModule(cfg),
         train_dataloaders=train_dataloader,
