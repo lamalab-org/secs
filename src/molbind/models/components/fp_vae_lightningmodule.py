@@ -16,30 +16,39 @@ class FingerprintEncoderModule(LightningModule):
         super().__init__()
         self.model = FingerprintEncoder(cfg=cfg)
         self.config = cfg
+        self.beta = cfg.model.loss.beta_kl_loss
+        self.batch_size = cfg.data.batch_size
 
     def forward(self, input_fingerprint: Tensor):
         return self.model(input_fingerprint)
 
-    def _vae_loss(self, input_fingerprint, prefix="train"):
+    def _vae_loss(self, input_fingerprint, prefix="train") -> Tensor:
         if self.current_epoch > self.config.warmup_epochs:
             mu, log_var, output_fingerprint = self.model(input_fingerprint)
             # Reconstruction loss
             recon_loss = F.mse_loss(output_fingerprint, input_fingerprint)
             # KL divergence loss
             kl_loss = -0.5 * torch.mean(1 + log_var - mu**2 - torch.exp(log_var))
-            self.log(f"recon_loss_{prefix}", recon_loss)
-            self.log(f"kl_loss_{prefix}", kl_loss)
+            total_loss = recon_loss + self.beta * kl_loss
         else:
             kl_loss = torch.tensor(0)
             mu, log_var, output_fingerprint = self.model(input_fingerprint)
             recon_loss = F.mse_loss(output_fingerprint, input_fingerprint)
-            self.log(f"recon_loss_{prefix}", recon_loss)
-        return torch.mean(recon_loss + kl_loss)
+            total_loss = recon_loss + self.beta * kl_loss
+        self.log(f"recon_loss_{prefix}", recon_loss)
+        self.log(f"kl_loss_{prefix}", kl_loss)
+        self.log(f"total_loss_{prefix}", total_loss)
+        # how many bits are correctly reconstructed (fraction)
+        # round output fingerprint
+        output_fingerprint = torch.round(output_fingerprint)
+        correct_recon = torch.sum(output_fingerprint == input_fingerprint).item()
+        self.log(f"correct_recon_{prefix}", correct_recon/self.batch_size/self.config.model.input_dim[0])
+        return torch.mean(recon_loss + self.beta * kl_loss)
 
-    def training_step(self, fingerprints: Tensor):
+    def training_step(self, fingerprints: Tensor) -> Tensor:
         return self._vae_loss(input_fingerprint=fingerprints, prefix="train")
 
-    def validation_step(self, fingerprints: Tensor):
+    def validation_step(self, fingerprints: Tensor) -> Tensor:
         return self._vae_loss(input_fingerprint=fingerprints, prefix="val")
 
     def configure_optimizers(self):
