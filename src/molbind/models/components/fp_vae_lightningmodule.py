@@ -21,10 +21,11 @@ class FingerprintEncoderModule(LightningModule):
         return self.model(input_fingerprint)
 
     def _vae_loss(self, input_fingerprint, prefix="train"):
-        # Reconstruction loss
-        if self.current_epoch > 5:
+        if self.current_epoch > self.config.warmup_epochs:
             mu, log_var, output_fingerprint = self.model(input_fingerprint)
+            # Reconstruction loss
             recon_loss = F.mse_loss(output_fingerprint, input_fingerprint)
+            # KL divergence loss
             kl_loss = -0.5 * torch.mean(1 + log_var - mu**2 - torch.exp(log_var))
             self.log(f"recon_loss_{prefix}", recon_loss)
             self.log(f"kl_loss_{prefix}", kl_loss)
@@ -32,6 +33,7 @@ class FingerprintEncoderModule(LightningModule):
             kl_loss = torch.tensor(0)
             mu, log_var, output_fingerprint = self.model(input_fingerprint)
             recon_loss = F.mse_loss(output_fingerprint, input_fingerprint)
+            self.log(f"recon_loss_{prefix}", recon_loss)
         return torch.mean(recon_loss + kl_loss)
 
     def training_step(self, fingerprints: Tensor):
