@@ -1,10 +1,9 @@
 import numpy as np
-from rdkit import DataStructs
-from rdkit.Chem import AllChem
+from rdkit.Chem import AllChem, MolFromSmiles
 
 
 def get_morgan_fingerprint_from_smiles(
-    smiles: str, radius: int = 2, nbits: int = 2048
+    smiles: str, radius: int = 4, nbits: int = 2048
 ) -> np.array:
     """
     Get Morgan fingerprint of a molecule:
@@ -16,9 +15,10 @@ def get_morgan_fingerprint_from_smiles(
     Returns:
         np.array: fingerprint array
     """
-    mol = AllChem.MolFromSmiles(smiles)
+    mol = MolFromSmiles(smiles)
     if mol is None:
         return None
-    fingerprint_array = np.zeros(nbits, dtype=np.int4)
-    fingerprint = AllChem.GetMorganFingerprintAsBitVect(mol, radius, nBits=nbits)
-    return DataStructs.ConvertToNumpyArray(fingerprint, fingerprint_array)
+
+   # Generate Morgan fingerprint
+    fingerprint = AllChem.GetMorganFingerprintAsBitVect(mol, radius, nbits)
+    return list(fingerprint)

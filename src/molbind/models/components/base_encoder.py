@@ -1,8 +1,13 @@
 from typing import Tuple
 
+import torch
 import torch.nn as nn
+import torch.nn.functional as F
+from lightning import LightningModule
 from torch import Tensor
 from transformers import AutoModelForCausalLM
+
+from molbind.models.components.head import ProjectionHead
 
 
 def xavier_init(model: nn.Module):
@@ -58,8 +63,23 @@ class BaseModalityEncoder(nn.Module):
 
 
 class FingerprintEncoder(nn.Module):
-    def __init__(self):
+    def __init__(self, cfg):
         super().__init__()
+        # Example architecture
+        input_dim = cfg.model.input_dim
+        latent_dim = cfg.model.latent_dim
+        output_dim = cfg.model.output_dim
 
-    def forward(self, x: Tensor) -> Tensor:
-        return x
+        self.encoder_head = ProjectionHead(dims=input_dim, activation="leakyrelu")
+        # Output layers for mu and log_var
+        self.fc_mu = nn.Linear(input_dim[-1], latent_dim)
+        self.fc_log_var = nn.Linear(input_dim[-1], latent_dim)
+        # decoder
+        self.decoder_head = ProjectionHead(dims=output_dim, activation="leakyrelu")
+
+    def forward(self, x):
+        encoder = self.encoder_head(x)
+        mu = self.fc_mu(encoder)
+        log_var = self.fc_log_var(encoder)
+        output = self.decoder_head(encoder)
+        return mu, log_var, output

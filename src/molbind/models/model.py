@@ -49,22 +49,21 @@ class MolBind(nn.Module):
         # input_data = [data, batch_index, dataloader_index]
         input_data, _, _ = input_data
         # input_data is a dictionary with (smiles, modality) pairs (where the central modality is at index 0)
-        central_modality = [*input_data][0]
         modality = [*input_data][1]
         # store embeddings as store_embeddings[modality] = (smiles_embedding, modality_embedding)
         # forward through respective encoder
-        smiles_embedding = self.dict_encoders[central_modality].forward(
-            input_data[central_modality]
+        smiles_embedding = self.dict_encoders[self.central_modality].forward(
+            input_data[self.central_modality]
         )
         modality_embedding = self.dict_encoders[modality].forward(input_data[modality])
         central_modality_embedding_projected = self.dict_projection_heads[
-            central_modality
+            self.central_modality
         ](smiles_embedding)
         modality_embedding_projected = self.dict_projection_heads[modality](
             modality_embedding
         )
         # projection heads
-        store_embeddings[central_modality] = central_modality_embedding_projected
+        store_embeddings[self.central_modality] = central_modality_embedding_projected
         store_embeddings[modality] = modality_embedding_projected
         return store_embeddings
 

@@ -62,8 +62,13 @@ class StringDataset(Dataset):
         }
 
 
-class FingerprintDataset(Dataset):
-    def __init__(self, dataset: Tuple[Tensor, Tensor], central_modality: str = "smiles", context_length: Optional[int] = 256):
+class FingerprintMolBindDataset(Dataset):
+    def __init__(
+        self,
+        dataset: Tuple[Tensor, Tensor],
+        central_modality: str = "smiles",
+        context_length: Optional[int] = 256,
+    ):
         self.dataset = dataset
         self.modality = "fingerprint"
         self.central_modality = central_modality
@@ -75,9 +80,9 @@ class FingerprintDataset(Dataset):
             return_tensors="pt",
             max_length=context_length,
         )
-        
+
         self.fingerprints = dataset[1]
-        
+
     def __len__(self):
         return len(self.dataset)
 
@@ -90,3 +95,17 @@ class FingerprintDataset(Dataset):
 
 class GraphDataset(Dataset):
     pass
+
+
+class FingerprintVAEDataset(Dataset):
+    def __init__(
+        self,
+        dataset: Tuple[Tensor],
+    ):
+        self.fingerprints = dataset
+
+    def __len__(self):
+        return len(self.fingerprints)
+
+    def __getitem__(self, idx):
+        return self.fingerprints[idx]

@@ -1,6 +1,7 @@
-from torch import nn
-from typing import Union, List
+from typing import List, Union
+
 from class_resolver import ClassResolver
+from torch import nn
 
 ACTIVATION_RESOLVER = ClassResolver(
     [nn.ReLU, nn.LeakyReLU, nn.Sigmoid, nn.Tanh], base=nn.Module, default=nn.ReLU
@@ -14,7 +15,7 @@ class ProjectionHead(nn.Module):
         activation: Union[str, List[str]] = "leakyrelu",
         batch_norm: bool = False,
     ):
-        super(ProjectionHead, self).__init__()
+        super().__init__()
         # build projection head
         self.projection_head = self._build_projection_head(dims, activation, batch_norm)
 
