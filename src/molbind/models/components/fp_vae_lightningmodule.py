@@ -16,9 +16,9 @@ class FingerprintEncoderModule(LightningModule):
     def __init__(self, cfg: DictConfig):
         super().__init__()
         self.model = FingerprintEncoder(
-            input_dim=cfg.model.input_dim,
-            output_dim=cfg.model.output_dim,
-            latent_dim=cfg.model.latent_dim,
+            input_dim=cfg.model.input_dims,
+            output_dim=cfg.model.output_dims,
+            latent_dim=cfg.model.latent_dims,
         )
         self.config = cfg
         self.beta = cfg.model.loss.beta_kl_loss

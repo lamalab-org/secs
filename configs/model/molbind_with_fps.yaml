@@ -10,8 +10,8 @@ encoders:
 
   fingerprint:
     "ckpt_path": "${paths.pretrained_models_dir}/fingerprint/morgan_vae.ckpt"
-    "input_dim": [2048, 1024, 768]
-    "output_dim": [768, 1024, 2048]
+    "input_dims": [2048, 1024, 768]
+    "output_dims": [768, 1024, 2048]
     "latent_dim": 512
 
 projection_heads:

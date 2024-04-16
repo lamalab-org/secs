@@ -60,14 +60,14 @@ class BaseModalityEncoder(nn.Module):
 
 
 class FingerprintEncoder(nn.Module):
-    def __init__(self, input_dim: List[int], output_dim: List[int], latent_dim: int):
+    def __init__(self, input_dims: List[int], output_dims: List[int], latent_dim: int):
         super().__init__()
-        self.encoder = ProjectionHead(dims=input_dim, activation="leakyrelu")
+        self.encoder = ProjectionHead(dims=input_dims, activation="leakyrelu")
         # Output layers for mu and log_var
-        self.fc_mu = nn.Linear(input_dim[-1], latent_dim)
-        self.fc_log_var = nn.Linear(input_dim[-1], latent_dim)
+        self.fc_mu = nn.Linear(input_dims[-1], latent_dim)
+        self.fc_log_var = nn.Linear(input_dims[-1], latent_dim)
         # decoder
-        self.decoder = ProjectionHead(dims=output_dim, activation="leakyrelu")
+        self.decoder = ProjectionHead(dims=output_dims, activation="leakyrelu")
 
     def encode(self, x: Tensor):
         return self.encoder(x)

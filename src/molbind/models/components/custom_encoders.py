@@ -41,12 +41,12 @@ class NMREncoder(BaseModalityEncoder):
 class CustomFingerprintEncoder(FingerprintEncoder):
     def __init__(
         self,
-        input_dim: List[int],
-        output_dim: List[int],
+        input_dims: List[int],
+        output_dims: List[int],
         latent_dim: int,
         ckpt_path: str,
     ):
-        super().__init__(input_dim, output_dim, latent_dim)
+        super().__init__(input_dims, output_dims, latent_dim)
         # load weights from the pre-trained model
         self.load_state_dict(
             rename_keys_with_prefix(
