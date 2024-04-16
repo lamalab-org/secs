@@ -80,7 +80,7 @@ def train_molbind(config: DictConfig):
                 valid_modality_pair[column].to_list(),
             ]
 
-    combined_loader = load_combined_loader(
+    train_dataloader = load_combined_loader(
         central_modality=config.data.central_modality,
         data_modalities=train_modality_data,
         batch_size=config.data.batch_size,
@@ -97,7 +97,7 @@ def train_molbind(config: DictConfig):
     )
 
     datamodule = MolBindDataModule(
-        data={"train": combined_loader, "val": valid_dataloader},
+        data={"train": train_dataloader, "val": valid_dataloader},
         batch_size=config.data.batch_size,
         central_modality=config.data.central_modality,
         data_modalities=config.data.modalities,

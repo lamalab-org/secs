@@ -50,6 +50,7 @@ class MolBind(nn.Module):
         input_data, _, _ = input_data
         # input_data is a dictionary with (smiles, modality) pairs (where the central modality is at index 0)
         modality = [*input_data][1]
+        print(f"Central modality: {self.central_modality}", f"Modality: {modality}")
         # store embeddings as store_embeddings[modality] = (smiles_embedding, modality_embedding)
         # forward through respective encoder
         smiles_embedding = self.dict_encoders[self.central_modality].forward(

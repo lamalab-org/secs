@@ -49,7 +49,7 @@ class CustomFingerprintEncoder(FingerprintEncoder):
         super().__init__(input_dim, output_dim, latent_dim)
         # load weights from the pre-trained model
         self.load_state_dict(
-            remove_keys_with_prefix(torch.load(ckpt_path)["state_dict"])
+            remove_keys_with_prefix(torch.load(ckpt_path, map_location="cuda")["state_dict"])
         )
 
     def forward(self, x: Tensor) -> Tensor:

@@ -8,7 +8,7 @@ defaults:
   - model: molbind_with_fps
   - logger: wandb
   - paths: default
-  - trainer: mps
+  - trainer: gpu
   # - callbacks: default
   # - extras: default
   # - hydra: default

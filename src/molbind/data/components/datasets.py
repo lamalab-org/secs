@@ -86,7 +86,7 @@ class FingerprintMolBindDataset(Dataset):
         self.central_modality = central_modality
         self.context_length = context_length
 
-        assert MODALITY_DATA_TYPES[self.modality] == str
+        assert MODALITY_DATA_TYPES[self.modality] == list
         assert MODALITY_DATA_TYPES[central_modality] == str
 
         self.tokenized_central_modality = STRING_TOKENIZERS[central_modality](
@@ -100,12 +100,15 @@ class FingerprintMolBindDataset(Dataset):
         self.fingerprints = dataset[1]
 
     def __len__(self):
-        return len(self.dataset)
+        return len(self.dataset[0])
 
     def __getitem__(self, idx):
         return {
-            self.central_modality: self.central_modality[idx],
-            self.modality: self.fingerprints[idx],
+            self.central_modality: (
+                self.tokenized_central_modality.input_ids[idx],
+                self.tokenized_central_modality.attention_mask[idx],
+            ),
+            self.modality: Tensor(self.fingerprints[idx]),
         }
 
 

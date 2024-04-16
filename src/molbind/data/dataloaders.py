@@ -3,7 +3,11 @@ from networkx import Graph
 from torch.utils.data import DataLoader
 
 from molbind.data.available import MODALITY_DATA_TYPES
-from molbind.data.components.datasets import GraphDataset, StringDataset
+from molbind.data.components.datasets import (
+    GraphDataset,
+    StringDataset,
+    FingerprintMolBindDataset,
+)
 
 
 def load_combined_loader(
@@ -33,6 +37,19 @@ def load_combined_loader(
             dataset_instance = StringDataset(
                 dataset=data_modalities[modality],
                 modality=modality,
+                central_modality=central_modality,
+                context_length=256,
+            )
+            loaders[modality] = DataLoader(
+                dataset_instance,
+                batch_size=batch_size,
+                shuffle=shuffle,
+                num_workers=num_workers,
+                drop_last=drop_last,
+            )
+        elif MODALITY_DATA_TYPES[modality] == list:
+            dataset_instance = FingerprintMolBindDataset(
+                dataset=data_modalities[modality],
                 central_modality=central_modality,
                 context_length=256,
             )
