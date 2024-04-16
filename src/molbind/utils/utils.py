@@ -117,3 +117,15 @@ def get_metric_value(metric_dict: Dict[str, Any], metric_name: Optional[str]) ->
     log.info(f"Retrieved metric value! <{metric_name}={metric_value}>")
 
     return metric_value
+
+
+def remove_keys_with_prefix(d: dict) -> dict:
+    new_dict = {}
+    for key, value in d.items():
+        if key.startswith("model."):
+            # remove the prefix
+            new_key = key[len("model.") :]
+            new_dict[new_key] = value
+        else:
+            new_dict[key] = value
+    return new_dict

@@ -6,8 +6,8 @@ from molbind.data.components.datasets import (
     StringDataset,
 )
 from molbind.data.components.tokenizers import SELFIES_TOKENIZER, SMILES_TOKENIZER
-from molbind.models.components.base_encoder import FingerprintEncoder
 from molbind.models.components.custom_encoders import (
+    CustomFingerprintEncoder,
     GraphEncoder,
     SelfiesEncoder,
     SmilesEncoder,
@@ -18,7 +18,7 @@ AVAILABLE_ENCODERS = {
     "selfies": SelfiesEncoder,
     "graph": GraphEncoder,
     "nmr": None,
-    "fingerprint": FingerprintEncoder,
+    "fingerprint": CustomFingerprintEncoder,
 }
 
 MODALITY_DATA_TYPES = {

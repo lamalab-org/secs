@@ -1,7 +1,6 @@
-from typing import Tuple
+from typing import List, Tuple
 
 import torch.nn as nn
-from omegaconf import DictConfig
 from torch import Tensor
 from transformers import AutoModelForCausalLM
 
@@ -61,13 +60,8 @@ class BaseModalityEncoder(nn.Module):
 
 
 class FingerprintEncoder(nn.Module):
-    def __init__(self, cfg : DictConfig):
+    def __init__(self, input_dim: List[int], output_dim: List[int], latent_dim: int):
         super().__init__()
-        # Example architecture
-        input_dim = cfg.model.input_dim
-        latent_dim = cfg.model.latent_dim
-        output_dim = cfg.model.output_dim
-
         self.encoder = ProjectionHead(dims=input_dim, activation="leakyrelu")
         # Output layers for mu and log_var
         self.fc_mu = nn.Linear(input_dim[-1], latent_dim)
@@ -75,13 +69,13 @@ class FingerprintEncoder(nn.Module):
         # decoder
         self.decoder = ProjectionHead(dims=output_dim, activation="leakyrelu")
 
-    def encode(self, x : Tensor):
+    def encode(self, x: Tensor):
         return self.encoder(x)
 
-    def decode(self, x : Tensor):
+    def decode(self, x: Tensor):
         return self.decoder(x)
 
-    def forward(self, x : Tensor) -> Tuple[Tensor, Tensor, Tensor]:
+    def forward(self, x: Tensor) -> Tuple[Tensor, Tensor, Tensor]:
         latent_state = self.encode(x)
         mu = self.fc_mu(latent_state)
         log_var = self.fc_log_var(latent_state)
