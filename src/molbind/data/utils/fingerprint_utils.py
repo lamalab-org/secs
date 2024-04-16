@@ -4,7 +4,7 @@ from rdkit.Chem import AllChem, MolFromSmiles
 
 def get_morgan_fingerprint_from_smiles(
     smiles: str, radius: int = 4, nbits: int = 2048
-) -> np.array:
+) -> list:
     """
     Get Morgan fingerprint of a molecule:
 
