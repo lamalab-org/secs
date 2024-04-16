@@ -18,8 +18,8 @@ if __name__ == "__main__":
 
     cfg = {
         "model": {
-            "input_dim": [2048, 1024, 512],
-            "output_dim": [512, 1024, 2048],
+            "input_dim": [2048, 1024, 768],
+            "output_dim": [768, 1024, 2048],
             "latent_dim": 512,
             "optimizer": {
                 "lr": 1e-4,
@@ -30,12 +30,11 @@ if __name__ == "__main__":
             },
         },
         "trainer": {
-            "max_epochs": 30,
+            "max_epochs": 100,
             "log_every_n_steps": 5,
             "accelerator": "mps",
             "devices": 1,
         },
-        "warmup_epochs": 2,
         "data": {
             "batch_size": 128,
         },

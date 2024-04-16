@@ -1,14 +1,17 @@
-import hydra
-import pytorch_lightning as L
-import polars as pl
-from molbind.data.dataloaders import load_combined_loader
-from molbind.models.lightning_module import MolBindModule
-from omegaconf import DictConfig
-import torch
-import rootutils
-from dotenv import load_dotenv
-import pickle as pkl
 import os
+import pickle as pkl
+
+import hydra
+import polars as pl
+import pytorch_lightning as L
+import rootutils
+import torch
+from dotenv import load_dotenv
+from omegaconf import DictConfig
+
+from molbind.data.dataloaders import load_combined_loader
+from molbind.data.datamodule import MolBindDataModule
+from molbind.models.lightning_module import MolBindModule
 
 load_dotenv(".env")
 
@@ -93,10 +96,16 @@ def train_molbind(config: DictConfig):
         num_workers=1,
     )
 
+    datamodule = MolBindDataModule(
+        data={"train": combined_loader, "val": valid_dataloader},
+        batch_size=config.data.batch_size,
+        central_modality=config.data.central_modality,
+        data_modalities=config.data.modalities,
+    )
+
     trainer.fit(
-        MolBindModule(config),
-        train_dataloaders=combined_loader,
-        val_dataloaders=valid_dataloader,
+        model=MolBindModule(config),
+        datamodule=datamodule,
     )
 
 
