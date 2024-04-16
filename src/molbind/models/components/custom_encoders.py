@@ -7,7 +7,7 @@ from molbind.models.components.base_encoder import (
     BaseModalityEncoder,
     FingerprintEncoder,
 )
-from molbind.utils.utils import remove_keys_with_prefix
+from molbind.utils.utils import rename_keys_with_prefix, select_device
 
 
 class SmilesEncoder(BaseModalityEncoder):
@@ -49,7 +49,9 @@ class CustomFingerprintEncoder(FingerprintEncoder):
         super().__init__(input_dim, output_dim, latent_dim)
         # load weights from the pre-trained model
         self.load_state_dict(
-            remove_keys_with_prefix(torch.load(ckpt_path, map_location="cuda")["state_dict"])
+            rename_keys_with_prefix(
+                torch.load(ckpt_path, map_location=select_device())["state_dict"]
+            )
         )
 
     def forward(self, x: Tensor) -> Tensor:

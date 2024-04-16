@@ -1,4 +1,3 @@
-import numpy as np
 from rdkit.Chem import AllChem, MolFromSmiles
 
 
@@ -12,7 +11,7 @@ def get_morgan_fingerprint_from_smiles(
         mol (rdkit.Chem.rdchem.Mol): molecule
         radius (int, optional): radius of the fingerprint. Defaults to 2.
         nbits (int, optional): number of bits in the fingerprint. Defaults to 2048.
-        
+
     Returns:
         list: fingerprint array
     """
@@ -20,6 +19,6 @@ def get_morgan_fingerprint_from_smiles(
     if mol is None:
         return None
 
-   # Generate Morgan fingerprint
+    # Generate Morgan fingerprint
     fingerprint = AllChem.GetMorganFingerprintAsBitVect(mol, radius, nbits)
     return list(fingerprint)
