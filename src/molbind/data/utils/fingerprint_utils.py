@@ -13,7 +13,7 @@ def get_morgan_fingerprint_from_smiles(
         radius (int, optional): radius of the fingerprint. Defaults to 2.
         nbits (int, optional): number of bits in the fingerprint. Defaults to 2048.
     Returns:
-        np.array: fingerprint array
+        list: fingerprint array
     """
     mol = MolFromSmiles(smiles)
     if mol is None:
