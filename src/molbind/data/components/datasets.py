@@ -17,7 +17,7 @@ class StringDataset(Dataset):
         Args:
             dataset (Tuple[Tensor, Tensor]): pair of (central_modality, modality) where the central modality is at index 0.
             modality (str): name of data modality as found in MODALITY_DATA_TYPES
-            context_length (int, optional): _description_. Defaults to 256.
+            context_length (int, optional): Context length of the model. Important for padding. Defaults to 256.
         """
         from molbind.data.available import MODALITY_DATA_TYPES, STRING_TOKENIZERS
 
