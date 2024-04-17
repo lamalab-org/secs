@@ -4,9 +4,9 @@ from torch.utils.data import DataLoader
 
 from molbind.data.available import MODALITY_DATA_TYPES
 from molbind.data.components.datasets import (
+    FingerprintMolBindDataset,
     GraphDataset,
     StringDataset,
-    FingerprintMolBindDataset,
 )
 
 
