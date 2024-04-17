@@ -8,7 +8,7 @@ def get_morgan_fingerprint_from_smiles(
     Get Morgan fingerprint of a molecule:
 
     Args:
-        mol (rdkit.Chem.rdchem.Mol): molecule
+        smiles (str): SMILES of molecule
         radius (int, optional): radius of the fingerprint. Defaults to 2.
         nbits (int, optional): number of bits in the fingerprint. Defaults to 2048.
 
