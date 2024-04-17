@@ -10,7 +10,7 @@ def add_fingerprint_column_to_dataframe(
     Add fingerprint column to a DataFrame
 
     Args:
-        data (pl.DataFrame): DataFrame
+        csv_data_path (Union[Path, str]): Path to csv file with data
         radius (int, optional): radius of the fingerprint. Defaults to 2.
         nbits (int, optional): number of bits in the fingerprint. Defaults to 2048.
 
