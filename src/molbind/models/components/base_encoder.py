@@ -7,7 +7,7 @@ from transformers import AutoModelForCausalLM
 from molbind.models.components.head import ProjectionHead
 
 
-def xavier_init(model: nn.Module):
+def xavier_init(model: nn.Module) -> nn.Module:
     for param in model.parameters():
         if len(param.shape) > 1:
             nn.init.xavier_uniform_(param)
