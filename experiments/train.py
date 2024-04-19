@@ -1,13 +1,18 @@
+import os  # noqa: I002
+import pickle as pkl
+
 import hydra
-import pytorch_lightning as L
 import polars as pl
-from molbind.data.dataloaders import load_combined_loader
-from molbind.models.lightning_module import MolBindModule
-from omegaconf import DictConfig
-import torch
+import pytorch_lightning as L
 import rootutils
+import torch
 from dotenv import load_dotenv
-import os
+from omegaconf import DictConfig
+
+from molbind.data.dataloaders import load_combined_loader
+from molbind.data.datamodule import MolBindDataModule
+from molbind.models.lightning_module import MolBindModule
+
 load_dotenv(".env")
 
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
@@ -32,8 +37,14 @@ def train_molbind(config: DictConfig):
     train_modality_data = {}
     valid_modality_data = {}
 
-    # Example SMILES - SELFIES modality pair:
-    data = pl.read_csv(config.data.dataset_path)
+    # check format of config.data.dataset_path
+    data_format = config.data.dataset_path.split(".")[-1]
+
+    if data_format == "csv":
+        data = pl.read_csv(config.data.dataset_path)
+    elif data_format == "pkl":
+        data = pkl.load(open(config.data.dataset_path, "rb"))  # noqa: PTH123, SIM115
+        data = pl.from_pandas(data)
     shuffled_data = data.sample(
         fraction=config.data.fraction_data, shuffle=True, seed=config.data.seed
     )
@@ -69,7 +80,7 @@ def train_molbind(config: DictConfig):
                 valid_modality_pair[column].to_list(),
             ]
 
-    combined_loader = load_combined_loader(
+    train_dataloader = load_combined_loader(
         central_modality=config.data.central_modality,
         data_modalities=train_modality_data,
         batch_size=config.data.batch_size,
@@ -85,10 +96,16 @@ def train_molbind(config: DictConfig):
         num_workers=1,
     )
 
+    datamodule = MolBindDataModule(
+        data={"train": train_dataloader, "val": valid_dataloader},
+        batch_size=config.data.batch_size,
+        central_modality=config.data.central_modality,
+        data_modalities=config.data.modalities,
+    )
+
     trainer.fit(
-        MolBindModule(config),
-        train_dataloaders=combined_loader,
-        val_dataloaders=valid_dataloader,
+        model=MolBindModule(config),
+        datamodule=datamodule,
     )
 
 

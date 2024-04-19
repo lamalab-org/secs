@@ -1,15 +1,28 @@
-from molbind.models.components.base_encoder import BaseModalityEncoder
+from typing import List  # noqa: UP035, I002
+
+import torch
+from torch import Tensor
+
+from molbind.models.components.base_encoder import (
+    BaseModalityEncoder,
+    FingerprintEncoder,
+)
+from molbind.utils.utils import rename_keys_with_prefix, select_device
 
 
 class SmilesEncoder(BaseModalityEncoder):
-    def __init__(self, freeze_encoder: bool = False, pretrained: bool = True, **kwargs):
+    def __init__(
+        self, freeze_encoder: bool = False, pretrained: bool = True, **kwargs
+    ) -> None:
         super().__init__(
             "seyonec/ChemBERTa-zinc-base-v1", freeze_encoder, pretrained, **kwargs
         )
 
 
 class SelfiesEncoder(BaseModalityEncoder):
-    def __init__(self, freeze_encoder: bool = False, pretrained: bool = True, **kwargs):
+    def __init__(
+        self, freeze_encoder: bool = False, pretrained: bool = True, **kwargs
+    ) -> None:
         super().__init__("HUBioDataLab/SELFormer", freeze_encoder, pretrained, **kwargs)
 
 
@@ -27,3 +40,23 @@ class GraphEncoder(BaseModalityEncoder):
 
 class NMREncoder(BaseModalityEncoder):
     pass
+
+
+class CustomFingerprintEncoder(FingerprintEncoder):
+    def __init__(
+        self,
+        input_dims: List[int],  # noqa: UP006
+        output_dims: List[int],  # noqa: UP006
+        latent_dim: int,
+        ckpt_path: str,
+    ) -> None:
+        super().__init__(input_dims, output_dims, latent_dim)
+        # load weights from the pre-trained model
+        self.load_state_dict(
+            rename_keys_with_prefix(
+                torch.load(ckpt_path, map_location=select_device())["state_dict"]
+            )
+        )
+
+    def forward(self, x: Tensor) -> Tensor:
+        return self.encoder(x)

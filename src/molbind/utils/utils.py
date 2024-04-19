@@ -3,7 +3,7 @@ from importlib.util import find_spec
 from typing import Any, Callable, Dict, Optional, Tuple
 from omegaconf import DictConfig
 from molbind.utils import pylogger, rich_utils
-import torch.nn as nn
+import torch
 
 
 log = pylogger.RankedLogger(__name__, rank_zero_only=True)
@@ -95,7 +95,9 @@ def task_wrapper(task_func: Callable) -> Callable:
     return wrap
 
 
-def get_metric_value(metric_dict: Dict[str, Any], metric_name: Optional[str]) -> Optional[float]:
+def get_metric_value(
+    metric_dict: Dict[str, Any], metric_name: Optional[str]
+) -> Optional[float]:
     """Safely retrieves value of the metric logged in LightningModule.
 
     :param metric_dict: A dict containing metric values.
@@ -117,3 +119,26 @@ def get_metric_value(metric_dict: Dict[str, Any], metric_name: Optional[str]) ->
     log.info(f"Retrieved metric value! <{metric_name}={metric_value}>")
 
     return metric_value
+
+
+def rename_keys_with_prefix(d: dict) -> dict:
+    new_dict = {}
+    for key, value in d.items():
+        if key.startswith("model."):
+            # remove the prefix
+            new_key = key[len("model.") :]
+            new_dict[new_key] = value
+        else:
+            new_dict[key] = value
+    return new_dict
+
+
+def select_device() -> str:
+    """Selects the device to use for the model."""
+    if torch.cuda.is_available():
+        device = "cuda"
+    elif torch.backends.mps.is_available():
+        device = "mps"
+    else:
+        device = "cpu"
+    return device

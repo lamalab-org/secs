@@ -16,3 +16,5 @@ output_dir: ${hydra:runtime.output_dir}
 
 # path to working directory
 work_dir: ${hydra:runtime.cwd}
+
+pretrained_models_dir: ${paths.data_dir}/pretrained_models

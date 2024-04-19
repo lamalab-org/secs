@@ -1,9 +1,11 @@
+from typing import Dict
+
+import torch
 from info_nce import InfoNCE
 from pytorch_lightning import LightningModule
-from molbind.models.model import MolBind
-import torch
 from torch import Tensor
-from typing import Dict
+
+from molbind.models.model import MolBind
 
 
 class MolBindModule(LightningModule):
@@ -22,7 +24,7 @@ class MolBindModule(LightningModule):
         return self.loss(z1, z2)
 
     def _multimodal_loss(self, embeddings_dict: Dict, prefix: str):
-        modality_pair = [*embeddings_dict.keys()]
+        modality_pair = [*embeddings_dict]
         loss = self._info_nce_loss(
             embeddings_dict[modality_pair[0]], embeddings_dict[modality_pair[1]]
         )
