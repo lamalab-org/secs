@@ -1,4 +1,4 @@
-import os
+import os  # noqa: I002
 import pickle as pkl
 
 import hydra
@@ -43,7 +43,7 @@ def train_molbind(config: DictConfig):
     if data_format == "csv":
         data = pl.read_csv(config.data.dataset_path)
     elif data_format == "pkl":
-        data = pkl.load(open(config.data.dataset_path, "rb"))
+        data = pkl.load(open(config.data.dataset_path, "rb"))  # noqa: PTH123, SIM115
         data = pl.from_pandas(data)
     shuffled_data = data.sample(
         fraction=config.data.fraction_data, shuffle=True, seed=config.data.seed
