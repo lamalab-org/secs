@@ -11,4 +11,5 @@ dependencies:
   - pip
   - faiss-cpu
   - pip:
+    - selfies
     - --editable "."
