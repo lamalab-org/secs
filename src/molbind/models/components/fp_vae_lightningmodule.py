@@ -1,19 +1,19 @@
 """
 This module contains the implementation of the FingerprintEncoderModule class, which is a PyTorch Lightning module.
 The FingerprintEncoderModule class is used to train the FingerprintEncoder model using PyTorch Lightning.
-"""
+"""  # noqa: I002
 
 import torch
 import torch.nn.functional as F
 from lightning import LightningModule
+from omegaconf import DictConfig
 from torch import Tensor
 
 from molbind.models.components.base_encoder import FingerprintEncoder
-from omegaconf import DictConfig
 
 
 class FingerprintEncoderModule(LightningModule):
-    def __init__(self, cfg: DictConfig):
+    def __init__(self, cfg: DictConfig) -> None:
         super().__init__()
         self.model = FingerprintEncoder(
             input_dim=cfg.model.input_dims,
@@ -24,10 +24,14 @@ class FingerprintEncoderModule(LightningModule):
         self.beta = cfg.model.loss.beta_kl_loss
         self.batch_size = cfg.data.batch_size
 
-    def forward(self, input_fingerprint: Tensor):
+    def forward(self, input_fingerprint: Tensor) -> Tensor:
         return self.model(input_fingerprint)
 
     def _vae_loss(self, input_fingerprint, prefix="train") -> Tensor:
+        """
+        https://stats.stackexchange.com/questions/341954/balancing-reconstruction-vs-kl-loss-variational-autoencoder
+        KL-annealing: https://arxiv.org/pdf/1511.06349.pdf
+        """
         if self.current_epoch > self.config.warmup_epochs:
             mu, log_var, output_fingerprint = self.model(input_fingerprint)
             # Reconstruction loss
@@ -59,7 +63,7 @@ class FingerprintEncoderModule(LightningModule):
     def validation_step(self, fingerprints: Tensor) -> Tensor:
         return self._vae_loss(input_fingerprint=fingerprints, prefix="val")
 
-    def configure_optimizers(self):
+    def configure_optimizers(self) -> torch.optim.Optimizer:
         return torch.optim.AdamW(
             self.model.parameters(),
             lr=self.config.model.optimizer.lr,

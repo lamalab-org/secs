@@ -13,7 +13,7 @@ from molbind.data.components.datasets import FingerprintVAEDataset as Fingerprin
 from molbind.models.components.fp_vae_lightningmodule import FingerprintEncoderModule
 
 if __name__ == "__main__":
-    with open("fingerprint.pkl", "rb") as f:
+    with open("fingerprint.pkl", "rb") as f:  # noqa: PTH123
         data = pkl.load(f)
 
     cfg = {
