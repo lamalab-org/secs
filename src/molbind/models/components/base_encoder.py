@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import List, Tuple  # noqa: UP035, I002
 
 import torch.nn as nn
 from torch import Tensor
@@ -39,7 +39,7 @@ class BaseModalityEncoder(nn.Module):
             self.encoder = AutoModelForCausalLM.from_pretrained(self.model_name)
             self.encoder = xavier_init(self.encoder)
 
-    def forward(self, x: Tuple[Tensor, Tensor]) -> Tensor:
+    def forward(self, x: Tuple[Tensor, Tensor]) -> Tensor: # noqa: UP006
         token_ids, attention_mask = x
         output = self.encoder(
             input_ids=token_ids,
@@ -60,7 +60,9 @@ class BaseModalityEncoder(nn.Module):
 
 
 class FingerprintEncoder(nn.Module):
-    def __init__(self, input_dims: List[int], output_dims: List[int], latent_dim: int):
+    def __init__(
+        self, input_dims: List[int], output_dims: List[int], latent_dim: int  # noqa: UP006
+    ) -> None:
         super().__init__()
         self.encoder = ProjectionHead(dims=input_dims, activation="leakyrelu")
         # Output layers for mu and log_var
@@ -75,7 +77,7 @@ class FingerprintEncoder(nn.Module):
     def decode(self, x: Tensor):
         return self.decoder(x)
 
-    def forward(self, x: Tensor) -> Tuple[Tensor, Tensor, Tensor]:
+    def forward(self, x: Tensor) -> Tuple[Tensor, Tensor, Tensor]:  # noqa: UP006
         latent_state = self.encode(x)
         mu = self.fc_mu(latent_state)
         log_var = self.fc_log_var(latent_state)
