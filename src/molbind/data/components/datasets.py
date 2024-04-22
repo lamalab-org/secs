@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import Tuple  # noqa: UP035, I002
 
 from torch import Tensor
 from torch.utils.data import Dataset
@@ -7,108 +7,69 @@ from torch.utils.data import Dataset
 class StringDataset(Dataset):
     def __init__(
         self,
-        dataset: Tuple[Tensor, Tensor],
-        modality: str,
-        central_modality: str = "smiles",
-        context_length: Optional[int] = 256,
-    ):
+        central_modality_data: Tuple[Tensor, Tensor],  # noqa: UP006
+        other_modality_data: Tuple[Tensor, Tensor],  # noqa: UP006
+        central_modality: str,
+        other_modality: str,
+    ) -> None:
         """Dataset for string modalities.
 
         Args:
-            dataset (Tuple[Tensor, Tensor]): pair of (central_modality, modality) where the central modality is at index 0.
-            modality (str): name of data modality as found in MODALITY_DATA_TYPES
-            context_length (int, optional): Context length of the model. Important for padding. Defaults to 256.
+            central_modality_data (Tuple[Tensor, Tensor]): pair of (central_modality, tokenized_central_modality)
+            other_modality_data (Tuple[Tensor, Tensor]): pair of (other_modality, tokenized_other_modality)
+            central_modality (str): name of central modality as found in MODALITY_DATA_TYPES
+            other_modality (str): name of other modality as found in MODALITY_DATA_TYPES
         """
-        from molbind.data.available import MODALITY_DATA_TYPES, STRING_TOKENIZERS
-
-        assert len(dataset) == 2
-        assert len(dataset[0]) == len(dataset[1])
-
-        self.modality = modality
+        self.central_modality_data = central_modality_data
         self.central_modality = central_modality
-
-        assert MODALITY_DATA_TYPES[modality] == str
-        assert MODALITY_DATA_TYPES[central_modality] == str
-
-        self.tokenized_central_modality = STRING_TOKENIZERS[central_modality](
-            dataset[0],
-            padding="max_length",
-            truncation=True,
-            return_tensors="pt",
-            max_length=context_length,
-        )
-
-        self.tokenized_string = STRING_TOKENIZERS[modality](
-            dataset[1],
-            padding="max_length",
-            truncation=True,
-            return_tensors="pt",
-            max_length=context_length,
-        )
+        self.other_modality = other_modality
+        self.tokenized_central_modality = central_modality_data
+        self.tokenized_other_modality = other_modality_data
 
     def __len__(self):
-        return len(self.tokenized_central_modality.input_ids)
+        return len(self.tokenized_central_modality[0])
 
     def __getitem__(self, idx):
         return {
             self.central_modality: (
-                self.tokenized_central_modality.input_ids[idx],
-                self.tokenized_central_modality.attention_mask[idx],
+                self.central_modality_data[0][idx],
+                self.central_modality_data[1][idx],
             ),
-            self.modality: (
-                self.tokenized_string.input_ids[idx],
-                self.tokenized_string.attention_mask[idx],
-            ),
+            self.modality: self.other_modality_data[idx],
         }
 
 
 class FingerprintMolBindDataset(Dataset):
     def __init__(
         self,
-        dataset: Tuple[Tensor, Tensor],
-        central_modality: str = "smiles",
-        context_length: Optional[int] = 256,
-    ):
+        central_modality_data: Tuple[Tensor, Tensor],  # noqa: UP006
+        fingerprint_data: Tensor,
+        central_modality: str,
+    ) -> None:
         """Dataset for fingerprints.
 
         Args:
-            dataset (Tuple[Tensor, Tensor]): pair of (central_modality, fingerprint) where the central modality is at index 0.
-            modality (str): name of data modality as found in MODALITY_DATA_TYPES
-            context_length (int, optional): _description_. Defaults to 256.
+            central_modality_data (Tuple[Tensor, Tensor]): pair of (central_modality, tokenized_central_modality)
+            fingerprint_data (Tensor): fingerprint data
+            central_modality (str): name of central modality as found in MODALITY_DATA_TYPES
+        Returns:
+            None
         """
-        from molbind.data.available import MODALITY_DATA_TYPES, STRING_TOKENIZERS
-
-        assert len(dataset) == 2
-        assert len(dataset[0]) == len(dataset[1])
-
-        self.dataset = dataset
-        self.modality = "fingerprint"
+        self.central_modality_data = central_modality_data
         self.central_modality = central_modality
-        self.context_length = context_length
-
-        assert MODALITY_DATA_TYPES[self.modality] == list
-        assert MODALITY_DATA_TYPES[central_modality] == str
-
-        self.tokenized_central_modality = STRING_TOKENIZERS[central_modality](
-            dataset[0],
-            padding="max_length",
-            truncation=True,
-            return_tensors="pt",
-            max_length=context_length,
-        )
-
-        self.fingerprints = dataset[1]
+        self.other_modality = "fingerprint"
+        self.fingerprints = fingerprint_data
 
     def __len__(self):
-        return len(self.dataset[0])
+        return len(self.fingerprints)
 
     def __getitem__(self, idx):
         return {
             self.central_modality: (
-                self.tokenized_central_modality.input_ids[idx],
-                self.tokenized_central_modality.attention_mask[idx],
+                self.central_modality_data[0][idx],
+                self.central_modality_data[1][idx],
             ),
-            self.modality: Tensor(self.fingerprints[idx]),
+            self.other_modality: Tensor(self.fingerprints[idx]),
         }
 
 
@@ -121,6 +82,7 @@ class FingerprintVAEDataset(Dataset):
         self,
         dataset: Tensor,
     ):
+        """Dataset for fingerprints for the VAE model."""
         self.fingerprints = dataset
 
     def __len__(self):
