@@ -1,5 +1,6 @@
 import os  # noqa: I002
 import pickle as pkl
+from pathlib import Path
 
 import hydra
 import polars as pl
@@ -9,8 +10,8 @@ import torch
 from dotenv import load_dotenv
 from omegaconf import DictConfig
 
-from molbind.data.dataloaders import load_combined_loader
 from molbind.data.datamodule import MolBindDataModule
+from molbind.data.molbind_dataset import MolBindDataset
 from molbind.models.lightning_module import MolBindModule
 
 load_dotenv(".env")
@@ -34,15 +35,12 @@ def train_molbind(config: DictConfig):
         strategy="ddp" if device_count > 1 else "auto",
     )
 
-    train_modality_data = {}
-    valid_modality_data = {}
-
-    # check format of config.data.dataset_path
-    data_format = config.data.dataset_path.split(".")[-1]
-
-    if data_format == "csv":
+    # extract format of dataset file
+    data_format = Path(config.data.dataset_path).suffix
+    # check if dataset is in csv or pkl format
+    if data_format == ".csv":
         data = pl.read_csv(config.data.dataset_path)
-    elif data_format == "pkl":
+    elif data_format == ".pkl":
         data = pkl.load(open(config.data.dataset_path, "rb"))  # noqa: PTH123, SIM115
         data = pl.from_pandas(data)
     shuffled_data = data.sample(
@@ -55,32 +53,6 @@ def train_molbind(config: DictConfig):
     train_shuffled_data = shuffled_data.head(
         int(config.data.train_frac * dataset_length)
     )
-
-    columns = shuffled_data.columns
-    # extract non-central modalities
-    non_central_modalities = config.data.modalities
-    central_modality = config.data.central_modality
-
-    # for column in columns:
-    #     if column in non_central_modalities:
-    #         # drop nan for specific pair
-    #         train_modality_pair = train_shuffled_data[
-    #             [central_modality, column]
-    #         ].drop_nulls()
-    #         valid_modality_pair = valid_shuffled_data[
-    #             [central_modality, column]
-    #         ].drop_nulls()
-
-    #         train_modality_data[column] = [
-    #             train_modality_pair[central_modality].to_list(),
-    #             train_modality_pair[column].to_list(),
-    #         ]
-    #         valid_modality_data[column] = [
-    #             valid_modality_pair[central_modality].to_list(),
-    #             valid_modality_pair[column].to_list(),
-    #         ]
-
-    from molbind.data.molbind_dataset import MolBindDataset
 
     train_dataloader, valid_dataloader = (
         MolBindDataset(
@@ -106,22 +78,6 @@ def train_molbind(config: DictConfig):
             num_workers=config.data.num_workers,
         ),
     )
-
-    # train_dataloader = load_combined_loader(
-    #     central_modality=config.data.central_modality,
-    #     data_modalities=train_modality_data,
-    #     batch_size=config.data.batch_size,
-    #     shuffle=True,
-    #     num_workers=1,
-    # )
-
-    # valid_dataloader = load_combined_loader(
-    #     central_modality=config.data.central_modality,
-    #     data_modalities=valid_modality_data,
-    #     batch_size=config.data.batch_size,
-    #     shuffle=False,
-    #     num_workers=1,
-    # )
 
     datamodule = MolBindDataModule(
         data={"train": train_dataloader, "val": valid_dataloader},
