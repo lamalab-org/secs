@@ -20,6 +20,7 @@ class StringDataset(Dataset):
             central_modality (str): name of central modality as found in MODALITY_DATA_TYPES
             other_modality (str): name of other modality as found in MODALITY_DATA_TYPES
         """
+        from molbind.data.available import MODALITY_DATA_TYPES
 
         # modality pair definition
         self.central_modality = central_modality
@@ -27,14 +28,20 @@ class StringDataset(Dataset):
         # modality pair data
         self.central_modality_data = central_modality_data
         self.other_modality_data = other_modality_data
+        self.central_modality_data_type = MODALITY_DATA_TYPES[central_modality]
+        self.other_modality_data_type = MODALITY_DATA_TYPES[other_modality]
 
     def __len__(self):
-        return len(self.central_modality_data[0])
+        return len(self.other_modality_data[0])
 
     def __getitem__(self, idx):
         return {
-            self.central_modality: [i[idx] for i in self.tokenized_central_modality],
-            self.modality: [i[idx] for i in self.tokenized_other_modality],
+            self.central_modality: tuple([i[idx] for i in self.central_modality_data])
+            if self.central_modality_data_type == str
+            else Tensor(self.central_modality_data[idx]),
+            self.other_modality: tuple([i[idx] for i in self.other_modality_data])
+            if self.other_modality_data_type == str
+            else Tensor(self.other_modality_data)[idx],
         }
 
 

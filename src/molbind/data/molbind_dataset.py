@@ -45,12 +45,12 @@ class MolBindDataset:
         self.central_modality = central_modality
         self.central_modality_data_type = MODALITY_DATA_TYPES[central_modality]
 
-        if self.central_modality_data_type == str:
-            init_str_fn = partial(
-                self._tokenize_strings,
-                context_length=kwargs["context_length"],
-                modality=central_modality,
-            )
+        # if self.central_modality_data_type == str:
+        init_str_fn = partial(
+            self._tokenize_strings,
+            context_length=kwargs["context_length"],
+            modality=central_modality,
+        )
         self.central_modality_handlers = {
             StringModalitiesEnum.SMILES: init_str_fn,
             StringModalitiesEnum.SELFIES: init_str_fn,
@@ -61,7 +61,6 @@ class MolBindDataset:
             NonStringModalitiesEnum.GRAPH: lambda x: x,
             NonStringModalitiesEnum.FINGERPRINT: lambda x: x,
         }
-
         # central modality data
         self.central_modality_data = self.central_modality_handlers[central_modality](
             self.data[central_modality].to_list()
@@ -103,7 +102,7 @@ class MolBindDataset:
     ) -> CombinedLoader:
         datasets, dataloaders = {}, {}
         for modality in self.other_modalities:
-            if modality == "graph":
+            if modality == NonStringModalitiesEnum.GRAPH:
                 dataset = self.build_graph_dataset()
             elif modality in [
                 StringModalitiesEnum.SMILES,
@@ -114,11 +113,11 @@ class MolBindDataset:
                 StringModalitiesEnum.MASS,
             ]:
                 dataset = self.build_string_dataset(modality)
-            elif modality == "fingerprint":
+            elif modality == NonStringModalitiesEnum.FINGERPRINT:
                 dataset = self.build_fp_dataset()
             datasets[modality] = dataset
 
-        for modality in [*datasets]:
+        for modality in datasets:
             dataloaders[modality] = DataLoader(
                 datasets[modality],
                 batch_size=batch_size,
