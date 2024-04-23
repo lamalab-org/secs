@@ -1,4 +1,6 @@
-from typing import Dict, List, Tuple  # noqa: UP035, I002
+from enum import StrEnum  # noqa: I002
+from functools import partial
+from typing import List, Tuple  # noqa: UP035
 
 import polars as pl
 import selfies as sf
@@ -16,6 +18,20 @@ from molbind.data.components.datasets import (
 from molbind.data.utils.graph_utils import pyg_from_smiles
 
 
+class StringModalitiesEnum(StrEnum):
+    SMILES = "smiles"
+    SELFIES = "selfies"
+    INCHI = "inchi"
+    IR = "ir"
+    NMR = "nmr"
+    MASS = "mass"
+
+
+class NonStringModalitiesEnum(StrEnum):
+    GRAPH = "graph"
+    FINGERPRINT = "fingerprint"
+
+
 class MolBindDataset:
     def __init__(
         self,
@@ -28,10 +44,27 @@ class MolBindDataset:
         self.data = data
         self.central_modality = central_modality
         self.central_modality_data_type = MODALITY_DATA_TYPES[central_modality]
-        self.central_modality_data = self._tokenize_strings(
-            self.data[central_modality].to_list(),
-            context_length=kwargs["context_length"],
-            modality=central_modality,
+
+        if self.central_modality_data_type == str:
+            init_str_fn = partial(
+                self._tokenize_strings,
+                context_length=kwargs["context_length"],
+                modality=central_modality,
+            )
+        self.central_modality_handlers = {
+            StringModalitiesEnum.SMILES: init_str_fn,
+            StringModalitiesEnum.SELFIES: init_str_fn,
+            StringModalitiesEnum.INCHI: init_str_fn,
+            StringModalitiesEnum.IR: init_str_fn,
+            StringModalitiesEnum.NMR: init_str_fn,
+            StringModalitiesEnum.MASS: init_str_fn,
+            NonStringModalitiesEnum.GRAPH: lambda x: x,
+            NonStringModalitiesEnum.FINGERPRINT: lambda x: x,
+        }
+
+        # central modality data
+        self.central_modality_data = self.central_modality_handlers[central_modality](
+            self.data[central_modality].to_list()
         )
         self.other_modalities = other_modalities
 
@@ -39,10 +72,11 @@ class MolBindDataset:
         modality = "graph"
         graph_data = self.data[[self.central_modality, modality]].drop_nulls()
         # perform graph operations
+        # add graph dataset logic here
         return GraphDataset(graph_data, modality, self.central_modality)
 
     def build_string_dataset(self, modality, context_length=256) -> StringDataset:
-        string_data = self.data[[self.central_modality, modality]]
+        string_data = self.data[[self.central_modality, modality]].drop_nulls()
         other_modality_data = self._tokenize_strings(
             string_data[modality].to_list(),
             context_length=context_length,
@@ -56,7 +90,7 @@ class MolBindDataset:
         )
 
     def build_fp_dataset(self) -> FingerprintMolBindDataset:
-        fp_data = self.data[[self.central_modality, "fingerprint"]]
+        fp_data = self.data[[self.central_modality, "fingerprint"]].drop_nulls()
         # perform fingerprint operations
         return FingerprintMolBindDataset(
             central_modality=self.central_modality,
@@ -71,7 +105,14 @@ class MolBindDataset:
         for modality in self.other_modalities:
             if modality == "graph":
                 dataset = self.build_graph_dataset()
-            elif modality in ["smiles", "selfies", "inchi", "ir", "nmr", "mass"]:
+            elif modality in [
+                StringModalitiesEnum.SMILES,
+                StringModalitiesEnum.SELFIES,
+                StringModalitiesEnum.INCHI,
+                StringModalitiesEnum.IR,
+                StringModalitiesEnum.NMR,
+                StringModalitiesEnum.MASS,
+            ]:
                 dataset = self.build_string_dataset(modality)
             elif modality == "fingerprint":
                 dataset = self.build_fp_dataset()
@@ -103,9 +144,9 @@ class MolBindDataset:
     # private class methods
     @staticmethod
     def _tokenize_strings(
-        dataset: List[str],
+        dataset: List[str],  # noqa: UP006
         context_length: int,
-        modality: str,  # noqa: UP006
+        modality: str,
     ) -> Tuple[Tensor, Tensor]:  # noqa: UP006
         tokenized_data = STRING_TOKENIZERS[modality](
             dataset,

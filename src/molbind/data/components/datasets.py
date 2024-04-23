@@ -20,22 +20,21 @@ class StringDataset(Dataset):
             central_modality (str): name of central modality as found in MODALITY_DATA_TYPES
             other_modality (str): name of other modality as found in MODALITY_DATA_TYPES
         """
-        self.central_modality_data = central_modality_data
+
+        # modality pair definition
         self.central_modality = central_modality
         self.other_modality = other_modality
-        self.tokenized_central_modality = central_modality_data
-        self.tokenized_other_modality = other_modality_data
+        # modality pair data
+        self.central_modality_data = central_modality_data
+        self.other_modality_data = other_modality_data
 
     def __len__(self):
-        return len(self.tokenized_central_modality[0])
+        return len(self.central_modality_data[0])
 
     def __getitem__(self, idx):
         return {
-            self.central_modality: (
-                self.central_modality_data[0][idx],
-                self.central_modality_data[1][idx],
-            ),
-            self.modality: self.other_modality_data[idx],
+            self.central_modality: [i[idx] for i in self.tokenized_central_modality],
+            self.modality: [i[idx] for i in self.tokenized_other_modality],
         }
 
 
@@ -65,10 +64,7 @@ class FingerprintMolBindDataset(Dataset):
 
     def __getitem__(self, idx):
         return {
-            self.central_modality: (
-                self.central_modality_data[0][idx],
-                self.central_modality_data[1][idx],
-            ),
+            self.central_modality: [i[idx] for i in self.central_modality_data],
             self.other_modality: Tensor(self.fingerprints[idx]),
         }
 
