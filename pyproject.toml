@@ -27,6 +27,7 @@ classifiers = [
 requires-python = ">=3.9, <3.13"
 dependencies = [
   "numpy",
+  "loguru",
   "transformers",
   "selfies",
   "fire",

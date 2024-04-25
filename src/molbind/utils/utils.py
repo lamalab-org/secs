@@ -1,10 +1,11 @@
-import warnings
+import warnings  # noqa: I002
 from importlib.util import find_spec
-from typing import Any, Callable, Dict, Optional, Tuple
-from omegaconf import DictConfig
-from molbind.utils import pylogger, rich_utils
-import torch
+from typing import Any, Callable, Dict, Optional, Tuple  # noqa: UP035
 
+import torch
+from omegaconf import DictConfig
+
+from molbind.utils import pylogger, rich_utils
 
 log = pylogger.RankedLogger(__name__, rank_zero_only=True)
 
@@ -62,7 +63,7 @@ def task_wrapper(task_func: Callable) -> Callable:
     :return: The wrapped task function.
     """
 
-    def wrap(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    def wrap(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:  # noqa: UP006
         # execute the task
         try:
             metric_dict, object_dict = task_func(cfg=cfg)
@@ -96,7 +97,7 @@ def task_wrapper(task_func: Callable) -> Callable:
 
 
 def get_metric_value(
-    metric_dict: Dict[str, Any], metric_name: Optional[str]
+    metric_dict: Dict[str, Any], metric_name: Optional[str] # noqa: UP006
 ) -> Optional[float]:
     """Safely retrieves value of the metric logged in LightningModule.
 

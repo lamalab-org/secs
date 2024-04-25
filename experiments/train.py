@@ -8,10 +8,12 @@ import pytorch_lightning as L
 import rootutils
 import torch
 from dotenv import load_dotenv
+from loguru import logger
 from omegaconf import DictConfig
 
 from molbind.data.datamodule import MolBindDataModule
 from molbind.data.molbind_dataset import MolBindDataset
+from molbind.data.utils.file_utils import csv_load_function, pickle_load_function
 from molbind.models.lightning_module import MolBindModule
 
 load_dotenv(".env")
@@ -37,12 +39,18 @@ def train_molbind(config: DictConfig):
 
     # extract format of dataset file
     data_format = Path(config.data.dataset_path).suffix
-    # check if dataset is in csv or pkl format
-    if data_format == ".csv":
-        data = pl.read_csv(config.data.dataset_path)
-    elif data_format == ".pkl":
-        data = pkl.load(open(config.data.dataset_path, "rb"))  # noqa: PTH123, SIM115
-        data = pl.from_pandas(data)
+
+    handlers = {
+        ".csv": csv_load_function,
+        ".pickle": pickle_load_function,
+        ".pkl": pickle_load_function,
+    }
+
+    try:
+        data = handlers[data_format](config.data.dataset_path)
+    except KeyError:
+        logger.error(f"Format {data_format} not supported")
+
     shuffled_data = data.sample(
         fraction=config.data.fraction_data, shuffle=True, seed=config.data.seed
     )
