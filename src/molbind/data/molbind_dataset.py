@@ -1,6 +1,6 @@
 from enum import StrEnum  # noqa: I002
 from functools import partial
-from typing import List, Tuple  # noqa: UP035
+from typing import List, Tuple, Union  # noqa: UP035
 
 import polars as pl
 import selfies as sf
@@ -18,7 +18,7 @@ from molbind.data.components.datasets import (
 from molbind.data.utils.graph_utils import pyg_from_smiles
 
 
-class StringModalitiesEnum(StrEnum):
+class StringModalities(StrEnum):
     SMILES = "smiles"
     SELFIES = "selfies"
     INCHI = "inchi"
@@ -27,7 +27,7 @@ class StringModalitiesEnum(StrEnum):
     MASS = "mass"
 
 
-class NonStringModalitiesEnum(StrEnum):
+class NonStringModalities(StrEnum):
     GRAPH = "graph"
     FINGERPRINT = "fingerprint"
 
@@ -36,7 +36,7 @@ class MolBindDataset:
     def __init__(
         self,
         data: pl.DataFrame,
-        central_modality: str,
+        central_modality: Union[StringModalities, NonStringModalities],
         other_modalities: List[str],  # noqa: UP006
         **kwargs,
     ) -> None:
@@ -48,18 +48,18 @@ class MolBindDataset:
         # if self.central_modality_data_type == str:
         init_str_fn = partial(
             self._tokenize_strings,
-            context_length=kwargs["context_length"],
+            context_length=kwargs.get("context_length", 256),
             modality=central_modality,
         )
         self.central_modality_handlers = {
-            StringModalitiesEnum.SMILES: init_str_fn,
-            StringModalitiesEnum.SELFIES: init_str_fn,
-            StringModalitiesEnum.INCHI: init_str_fn,
-            StringModalitiesEnum.IR: init_str_fn,
-            StringModalitiesEnum.NMR: init_str_fn,
-            StringModalitiesEnum.MASS: init_str_fn,
-            NonStringModalitiesEnum.GRAPH: lambda x: x,
-            NonStringModalitiesEnum.FINGERPRINT: lambda x: x,
+            StringModalities.SMILES: init_str_fn,
+            StringModalities.SELFIES: init_str_fn,
+            StringModalities.INCHI: init_str_fn,
+            StringModalities.IR: init_str_fn,
+            StringModalities.NMR: init_str_fn,
+            StringModalities.MASS: init_str_fn,
+            NonStringModalities.GRAPH: lambda x: x,
+            NonStringModalities.FINGERPRINT: lambda x: x,
         }
         # central modality data
         self.central_modality_data = self.central_modality_handlers[central_modality](
@@ -102,18 +102,18 @@ class MolBindDataset:
     ) -> CombinedLoader:
         datasets, dataloaders = {}, {}
         for modality in self.other_modalities:
-            if modality == NonStringModalitiesEnum.GRAPH:
+            if modality == NonStringModalities.GRAPH:
                 dataset = self.build_graph_dataset()
             elif modality in [
-                StringModalitiesEnum.SMILES,
-                StringModalitiesEnum.SELFIES,
-                StringModalitiesEnum.INCHI,
-                StringModalitiesEnum.IR,
-                StringModalitiesEnum.NMR,
-                StringModalitiesEnum.MASS,
+                StringModalities.SMILES,
+                StringModalities.SELFIES,
+                StringModalities.INCHI,
+                StringModalities.IR,
+                StringModalities.NMR,
+                StringModalities.MASS,
             ]:
                 dataset = self.build_string_dataset(modality)
-            elif modality == NonStringModalitiesEnum.FINGERPRINT:
+            elif modality == NonStringModalities.FINGERPRINT:
                 dataset = self.build_fp_dataset()
             datasets[modality] = dataset
 
@@ -126,19 +126,6 @@ class MolBindDataset:
                 drop_last=drop_last,
             )
         return CombinedLoader(dataloaders, "sequential")
-
-    @classmethod
-    def general_assert(cls: "MolBindDataset") -> None:
-        assert cls.central_modality_data_type == str
-        assert cls.central_modality in cls.data.columns
-        assert (
-            cls.central_modality_data_type == MODALITY_DATA_TYPES[cls.central_modality]
-        )
-
-    @classmethod
-    def specific_assert_dataset(cls: "MolBindDataset") -> None:
-        assert len(cls.data.columns) == 2
-        assert len(cls.central_modality_data) == len(cls.data[cls.other_modalities[0]])
 
     # private class methods
     @staticmethod
