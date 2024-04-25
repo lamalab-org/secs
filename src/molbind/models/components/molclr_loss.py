@@ -1,6 +1,7 @@
 import numpy as np  # noqa: I002
 import torch
 import torch.nn as nn
+from torch import Tensor
 
 
 class NTXentLoss(nn.Module):
@@ -20,7 +21,7 @@ class NTXentLoss(nn.Module):
         self.similarity_function = self._get_similarity_function(use_cosine_similarity)
         self.criterion = nn.CrossEntropyLoss(reduction="sum")
 
-    def _get_similarity_function(self, use_cosine_similarity):
+    def _get_similarity_function(self, use_cosine_similarity: bool) -> Tensor:
         if use_cosine_similarity:
             self._cosine_similarity = nn.CosineSimilarity(dim=-1)
             return self._cosine_simililarity

@@ -2,6 +2,7 @@ import csv  # noqa: I002
 import math
 import random
 from copy import deepcopy
+from typing import List, Tuple  # noqa: UP035
 
 import numpy as np
 import torch
@@ -27,9 +28,9 @@ BONDDIR_LIST = [
 ]
 
 
-def read_smiles(data_path):
+def read_smiles(data_path: str) -> List[str]:  # noqa: UP006
     smiles_data = []
-    with open(data_path) as csv_file: # noqa: PTH123
+    with open(data_path) as csv_file:  # noqa: PTH123
         csv_reader = csv.reader(csv_file, delimiter=",")
         for _, row in enumerate(csv_reader):
             smiles = row[-1]
@@ -38,11 +39,11 @@ def read_smiles(data_path):
 
 
 class MoleculeDataset(Dataset):
-    def __init__(self, data_path):
+    def __init__(self, data_path: str) -> None:
         super(Dataset, self).__init__()
         self.smiles_data = read_smiles(data_path)
 
-    def __getitem__(self, index):
+    def __getitem__(self, index: int) -> Tuple:  # noqa: UP006
         mol = Chem.MolFromSmiles(self.smiles_data[index])
         # mol = Chem.AddHs(mol)
 
@@ -143,21 +144,25 @@ class MoleculeDataset(Dataset):
 
 
 class MoleculeDatasetWrapper:
-    def __init__(self, batch_size, num_workers, valid_size, data_path):
+    def __init__(
+        self, batch_size: int, num_workers: int, valid_size: float, data_path: str
+    ) -> None:
         super(object, self).__init__()
         self.data_path = data_path
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.valid_size = valid_size
 
-    def get_data_loaders(self):
+    def get_data_loaders(self) -> Tuple[DataLoader, DataLoader]:  # type: ignore # noqa: UP006, PGH003
         train_dataset = MoleculeDataset(data_path=self.data_path)
         train_loader, valid_loader = self.get_train_validation_data_loaders(
             train_dataset
         )
         return train_loader, valid_loader
 
-    def get_train_validation_data_loaders(self, train_dataset):
+    def get_train_validation_data_loaders(
+        self, train_dataset: MoleculeDataset
+    ) -> Tuple[DataLoader, DataLoader]:  #type: ignore # noqa: UP006, PGH003
         # obtain training indices that will be used for validation
         num_train = len(train_dataset)
         indices = list(range(num_train))
