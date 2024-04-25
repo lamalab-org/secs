@@ -4,7 +4,13 @@ import torch.nn as nn
 
 
 class NTXentLoss(nn.Module):
-    def __init__(self, device, batch_size, temperature, use_cosine_similarity):
+    def __init__(
+        self,
+        device: str,
+        batch_size: int,
+        temperature: float,
+        use_cosine_similarity: bool,
+    ) -> None:
         super().__init__()
         self.batch_size = batch_size
         self.temperature = temperature
@@ -21,7 +27,7 @@ class NTXentLoss(nn.Module):
         else:
             return self._dot_simililarity
 
-    def _get_correlated_mask(self):
+    def _get_correlated_mask(self) -> torch.Tensor:
         diag = np.eye(2 * self.batch_size)
         l1 = np.eye((2 * self.batch_size), 2 * self.batch_size, k=-self.batch_size)
         l2 = np.eye((2 * self.batch_size), 2 * self.batch_size, k=self.batch_size)
@@ -30,18 +36,17 @@ class NTXentLoss(nn.Module):
         return mask.to(self.device)
 
     @staticmethod
-    def _dot_simililarity(x, y):
+    def _dot_simililarity(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         return torch.tensordot(x.unsqueeze(1), y.T.unsqueeze(0), dims=2)
 
-    def _cosine_simililarity(self, x, y):
+    def _cosine_simililarity(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         # x shape: (N, 1, C)
         # y shape: (1, 2N, C)
         # v shape: (N, 2N)
         return self._cosine_similarity(x.unsqueeze(1), y.unsqueeze(0))
 
-    def forward(self, zis, zjs):
+    def forward(self, zis: torch.Tensor, zjs: torch.Tensor) -> torch.Tensor:
         representations = torch.cat([zjs, zis], dim=0)
-
         similarity_matrix = self.similarity_function(representations, representations)
         # filter out the scores from the positive samples
         l_pos = torch.diag(similarity_matrix, self.batch_size)

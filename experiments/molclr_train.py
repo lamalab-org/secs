@@ -34,7 +34,7 @@ def train_molclr():
         },
         "loss": {
             "device": "mps",
-            "batch_size": 256,
+            "batch_size": 64,
             "temperature": 0.5,
             "use_cosine_similarity": True,
         },

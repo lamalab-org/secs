@@ -14,31 +14,38 @@ class GCNModule(LightningModule):
         self.cfg = cfg
         self.model_config = cfg.model
         self.loss_config = cfg.loss
+        self.batch_size = cfg.data.batch_size
+        self.log("batch_size", self.cfg.data.batch_size)
         self.model = GCN(**self.model_config)
         self.criterion = NTXentLoss(**self.loss_config)
 
     def forward(self, batch):
-        _, xis_xjs = batch
-        xis, xjs = xis_xjs[0], xis_xjs[1]
-        _, zis = self.model(xis)
-        _, zjs = self.model(xjs)
+        xis, xjs = batch
+        ris, zis = self.model(xis)  # [N,C]
+
+        # get the representations and the projections
+        rjs, zjs = self.model(xjs)  # [N,C]
+
+        # normalize projection feature vectors
+        zis = F.normalize(zis, dim=1)
+        zjs = F.normalize(zjs, dim=1)
         return zis, zjs
 
-    def _nt_xent_loss(self, batch):
-        _, xis_xjs = batch
-        xis, xjs = xis_xjs[0], xis_xjs[1]
-
+    def _nt_xent_loss(self, batch, prefix: str = "train") -> Tensor:
+        xis, xjs = batch
         _, zis = self.model(xis)  # [N,C]
 
         # get the representations and the projections
         _, zjs = self.model(xjs)  # [N,C]
-        return self.criterion(zis, zjs)
+        loss = self.criterion(zis, zjs)
+        self.log(f"{prefix}_loss", loss)
+        return loss
 
     def training_step(self, batch) -> Tensor:
-        return self._nt_xent_loss(batch)
+        return self._nt_xent_loss(batch, prefix="train")
 
     def validation_step(self, batch) -> Tensor:
-        return self._nt_xent_loss(batch)
+        return self._nt_xent_loss(batch, prefix="val")
 
     def configure_optimizers(self) -> torch.optim.Optimizer:
         return torch.optim.AdamW(
