@@ -1,4 +1,4 @@
-from typing import Dict, Tuple, Union
+from typing import Dict, Tuple, Union  # noqa: UP035, I002
 
 import torch
 import torch.nn as nn
@@ -43,22 +43,21 @@ class MolBind(nn.Module):
         self.dict_projection_heads = nn.ModuleDict(self.dict_projection_heads)
 
     def forward(
-        self, input_data: Dict[str, Union[Tuple[Tensor, Tensor], Tensor]]
+        self,
+        input_data: Dict[str, Union[Tuple[Tensor, Tensor], Tensor]],  # noqa: UP006
     ) -> Tensor:
         store_embeddings = {}
         # input_data = [data, batch_index, dataloader_index]
         input_data, _, _ = input_data
-        # input_data is a dictionary with (smiles, modality) pairs (where the central modality is at index 0)
+        # input_data is a dictionary with (central_modality, modality) pairs (where the central modality is at index 0)
         modality = [*input_data][1]
-        # store embeddings as store_embeddings[modality] = (smiles_embedding, modality_embedding)
-        # forward through respective encoder
-        smiles_embedding = self.dict_encoders[self.central_modality].forward(
-            input_data[self.central_modality]
-        )
+        # store embeddings as store_embeddings[modality] = (central_modality_embedding, modality_embedding)
+        # forward through respective encoder and projection head
+        central_modality_embedding = self.dict_encoders[self.central_modality].forward(input_data[self.central_modality])
         modality_embedding = self.dict_encoders[modality].forward(input_data[modality])
         central_modality_embedding_projected = self.dict_projection_heads[
             self.central_modality
-        ](smiles_embedding)
+        ](central_modality_embedding)
         modality_embedding_projected = self.dict_projection_heads[modality](
             modality_embedding
         )

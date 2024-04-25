@@ -1,16 +1,17 @@
 import os  # noqa: I002
-import pickle as pkl
+from pathlib import Path
 
 import hydra
-import polars as pl
 import pytorch_lightning as L
 import rootutils
 import torch
 from dotenv import load_dotenv
+from loguru import logger
 from omegaconf import DictConfig
 
-from molbind.data.dataloaders import load_combined_loader
 from molbind.data.datamodule import MolBindDataModule
+from molbind.data.molbind_dataset import MolBindDataset
+from molbind.data.utils.file_utils import csv_load_function, pickle_load_function
 from molbind.models.lightning_module import MolBindModule
 
 load_dotenv(".env")
@@ -34,17 +35,20 @@ def train_molbind(config: DictConfig):
         strategy="ddp" if device_count > 1 else "auto",
     )
 
-    train_modality_data = {}
-    valid_modality_data = {}
+    # extract format of dataset file
+    data_format = Path(config.data.dataset_path).suffix
 
-    # check format of config.data.dataset_path
-    data_format = config.data.dataset_path.split(".")[-1]
+    handlers = {
+        ".csv": csv_load_function,
+        ".pickle": pickle_load_function,
+        ".pkl": pickle_load_function,
+    }
 
-    if data_format == "csv":
-        data = pl.read_csv(config.data.dataset_path)
-    elif data_format == "pkl":
-        data = pkl.load(open(config.data.dataset_path, "rb"))  # noqa: PTH123, SIM115
-        data = pl.from_pandas(data)
+    try:
+        data = handlers[data_format](config.data.dataset_path)
+    except KeyError:
+        logger.error(f"Format {data_format} not supported")
+
     shuffled_data = data.sample(
         fraction=config.data.fraction_data, shuffle=True, seed=config.data.seed
     )
@@ -56,51 +60,33 @@ def train_molbind(config: DictConfig):
         int(config.data.train_frac * dataset_length)
     )
 
-    columns = shuffled_data.columns
-    # extract non-central modalities
-    non_central_modalities = config.data.modalities
-    central_modality = config.data.central_modality
-
-    for column in columns:
-        if column in non_central_modalities:
-            # drop nan for specific pair
-            train_modality_pair = train_shuffled_data[
-                [central_modality, column]
-            ].drop_nulls()
-            valid_modality_pair = valid_shuffled_data[
-                [central_modality, column]
-            ].drop_nulls()
-
-            train_modality_data[column] = [
-                train_modality_pair[central_modality].to_list(),
-                train_modality_pair[column].to_list(),
-            ]
-            valid_modality_data[column] = [
-                valid_modality_pair[central_modality].to_list(),
-                valid_modality_pair[column].to_list(),
-            ]
-
-    train_dataloader = load_combined_loader(
-        central_modality=config.data.central_modality,
-        data_modalities=train_modality_data,
-        batch_size=config.data.batch_size,
-        shuffle=True,
-        num_workers=1,
-    )
-
-    valid_dataloader = load_combined_loader(
-        central_modality=config.data.central_modality,
-        data_modalities=valid_modality_data,
-        batch_size=config.data.batch_size,
-        shuffle=False,
-        num_workers=1,
+    train_dataloader, valid_dataloader = (
+        MolBindDataset(
+            central_modality=config.data.central_modality,
+            other_modalities=config.data.modalities,
+            data=train_shuffled_data,
+            context_length=config.data.context_length,
+        ).build_multimodal_dataloader(
+            config.data.batch_size,
+            shuffle=True,
+            drop_last=config.data.drop_last,
+            num_workers=config.data.num_workers,
+        ),
+        MolBindDataset(
+            central_modality=config.data.central_modality,
+            other_modalities=config.data.modalities,
+            data=valid_shuffled_data,
+            context_length=config.data.context_length,
+        ).build_multimodal_dataloader(
+            config.data.batch_size,
+            shuffle=False,
+            drop_last=config.data.drop_last,
+            num_workers=config.data.num_workers,
+        ),
     )
 
     datamodule = MolBindDataModule(
         data={"train": train_dataloader, "val": valid_dataloader},
-        batch_size=config.data.batch_size,
-        central_modality=config.data.central_modality,
-        data_modalities=config.data.modalities,
     )
 
     trainer.fit(

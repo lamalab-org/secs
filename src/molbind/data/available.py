@@ -1,4 +1,4 @@
-from networkx import Graph
+from networkx import Graph  # noqa: I002
 
 from molbind.data.components.datasets import (
     FingerprintMolBindDataset,

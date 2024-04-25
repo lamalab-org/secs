@@ -1,9 +1,12 @@
-central_modality: "smiles"
+central_modality: fingerprint
+context_length: 256
 modalities: 
-  - "fingerprint"
-  - "selfies"
+  - smiles
+  - selfies
 train_frac : 0.8
 valid_frac : 0.2
+drop_last: true
+num_workers: 1
 seed: 42
 fraction_data: 1.0
 dataset_path: "${paths.data_dir}/fingerprint.pkl"

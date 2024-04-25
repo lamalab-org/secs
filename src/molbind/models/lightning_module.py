@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict  # noqa: UP035, I002
 
 import torch
 from info_nce import InfoNCE
@@ -17,13 +17,13 @@ class MolBindModule(LightningModule):
             temperature=cfg.model.loss.temperature, negative_mode="unpaired"
         )
 
-    def forward(self, batch: Dict):
+    def forward(self, batch: Dict) -> Dict: # noqa: UP006
         return self.model(batch)
 
     def _info_nce_loss(self, z1: Tensor, z2: Tensor):
         return self.loss(z1, z2)
 
-    def _multimodal_loss(self, embeddings_dict: Dict, prefix: str):
+    def _multimodal_loss(self, embeddings_dict: Dict, prefix: str) -> float:  # noqa: UP006
         modality_pair = [*embeddings_dict]
         loss = self._info_nce_loss(
             embeddings_dict[modality_pair[0]], embeddings_dict[modality_pair[1]]
@@ -31,11 +31,11 @@ class MolBindModule(LightningModule):
         self.log(f"{prefix}_loss", loss)
         return loss
 
-    def training_step(self, batch: Dict):
+    def training_step(self, batch: Dict):  # noqa: UP006
         embeddings_dict = self.forward(batch)
         return self._multimodal_loss(embeddings_dict, "train")
 
-    def validation_step(self, batch: Dict):
+    def validation_step(self, batch: Dict) -> Tensor:  # noqa: UP006
         embeddings_dict = self.forward(batch)
         return self._multimodal_loss(embeddings_dict, "valid")
 
