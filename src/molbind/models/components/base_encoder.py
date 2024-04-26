@@ -241,5 +241,4 @@ class GraphEncoder(nn.Module):
         h = self.pool(h, data.batch)
         h = self.feat_lin(h)
         out = self.out_lin(h)
-
         return h, out
