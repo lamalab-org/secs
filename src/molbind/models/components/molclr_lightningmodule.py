@@ -4,7 +4,7 @@ from lightning import LightningModule
 from omegaconf import DictConfig
 from torch import Tensor
 
-from molbind.models.components.base_encoder import GCN
+from molbind.models.components.base_encoder import GraphEncoder
 from molbind.models.components.molclr_loss import NTXentLoss
 
 
@@ -15,7 +15,7 @@ class GCNModule(LightningModule):
         self.model_config = cfg.model
         self.loss_config = cfg.loss
         self.batch_size = cfg.data.batch_size
-        self.model = GCN(**self.model_config)
+        self.model = GraphEncoder(**self.model_config)
         self.criterion = NTXentLoss(**self.loss_config)
         # log hyperparameters
         self.log(name="batch_size", value=self.batch_size, batch_size=self.batch_size)

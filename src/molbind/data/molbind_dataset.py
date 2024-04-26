@@ -4,7 +4,6 @@ from typing import List, Tuple, Union  # noqa: UP035
 import polars as pl
 import selfies as sf
 from lightning.pytorch.utilities.combined_loader import CombinedLoader
-from networkx import Graph
 from torch import Tensor
 from torch.utils.data import DataLoader
 
@@ -29,7 +28,7 @@ class MolBindDataset:
         other_modalities: List[str],  # noqa: UP006
         **kwargs,
     ) -> None:
-        from molbind.data.available import NonStringModalities, StringModalities
+
         """Dataset for multimodal data."""
         self.data = data
         self.central_modality = central_modality
