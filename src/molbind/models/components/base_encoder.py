@@ -174,7 +174,7 @@ class GCNConv(MessagePassing):
         return torch_sparse.matmul(adj_t, x, reduce=self.aggr)
 
 
-class GCN(nn.Module):
+class GraphEncoder(nn.Module):
     def __init__(
         self, num_layer=5, emb_dim=300, feat_dim=256, drop_ratio=0, pool="mean"
     ):
