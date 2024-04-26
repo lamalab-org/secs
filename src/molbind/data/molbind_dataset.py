@@ -1,5 +1,4 @@
-from enum import StrEnum  # noqa: I002
-from functools import partial
+from functools import partial  # noqa: I002
 from typing import List, Tuple, Union  # noqa: UP035
 
 import polars as pl
@@ -9,27 +8,17 @@ from networkx import Graph
 from torch import Tensor
 from torch.utils.data import DataLoader
 
-from molbind.data.available import MODALITY_DATA_TYPES, STRING_TOKENIZERS
+from molbind.data.available import (
+    MODALITY_DATA_TYPES,
+    STRING_TOKENIZERS,
+    NonStringModalities,
+    StringModalities,
+)
 from molbind.data.components.datasets import (
     FingerprintMolBindDataset,
     GraphDataset,
     StringDataset,
 )
-from molbind.data.utils.graph_utils import pyg_from_smiles
-
-
-class StringModalities(StrEnum):
-    SMILES = "smiles"
-    SELFIES = "selfies"
-    INCHI = "inchi"
-    IR = "ir"
-    NMR = "nmr"
-    MASS = "mass"
-
-
-class NonStringModalities(StrEnum):
-    GRAPH = "graph"
-    FINGERPRINT = "fingerprint"
 
 
 class MolBindDataset:
@@ -40,6 +29,7 @@ class MolBindDataset:
         other_modalities: List[str],  # noqa: UP006
         **kwargs,
     ) -> None:
+        from molbind.data.available import NonStringModalities, StringModalities
         """Dataset for multimodal data."""
         self.data = data
         self.central_modality = central_modality
@@ -142,10 +132,6 @@ class MolBindDataset:
             max_length=context_length,
         )
         return tokenized_data["input_ids"], tokenized_data["attention_mask"]
-
-    @staticmethod
-    def _build_graph_from_smiles(smi_list: List[str]) -> List[Graph]:  # noqa: UP006
-        return pyg_from_smiles(smi_list)
 
     @staticmethod
     def _build_selfies_from_smiles(smi_list: List[str]) -> List[str]:  # noqa: UP006
