@@ -15,6 +15,8 @@ def train_molclr():
     """
     References:
         config ref: https://github.com/yuyangw/MolCLR/blob/master/config.yaml
+        data   ref: https://codeocean.com/capsule/6901415/tree/v1
+        model  ref: https://github.com/yuyangw/MolCLR/blob/master/models/gcn_molclr.py
     """
     cfg = {
         "model": {
@@ -27,7 +29,7 @@ def train_molclr():
         "data": {
             "batch_size": 512,
             "num_workers": 4,
-            "data_path": "../data/subset.csv",
+            "data_path": "../data/pretrain_example.csv",
             "valid_size": 0.2,
         },
         "trainer": {
