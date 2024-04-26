@@ -8,8 +8,6 @@ import numpy as np
 import torch
 from rdkit import Chem
 from rdkit.Chem.rdchem import BondType as BT
-
-# from torch.utils.data import Dataset, DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
 from torch_geometric.data import Data, DataLoader, Dataset
 
@@ -162,7 +160,7 @@ class MoleculeDatasetWrapper:
 
     def get_train_validation_data_loaders(
         self, train_dataset: MoleculeDataset
-    ) -> Tuple[DataLoader, DataLoader]:  #type: ignore # noqa: UP006, PGH003
+    ) -> Tuple[DataLoader, DataLoader]:  # type: ignore # noqa: UP006, PGH003
         # obtain training indices that will be used for validation
         num_train = len(train_dataset)
         indices = list(range(num_train))
