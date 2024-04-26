@@ -15,9 +15,11 @@ class GCNModule(LightningModule):
         self.model_config = cfg.model
         self.loss_config = cfg.loss
         self.batch_size = cfg.data.batch_size
-        self.log("batch_size", self.cfg.data.batch_size)
         self.model = GCN(**self.model_config)
         self.criterion = NTXentLoss(**self.loss_config)
+        # log hyperparameters
+        self.log(name="batch_size", value=self.batch_size, batch_size=self.batch_size)
+        self.log("learning_rate", self.cfg.optimizer.lr)
 
     def forward(self, batch):
         xis, xjs = batch

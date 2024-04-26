@@ -40,7 +40,7 @@ def read_smiles(data_path: str) -> List[str]:  # noqa: UP006
 
 class MoleculeDataset(Dataset):
     def __init__(self, data_path: str) -> None:
-        super(Dataset, self).__init__()
+        super().__init__()
         self.smiles_data = read_smiles(data_path)
 
     def __getitem__(self, index: int) -> Tuple:  # noqa: UP006

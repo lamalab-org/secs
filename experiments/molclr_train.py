@@ -12,16 +12,20 @@ load_dotenv(".env")
 
 def train_molclr():
     # loss device, batch_size, temperature, use_cosine_similarity
+    """
+    References:
+        config ref: https://github.com/yuyangw/MolCLR/blob/master/config.yaml
+    """
     cfg = {
         "model": {
-            "num_layer": 3,
+            "num_layer": 5,
             "drop_ratio": 0,
-            "feat_dim": 128,
+            "feat_dim": 512,
             "pool": "mean",
-            "emb_dim": 256,
+            "emb_dim": 300,
         },
         "data": {
-            "batch_size": 256,
+            "batch_size": 512,
             "num_workers": 4,
             "data_path": "../data/subset.csv",
             "valid_size": 0.2,
@@ -34,12 +38,12 @@ def train_molclr():
         },
         "loss": {
             "device": "mps",
-            "batch_size": 64,
-            "temperature": 0.5,
+            "batch_size": 512,
+            "temperature": 0.1,
             "use_cosine_similarity": True,
         },
         "optimizer": {
-            "lr": 1e-4,
+            "lr": 0.0005,
             "weight_decay": 1e-5,
         },
     }
