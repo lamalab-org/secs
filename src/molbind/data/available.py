@@ -1,4 +1,6 @@
-from networkx import Graph  # noqa: I002
+from enum import StrEnum  # noqa: I002
+
+from networkx import Graph
 
 from molbind.data.components.datasets import (
     FingerprintMolBindDataset,
@@ -8,7 +10,7 @@ from molbind.data.components.datasets import (
 from molbind.data.components.tokenizers import SELFIES_TOKENIZER, SMILES_TOKENIZER
 from molbind.models.components.custom_encoders import (
     CustomFingerprintEncoder,
-    GraphEncoder,
+    CustomGraphEncoder,
     SelfiesEncoder,
     SmilesEncoder,
 )
@@ -16,7 +18,7 @@ from molbind.models.components.custom_encoders import (
 AVAILABLE_ENCODERS = {
     "smiles": SmilesEncoder,
     "selfies": SelfiesEncoder,
-    "graph": GraphEncoder,
+    "graph": CustomGraphEncoder,
     "nmr": None,
     "fingerprint": CustomFingerprintEncoder,
 }
@@ -45,3 +47,17 @@ MODALITY_DATASETS = {
     "nmr": StringDataset,
     "ir": StringDataset,
 }
+
+
+class StringModalities(StrEnum):
+    SMILES = "smiles"
+    SELFIES = "selfies"
+    INCHI = "inchi"
+    IR = "ir"
+    NMR = "nmr"
+    MASS = "mass"
+
+
+class NonStringModalities(StrEnum):
+    GRAPH = "graph"
+    FINGERPRINT = "fingerprint"
