@@ -1,11 +1,11 @@
 import torch  # noqa: I002
 import torch.nn.functional as F
+from info_nce import InfoNCE
 from lightning import LightningModule
 from omegaconf import DictConfig
 from torch import Tensor
 
 from molbind.models.components.base_encoder import GraphEncoder
-from molbind.models.components.molclr_loss import NTXentLoss
 
 
 class GCNModule(LightningModule):
@@ -16,7 +16,9 @@ class GCNModule(LightningModule):
         self.loss_config = cfg.loss
         self.batch_size = cfg.data.batch_size
         self.model = GraphEncoder(**self.model_config)
-        self.criterion = NTXentLoss(**self.loss_config)
+        self.criterion = InfoNCE(
+            temperature=self.loss_config.temperature, negative_mode="unpaired"
+        )
         # log hyperparameters
         self.log(name="batch_size", value=self.batch_size, batch_size=self.batch_size)
         self.log("learning_rate", self.cfg.optimizer.lr)
