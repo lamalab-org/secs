@@ -4,7 +4,6 @@ from typing import List, Tuple  # noqa: UP035
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch_sparse
 from torch import Tensor
 from torch.nn import Parameter
 from torch_geometric.nn import (
@@ -15,11 +14,9 @@ from torch_geometric.nn import (
 )
 from torch_geometric.utils import add_self_loops
 from torch_geometric.utils.num_nodes import maybe_num_nodes
-from torch_scatter import scatter_add
 from transformers import AutoModelForCausalLM
 
 from molbind.models.components.head import ProjectionHead
-
 
 def xavier_init(model: nn.Module) -> nn.Module:
     for param in model.parameters():
@@ -109,7 +106,7 @@ def gcn_norm(edge_index, num_nodes=None):
     edge_weight = torch.ones((edge_index.size(1),), device=edge_index.device)
 
     row, col = edge_index[0], edge_index[1]
-    deg = scatter_add(edge_weight, col, dim=0, dim_size=num_nodes)
+    deg = torch.scatter_add(edge_weight, col, dim=0, dim_size=num_nodes)
     deg_inv_sqrt = deg.pow_(-0.5)
     deg_inv_sqrt.masked_fill_(deg_inv_sqrt == float("inf"), 0)
     return edge_index, deg_inv_sqrt[row] * edge_weight * deg_inv_sqrt[col]
@@ -171,7 +168,7 @@ class GCNConv(MessagePassing):
         return x_j if edge_attr is None else edge_attr + x_j
 
     def message_and_aggregate(self, adj_t, x):
-        return torch_sparse.matmul(adj_t, x, reduce=self.aggr)
+        return torch.sparse.matmul(adj_t, x, reduce=self.aggr)
 
 
 class GraphEncoder(nn.Module):

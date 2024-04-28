@@ -35,8 +35,6 @@ dependencies = [
   "pyarrow",
   "pandas",
   "polars",
-  "torch_scatter",
-  "torch_sparse",
   "info-nce-pytorch",
   "hydra-core==1.3.2",
   "torch>=2.0.0",
