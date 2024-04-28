@@ -18,6 +18,7 @@ from transformers import AutoModelForCausalLM
 
 from molbind.models.components.head import ProjectionHead
 
+
 def xavier_init(model: nn.Module) -> nn.Module:
     for param in model.parameters():
         if len(param.shape) > 1:
@@ -106,7 +107,9 @@ def gcn_norm(edge_index, num_nodes=None):
     edge_weight = torch.ones((edge_index.size(1),), device=edge_index.device)
 
     row, col = edge_index[0], edge_index[1]
-    deg = torch.scatter_add(edge_weight, col, dim=0, dim_size=num_nodes)
+    # deg = torch.scatter_add(edge_weight, col, dim=0, dim_size=num_nodes)
+    deg = torch.zeros(num_nodes, device=edge_index.device, dtype=edge_weight.dtype)
+    deg.scatter_add_(0, col, edge_weight)
     deg_inv_sqrt = deg.pow_(-0.5)
     deg_inv_sqrt.masked_fill_(deg_inv_sqrt == float("inf"), 0)
     return edge_index, deg_inv_sqrt[row] * edge_weight * deg_inv_sqrt[col]
@@ -168,7 +171,7 @@ class GCNConv(MessagePassing):
         return x_j if edge_attr is None else edge_attr + x_j
 
     def message_and_aggregate(self, adj_t, x):
-        return torch.sparse.matmul(adj_t, x, reduce=self.aggr)
+        return torch.sparse.mm(adj_t, x, reduce=self.aggr)
 
 
 class GraphEncoder(nn.Module):
