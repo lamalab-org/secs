@@ -35,7 +35,7 @@ class GCNModule(LightningModule):
         zjs = F.normalize(zjs, dim=1)
         return zis, zjs
 
-    def _nt_xent_loss(self, batch, prefix: str = "train") -> Tensor:
+    def _info_nce(self, batch, prefix: str = "train") -> Tensor:
         xis, xjs = batch
         _, zis = self.model(xis)  # [N,C]
 
@@ -46,10 +46,10 @@ class GCNModule(LightningModule):
         return loss
 
     def training_step(self, batch) -> Tensor:
-        return self._nt_xent_loss(batch, prefix="train")
+        return self._info_nce(batch, prefix="train")
 
     def validation_step(self, batch) -> Tensor:
-        return self._nt_xent_loss(batch, prefix="val")
+        return self._info_nce(batch, prefix="val")
 
     def configure_optimizers(self) -> torch.optim.Optimizer:
         return torch.optim.AdamW(
