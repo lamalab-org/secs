@@ -152,7 +152,7 @@ def get_train_valid_loaders_from_dataset(
     """
     dataset = MoleculeDataset(data_path)
     # split dataset into train and test
-    train_dataset, val_dataset = split_torch_dataset(dataset, 1 - valid_size)
+    train_dataset, val_dataset = split_torch_dataset(dataset, valid_size)
 
     train_loader = GeometricDataLoader(
         train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers
