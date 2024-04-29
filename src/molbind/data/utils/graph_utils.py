@@ -139,7 +139,7 @@ def get_train_valid_loaders_from_dataset(
     batch_size: int,
     num_workers: int = 0,
     valid_size: float = 0.2,
-) -> torch.utils.data.DataLoader:
+) -> Tuple[GeometricDataLoader, GeometricDataLoader]:  # noqa: UP006
     """Generate a torch DataLoader from a dataset.
 
     Args:
@@ -148,7 +148,7 @@ def get_train_valid_loaders_from_dataset(
         shuffle (bool, optional): shuffle data. Defaults to True.
         num_workers (int, optional): number of workers. Defaults to 0.
     Returns:
-        torch.utils.data.DataLoader: train and test data loaders
+        Tuple[GeometricDataLoader, GeometricDataLoader]: train and validation dataloaders as tuple
     """
     dataset = MoleculeDataset(data_path)
     # split dataset into train and test
