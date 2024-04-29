@@ -5,10 +5,11 @@ from dotenv import load_dotenv
 from lightning import Trainer
 from omegaconf import DictConfig
 
-from molbind.data.utils.graph_utils import MoleculeDatasetWrapper
+from molbind.data.utils.graph_utils import get_train_valid_loaders_from_dataset
 from molbind.models.components.molclr_lightningmodule import GCNModule
 
 load_dotenv(".env")
+
 
 def train_molclr():
     # loss device, batch_size, temperature, use_cosine_similarity
@@ -39,10 +40,7 @@ def train_molclr():
             "devices": 1,
         },
         "loss": {
-            "device": "mps",
-            "batch_size": 512,
             "temperature": 0.1,
-            "use_cosine_similarity": True,
         },
         "optimizer": {
             "lr": 0.0005,
@@ -52,12 +50,12 @@ def train_molclr():
     # convert to DictConfig
     cfg = DictConfig(cfg)
 
-    train_dataloader, val_dataloader = MoleculeDatasetWrapper(
+    train_dataloader, val_dataloader = get_train_valid_loaders_from_dataset(
+        data_path=cfg.data.data_path,
         batch_size=cfg.data.batch_size,
         num_workers=cfg.data.num_workers,
         valid_size=cfg.data.valid_size,
-        data_path=cfg.data.data_path,
-    ).get_data_loaders()
+    )
 
     wandb_logger = L.loggers.WandbLogger(
         project=os.getenv("WANDB_PROJECT"),
@@ -77,6 +75,7 @@ def train_molclr():
         train_dataloaders=train_dataloader,
         val_dataloaders=val_dataloader,
     )
+
 
 if __name__ == "__main__":
     train_molclr()
