@@ -4,6 +4,7 @@ channels:
   - conda-forge
   - pytorch
   - pyg
+  - nvidia
   - defaults
 
 dependencies:
@@ -11,4 +12,5 @@ dependencies:
   - pip
   - faiss-cpu
   - pip:
+    - torch>=2.0.0
     - --editable "."

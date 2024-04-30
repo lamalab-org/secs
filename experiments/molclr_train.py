@@ -7,6 +7,7 @@ from omegaconf import DictConfig
 
 from molbind.data.utils.graph_utils import get_train_valid_loaders_from_dataset
 from molbind.models.components.molclr_lightningmodule import GCNModule
+from molbind.utils.utils import select_device
 
 load_dotenv(".env")
 
@@ -36,7 +37,7 @@ def train_molclr():
         "trainer": {
             "max_epochs": 100,
             "log_every_n_steps": 5,
-            "accelerator": "mps",
+            "accelerator": select_device(),
             "devices": 1,
         },
         "loss": {
@@ -64,7 +65,7 @@ def train_molclr():
 
     trainer = Trainer(
         max_epochs=cfg.trainer.max_epochs,
-        accelerator=cfg.trainer.accelerator,
+        accelerator=select_device(),
         log_every_n_steps=cfg.trainer.log_every_n_steps,
         logger=wandb_logger,
         devices=cfg.trainer.devices,
