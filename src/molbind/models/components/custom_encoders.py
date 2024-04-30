@@ -85,8 +85,20 @@ class CustomGraphEncoder(GraphEncoder):
         )
         self.drop_ratio = drop_ratio
 
-    def forward(self, data):
-        data = data[0]
+    def forward(self, data : tuple) -> Tensor:
+        xis, xjs = data
+        ris, zis = self.forward_single(xis)  # [N,C]
+
+        # get the representations and the projections
+        rjs, zjs = self.forward_single(xjs)  # [N,C]
+
+        # normalize projection feature vectors
+        zis = F.normalize(zis, dim=1)
+        zjs = F.normalize(zjs, dim=1)
+        # return averaged projection features
+        return (zis + zjs) / 2
+
+    def forward_single(self, data) -> tuple:
         x = data.x
         edge_index = data.edge_index
         edge_attr = data.edge_attr
@@ -100,4 +112,8 @@ class CustomGraphEncoder(GraphEncoder):
                 h = F.dropout(h, self.drop_ratio, training=self.training)
             else:
                 h = F.dropout(F.relu(h), self.drop_ratio, training=self.training)
-        return self.pool(h, data.batch)
+        # global pooling
+        h = self.pool(h, data.batch)
+        h = self.feat_lin(h)
+        out = self.out_lin(h)
+        return h, out

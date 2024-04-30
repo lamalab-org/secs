@@ -61,7 +61,11 @@ class MolBindDataset:
         graph_data = self.data[[self.central_modality, modality]].drop_nulls()
         # perform graph operations
         # add graph dataset logic here
-        return GraphDataset(graph_data, modality, self.central_modality_data)
+        return GraphDataset(
+            graph_data=graph_data,
+            central_modality=self.central_modality,
+            central_modality_data=self.central_modality_data,
+        )
 
     def build_string_dataset(self, modality, context_length=256) -> StringDataset:
         string_data = self.data[[self.central_modality, modality]].drop_nulls()

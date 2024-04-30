@@ -38,7 +38,7 @@ def read_smiles(data_path: str) -> List[str]:  # noqa: UP006
     return smiles_data[1:]
 
 
-def smiles_to_graph(smiles: str) -> Tuple:  # noqa: UP006
+def smiles_to_graph(smiles: str) -> Tuple[Data, Data]:  # noqa: UP006
     mol = Chem.MolFromSmiles(smiles)
     # mol = Chem.AddHs(mol)
 
@@ -118,7 +118,6 @@ def smiles_to_graph(smiles: str) -> Tuple:  # noqa: UP006
             edge_attr_j[count, :] = edge_attr[bond_idx, :]
             count += 1
     data_j = Data(x=x_j, edge_index=edge_index_j, edge_attr=edge_attr_j)
-
     return data_i, data_j
 
 

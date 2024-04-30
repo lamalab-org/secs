@@ -54,9 +54,17 @@ class MolBindModule(LightningModule):
         )
 
     def _treat_graph_batch(self, batch):
-        central_modality_data = batch[0][0].central_modality_data[0]
         # this adjusts the shape of the central modality data to be compatible with the model
+        if not hasattr(batch[0][0], "input_ids"):
+            central_modality_data = batch[0][0].central_modality_data.reshape(
+                self.batch_size, -1
+            )
+        else:
+            central_modality_data = (
+                batch[0][0].input_ids.reshape(self.batch_size, -1),
+                batch[0][0].attention_mask.reshape(self.batch_size, -1)
+            )
         return {
-            self.central_modality: central_modality_data.reshape(self.batch_size, -1),
+            self.central_modality: central_modality_data,
             "graph": batch[0],
         }
