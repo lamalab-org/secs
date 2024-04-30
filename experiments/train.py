@@ -95,7 +95,7 @@ def train_molbind(config: DictConfig):
     )
 
 
-@hydra.main(version_base="1.3", config_path="../configs", config_name="train.yaml")
+@hydra.main(version_base="1.3", config_path="../configs", config_name="train_4mods.yaml")
 def main(config: DictConfig):
     train_molbind(config)
 

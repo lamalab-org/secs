@@ -1,7 +1,10 @@
-from typing import Tuple  # noqa: UP035, I002
+from typing import List, Tuple, Union  # noqa: UP035, I002
 
+import polars as pl
 from torch import Tensor
 from torch.utils.data import Dataset
+
+from molbind.data.utils.graph_utils import smiles_to_graph
 
 
 class StringDataset(Dataset):
@@ -77,7 +80,77 @@ class FingerprintMolBindDataset(Dataset):
 
 
 class GraphDataset(Dataset):
-    pass
+    def __init__(
+        self,
+        graph_data: pl.DataFrame,
+        central_modality: str,
+        central_modality_data: Union[List[int], Tensor, Tuple[Tensor, Tensor]],  # noqa: UP006
+    ) -> None:
+        """Dataset for the graph modality (MolCLR).
+
+        Args:
+            graph_data (pl.DataFrame): graph data as a polars DataFrame
+            central_modality (str): name of central modality as found in MODALITY_DATA_TYPES
+            central_modality_data (Union[Tensor, Tuple[Tensor, Tensor]]): central modality data
+            that is either a tensor or a tuple of tensors depending on the data type
+        Returns:
+            None
+        """
+
+        super().__init__()
+        from molbind.data.available import (
+            MODALITY_DATA_TYPES,
+            NonStringModalities,
+            StringModalities,
+        )
+
+        self.central_modality = central_modality
+        self.modality = "graph"
+        self.smiles_list = graph_data[self.modality].to_list()
+        self.central_modality_data = central_modality_data
+        self.central_modality_data_type = MODALITY_DATA_TYPES[central_modality]
+
+        self.central_modality_handlers = {
+            StringModalities.SMILES: self._string,
+            StringModalities.SELFIES: self._string,
+            StringModalities.INCHI: self._string,
+            StringModalities.IR: self._string,
+            StringModalities.NMR: self._string,
+            StringModalities.MASS: self._string,
+            NonStringModalities.FINGERPRINT: self._fingerprint,
+        }
+
+    def __len__(self):
+        return len(self.smiles_list)
+
+    def __getitem__(self, index: int) -> Tuple:  # noqa: UP006
+        """
+            For graph data, the central modality is added as an attribute to the graph data.
+            Then the data is reshaped to a Tensor of size (batch_size, N),
+            where N is the length of the central modality data component(s).
+        """
+        data_i, data_j = smiles_to_graph(self.smiles_list[index])
+        data_i.central_modality = self.central_modality
+        if self.central_modality_data_type != str:
+            data_i.central_modality_data = self.central_modality_handlers[
+                data_i.central_modality
+            ](self.central_modality_data[index])
+        else:
+            data_i.input_ids = self.central_modality_handlers[
+                data_i.central_modality
+            ](self.central_modality_data[0][index])
+            data_i.attention_mask = self.central_modality_handlers[
+                data_i.central_modality
+            ](self.central_modality_data[1][index])
+        return data_i, data_j
+
+    def _fingerprint(self, fingerprint: List[int]) -> Tensor:  # noqa: UP006
+        return Tensor(fingerprint)
+
+    def _string(
+        self, input
+    ) -> Tuple[Tensor, Tensor]:  # noqa: UP006
+        return input
 
 
 class FingerprintVAEDataset(Dataset):

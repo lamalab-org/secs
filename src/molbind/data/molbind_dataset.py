@@ -1,35 +1,24 @@
-from enum import StrEnum  # noqa: I002
-from functools import partial
+from functools import partial  # noqa: I002
 from typing import List, Tuple, Union  # noqa: UP035
 
 import polars as pl
 import selfies as sf
 from lightning.pytorch.utilities.combined_loader import CombinedLoader
-from networkx import Graph
 from torch import Tensor
 from torch.utils.data import DataLoader
+from torch_geometric.loader import DataLoader as GeometricDataLoader
 
-from molbind.data.available import MODALITY_DATA_TYPES, STRING_TOKENIZERS
+from molbind.data.available import (
+    MODALITY_DATA_TYPES,
+    STRING_TOKENIZERS,
+    NonStringModalities,
+    StringModalities,
+)
 from molbind.data.components.datasets import (
     FingerprintMolBindDataset,
     GraphDataset,
     StringDataset,
 )
-from molbind.data.utils.graph_utils import pyg_from_smiles
-
-
-class StringModalities(StrEnum):
-    SMILES = "smiles"
-    SELFIES = "selfies"
-    INCHI = "inchi"
-    IR = "ir"
-    NMR = "nmr"
-    MASS = "mass"
-
-
-class NonStringModalities(StrEnum):
-    GRAPH = "graph"
-    FINGERPRINT = "fingerprint"
 
 
 class MolBindDataset:
@@ -72,7 +61,11 @@ class MolBindDataset:
         graph_data = self.data[[self.central_modality, modality]].drop_nulls()
         # perform graph operations
         # add graph dataset logic here
-        return GraphDataset(graph_data, modality, self.central_modality)
+        return GraphDataset(
+            graph_data=graph_data,
+            central_modality=self.central_modality,
+            central_modality_data=self.central_modality_data,
+        )
 
     def build_string_dataset(self, modality, context_length=256) -> StringDataset:
         string_data = self.data[[self.central_modality, modality]].drop_nulls()
@@ -118,13 +111,22 @@ class MolBindDataset:
             datasets[modality] = dataset
 
         for modality in datasets:
-            dataloaders[modality] = DataLoader(
-                datasets[modality],
-                batch_size=batch_size,
-                shuffle=shuffle,
-                num_workers=num_workers,
-                drop_last=drop_last,
-            )
+            if modality == NonStringModalities.GRAPH:
+                dataloaders[modality] = GeometricDataLoader(
+                    datasets[modality],
+                    batch_size=batch_size,
+                    shuffle=shuffle,
+                    num_workers=num_workers,
+                    drop_last=drop_last,
+                )
+            else:
+                dataloaders[modality] = DataLoader(
+                    datasets[modality],
+                    batch_size=batch_size,
+                    shuffle=shuffle,
+                    num_workers=num_workers,
+                    drop_last=drop_last,
+                )
         return CombinedLoader(dataloaders, "sequential")
 
     # private class methods
@@ -142,10 +144,6 @@ class MolBindDataset:
             max_length=context_length,
         )
         return tokenized_data["input_ids"], tokenized_data["attention_mask"]
-
-    @staticmethod
-    def _build_graph_from_smiles(smi_list: List[str]) -> List[Graph]:  # noqa: UP006
-        return pyg_from_smiles(smi_list)
 
     @staticmethod
     def _build_selfies_from_smiles(smi_list: List[str]) -> List[str]:  # noqa: UP006
