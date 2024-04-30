@@ -6,6 +6,7 @@ import selfies as sf
 from lightning.pytorch.utilities.combined_loader import CombinedLoader
 from torch import Tensor
 from torch.utils.data import DataLoader
+from torch_geometric.loader import DataLoader as GeometricDataLoader
 
 from molbind.data.available import (
     MODALITY_DATA_TYPES,
@@ -28,7 +29,6 @@ class MolBindDataset:
         other_modalities: List[str],  # noqa: UP006
         **kwargs,
     ) -> None:
-
         """Dataset for multimodal data."""
         self.data = data
         self.central_modality = central_modality
@@ -61,7 +61,7 @@ class MolBindDataset:
         graph_data = self.data[[self.central_modality, modality]].drop_nulls()
         # perform graph operations
         # add graph dataset logic here
-        return GraphDataset(graph_data, modality, self.central_modality)
+        return GraphDataset(graph_data, modality, self.central_modality_data)
 
     def build_string_dataset(self, modality, context_length=256) -> StringDataset:
         string_data = self.data[[self.central_modality, modality]].drop_nulls()
@@ -107,13 +107,22 @@ class MolBindDataset:
             datasets[modality] = dataset
 
         for modality in datasets:
-            dataloaders[modality] = DataLoader(
-                datasets[modality],
-                batch_size=batch_size,
-                shuffle=shuffle,
-                num_workers=num_workers,
-                drop_last=drop_last,
-            )
+            if modality == NonStringModalities.GRAPH:
+                dataloaders[modality] = GeometricDataLoader(
+                    datasets[modality],
+                    batch_size=batch_size,
+                    shuffle=shuffle,
+                    num_workers=num_workers,
+                    drop_last=drop_last,
+                )
+            else:
+                dataloaders[modality] = DataLoader(
+                    datasets[modality],
+                    batch_size=batch_size,
+                    shuffle=shuffle,
+                    num_workers=num_workers,
+                    drop_last=drop_last,
+                )
         return CombinedLoader(dataloaders, "sequential")
 
     # private class methods

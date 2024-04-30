@@ -1,4 +1,4 @@
-from typing import Tuple, Union  # noqa: UP035, I002
+from typing import List, Tuple, Union  # noqa: UP035, I002
 
 import polars as pl
 from torch import Tensor
@@ -84,7 +84,7 @@ class GraphDataset(Dataset):
         self,
         graph_data: pl.DataFrame,
         central_modality: str,
-        central_modality_data: Union[Tensor, Tuple[Tensor, Tensor]],  # noqa: UP006
+        central_modality_data: Union[List[int], Tensor, Tuple[Tensor, Tensor]],  # noqa: UP006
     ) -> None:
         """Dataset for the graph modality (MolCLR).
 
@@ -98,21 +98,26 @@ class GraphDataset(Dataset):
         """
 
         super().__init__()
+        from molbind.data.available import MODALITY_DATA_TYPES
+
         self.central_modality = central_modality
         self.modality = "graph"
-        self.smiles_data = graph_data[self.modality]
+        self.smiles_list = graph_data[self.modality].to_list()
         self.central_modality_data = central_modality_data
+        self.central_modality_data_type = MODALITY_DATA_TYPES[central_modality]
 
     def __len__(self):
-        return len(self.smiles_data)
+        return len(self.smiles_list)
 
     def __getitem__(self, index: int) -> Tuple:  # noqa: UP006
-        data_i, data_j = smiles_to_graph(self.smiles_data[index])
-
-        return {
-            self.central_modality: [i[index] for i in self.central_modality_data],
-            self.modality: [data_i, data_j],
-        }
+        data_i, data_j = smiles_to_graph(self.smiles_list[index])
+        data_i.central_modality = self.central_modality_data[index]
+        data_i.central_modality_data = (
+            tuple([i[index] for i in self.central_modality_data])
+            if self.central_modality_data_type == str
+            else Tensor(self.central_modality_data[index]),
+        )
+        return data_i, data_j
 
 
 class FingerprintVAEDataset(Dataset):

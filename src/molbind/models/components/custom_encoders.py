@@ -85,7 +85,8 @@ class CustomGraphEncoder(GraphEncoder):
         )
         self.drop_ratio = drop_ratio
 
-    def forward(self, data: Tensor) -> Tensor:
+    def forward(self, data):
+        data = data[0]
         x = data.x
         edge_index = data.edge_index
         edge_attr = data.edge_attr

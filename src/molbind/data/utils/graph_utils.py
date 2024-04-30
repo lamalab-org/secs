@@ -9,7 +9,7 @@ import torch
 from rdkit import Chem
 from rdkit.Chem.rdchem import BondType as BT
 from torch_geometric.data import Data, Dataset
-from torch_geometric.data import DataLoader as GeometricDataLoader
+from torch_geometric.loader import DataLoader as GeometricDataLoader
 
 from molbind.data.utils import split_torch_dataset
 
