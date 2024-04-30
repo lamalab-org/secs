@@ -1,11 +1,11 @@
 import torch  # noqa: I002
 import torch.nn.functional as F
+from info_nce import InfoNCE
 from lightning import LightningModule
 from omegaconf import DictConfig
 from torch import Tensor
 
 from molbind.models.components.base_encoder import GraphEncoder
-from molbind.models.components.molclr_loss import NTXentLoss
 
 
 class GCNModule(LightningModule):
@@ -16,7 +16,9 @@ class GCNModule(LightningModule):
         self.loss_config = cfg.loss
         self.batch_size = cfg.data.batch_size
         self.model = GraphEncoder(**self.model_config)
-        self.criterion = NTXentLoss(**self.loss_config)
+        self.criterion = InfoNCE(
+            temperature=self.loss_config.temperature, negative_mode="unpaired"
+        )
         # log hyperparameters
         self.log(name="batch_size", value=self.batch_size, batch_size=self.batch_size)
         self.log("learning_rate", self.cfg.optimizer.lr)
@@ -33,7 +35,7 @@ class GCNModule(LightningModule):
         zjs = F.normalize(zjs, dim=1)
         return zis, zjs
 
-    def _nt_xent_loss(self, batch, prefix: str = "train") -> Tensor:
+    def _info_nce(self, batch, prefix: str = "train") -> Tensor:
         xis, xjs = batch
         _, zis = self.model(xis)  # [N,C]
 
@@ -44,10 +46,10 @@ class GCNModule(LightningModule):
         return loss
 
     def training_step(self, batch) -> Tensor:
-        return self._nt_xent_loss(batch, prefix="train")
+        return self._info_nce(batch, prefix="train")
 
     def validation_step(self, batch) -> Tensor:
-        return self._nt_xent_loss(batch, prefix="val")
+        return self._info_nce(batch, prefix="val")
 
     def configure_optimizers(self) -> torch.optim.Optimizer:
         return torch.optim.AdamW(

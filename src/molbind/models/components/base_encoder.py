@@ -1,10 +1,9 @@
 import math  # noqa: I002
-from typing import List, Tuple  # noqa: UP035
+from typing import List, Literal, Tuple  # noqa: UP035
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch_sparse
 from torch import Tensor
 from torch.nn import Parameter
 from torch_geometric.nn import (
@@ -15,7 +14,6 @@ from torch_geometric.nn import (
 )
 from torch_geometric.utils import add_self_loops
 from torch_geometric.utils.num_nodes import maybe_num_nodes
-from torch_scatter import scatter_add
 from transformers import AutoModelForCausalLM
 
 from molbind.models.components.head import ProjectionHead
@@ -34,7 +32,6 @@ class BaseModalityEncoder(nn.Module):
         model_name: str,
         freeze_encoder: bool = False,
         pretrained: bool = True,
-        **kwargs,
     ):
         super().__init__()
         self.model_name = model_name
@@ -102,14 +99,15 @@ class FingerprintEncoder(nn.Module):
         return mu, log_var, output
 
 
-
 def gcn_norm(edge_index, num_nodes=None):
     num_nodes = maybe_num_nodes(edge_index, num_nodes)
 
     edge_weight = torch.ones((edge_index.size(1),), device=edge_index.device)
 
     row, col = edge_index[0], edge_index[1]
-    deg = scatter_add(edge_weight, col, dim=0, dim_size=num_nodes)
+    # deg = torch.scatter_add(edge_weight, col, dim=0, dim_size=num_nodes)
+    deg = torch.zeros(num_nodes, device=edge_index.device, dtype=edge_weight.dtype)
+    deg.scatter_add_(0, col, edge_weight)
     deg_inv_sqrt = deg.pow_(-0.5)
     deg_inv_sqrt.masked_fill_(deg_inv_sqrt == float("inf"), 0)
     return edge_index, deg_inv_sqrt[row] * edge_weight * deg_inv_sqrt[col]
@@ -171,13 +169,18 @@ class GCNConv(MessagePassing):
         return x_j if edge_attr is None else edge_attr + x_j
 
     def message_and_aggregate(self, adj_t, x):
-        return torch_sparse.matmul(adj_t, x, reduce=self.aggr)
+        return torch.sparse.mm(adj_t, x, reduce=self.aggr)
 
 
 class GraphEncoder(nn.Module):
     def __init__(
-        self, num_layer=5, emb_dim=300, feat_dim=256, drop_ratio=0, pool="mean"
-    ):
+        self,
+        num_layer: int = 5,
+        emb_dim: int = 300,
+        feat_dim: int = 256,
+        drop_ratio: float = 0,
+        pool: str = Literal["mean", "add", "max"],
+    ) -> None:
         super().__init__()
         self.num_layer = num_layer
         self.emb_dim = emb_dim
@@ -219,7 +222,6 @@ class GraphEncoder(nn.Module):
         self.out_lin = nn.Sequential(
             nn.Linear(self.feat_dim, self.feat_dim),
             nn.ReLU(inplace=True),
-            # nn.Softplus(),
             nn.Linear(self.feat_dim, self.feat_dim // 2),
         )
 
@@ -237,7 +239,7 @@ class GraphEncoder(nn.Module):
                 h = F.dropout(h, self.drop_ratio, training=self.training)
             else:
                 h = F.dropout(F.relu(h), self.drop_ratio, training=self.training)
-
+        # global pooling
         h = self.pool(h, data.batch)
         h = self.feat_lin(h)
         out = self.out_lin(h)

@@ -1,0 +1,57 @@
+Some encoders include functions from other sources.
+
+Source code:
+
+The files that include these are:
+
+    * MoleculeBind/src/models/components/molclr_lightningmodule.py
+    * MoleculeBind/src/models/components/base_encoders.py
+    * MoleculeBind/src/data/utils/graph_utils.py
+
+
+The respective copyright notices are reproduced below:
+
+--------------------------------------------------------------------------
+
+MolCLR's MIT License:
+
+MIT License
+
+Copyright (c) 2021 Yuyang Wang
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+--------------------------------------------------------------------------
+
+References:
+    config ref: https://github.com/yuyangw/MolCLR/blob/master/config.yaml
+    data   ref: https://codeocean.com/capsule/6901415/tree/v1
+    model  ref: https://github.com/yuyangw/MolCLR/blob/master/models/gcn_molclr.py
+
+Specific code modifications:
+
+    * MoleculeBind/src/models/components/base_encoders.py
+        cleaned-up GCNConv and renamed GCN (model) to GraphEncoder to match the MoleculeBind 
+        encoder naming convention
+    * MoleculeBind/src/data/utils/graph_utils.py
+        most functions are from MolCLR's original source code
+        all the functions were cleaned-up for our application
+    * MoleculeBind/src/models/components/molclr_lightningmodule.py
+        the forward function is taken from the original MolCLR code
+        the loss was modified to InfoNCE

@@ -6,6 +6,7 @@ from torch import Tensor
 
 from molbind.data.available import AVAILABLE_ENCODERS
 from molbind.models.components.head import ProjectionHead
+from molbind.utils.utils import select_device
 
 
 class MolBind(nn.Module):
@@ -42,18 +43,27 @@ class MolBind(nn.Module):
         self.dict_encoders = nn.ModuleDict(self.dict_encoders)
         self.dict_projection_heads = nn.ModuleDict(self.dict_projection_heads)
 
+        # store the batch size
+        self.batch_size = cfg.data.batch_size
+
     def forward(
         self,
         input_data: Dict[str, Union[Tuple[Tensor, Tensor], Tensor]],  # noqa: UP006
     ) -> Tensor:
         store_embeddings = {}
         # input_data = [data, batch_index, dataloader_index]
-        input_data, _, _ = input_data
+        if isinstance(input_data, tuple):
+            input_data, _, _ = input_data
+            modality = [*input_data][1]
+        if isinstance(input_data, dict):
+            modality = [*input_data][1]
+
         # input_data is a dictionary with (central_modality, modality) pairs (where the central modality is at index 0)
-        modality = [*input_data][1]
         # store embeddings as store_embeddings[modality] = (central_modality_embedding, modality_embedding)
         # forward through respective encoder and projection head
-        central_modality_embedding = self.dict_encoders[self.central_modality].forward(input_data[self.central_modality])
+        central_modality_embedding = self.dict_encoders[self.central_modality].forward(
+            input_data[self.central_modality]
+        )
         modality_embedding = self.dict_encoders[modality].forward(input_data[modality])
         central_modality_embedding_projected = self.dict_projection_heads[
             self.central_modality
@@ -67,4 +77,4 @@ class MolBind(nn.Module):
         return store_embeddings
 
     def load_from_checkpoint(self, path: str):
-        return torch.load(path)
+        return torch.load(path, map_location=select_device())["state_dict"]
