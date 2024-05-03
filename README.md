@@ -22,7 +22,7 @@ conda activate molbind
 python download_molclr_data.py --save_dir "../data/pretrain_example.csv" --dataset_name "AdrianM0/molbind"
 ```
 
--
+- MolBind $\rightarrow$ `molbind/data/fingerprint.pkl` (same as for the FP-VAE encoder, but it is using more columns)
 
 ## Train individual encoders
 
