@@ -1,4 +1,5 @@
 # Description: Train a VAE on the fingerprint dataset
+import hydra
 import os
 import pickle as pkl
 
@@ -12,35 +13,15 @@ from omegaconf import DictConfig
 from molbind.data.components.datasets import FingerprintVAEDataset as FingerprintDataset
 from molbind.models.components.fp_vae_lightningmodule import FingerprintEncoderModule
 
-if __name__ == "__main__":
-    with open("../data/fingerprint.pkl", "rb") as f:  # noqa: PTH123
-        data = pkl.load(f)
 
-    cfg = {
-        "model": {
-            "input_dims": [2048, 1024, 768],
-            "output_dims": [768, 1024, 2048],
-            "latent_dim": 512,
-            "optimizer": {
-                "lr": 1e-4,
-                "weight_decay": 1e-5,
-            },
-            "loss": {
-                "beta_kl_loss": 1e-3,
-            },
-        },
-        "trainer": {
-            "max_epochs": 100,
-            "log_every_n_steps": 5,
-            "accelerator": "gpu",
-            "devices": 1,
-        },
-        "data": {
-            "batch_size": 128,
-        },
-        "warmup_epochs": 10 # TODO: no idea what you used, Adrian
-    }
-    cfg = DictConfig(cfg)
+@hydra.main(version_base="1.3", config_path="../configs", config_name="train_fp-vae.yaml")
+def main(cfg: DictConfig):
+
+    print("config is\n")
+    print(cfg)
+
+    with open(cfg.data.dataset_path, "rb") as f:  # noqa: PTH123
+        data = pkl.load(f)
 
     data = data.sample(frac=1, random_state=42)
     fingerprints = data["fingerprint"].to_list()
@@ -58,7 +39,7 @@ if __name__ == "__main__":
         max_epochs=cfg.trainer.max_epochs,
         accelerator=cfg.trainer.accelerator,
         log_every_n_steps=cfg.trainer.log_every_n_steps,
-        #logger=wandb_logger,
+        #logger=cfg.logger,
         devices=cfg.trainer.devices,
     )
 
@@ -76,3 +57,6 @@ if __name__ == "__main__":
         train_dataloaders=train_dataloader,
         val_dataloaders=val_dataloader,
     )
+
+if __name__ == "__main__":
+    main()

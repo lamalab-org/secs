@@ -32,7 +32,7 @@ class FingerprintEncoderModule(LightningModule):
         https://stats.stackexchange.com/questions/341954/balancing-reconstruction-vs-kl-loss-variational-autoencoder
         KL-annealing: https://arxiv.org/pdf/1511.06349.pdf
         """
-        if self.current_epoch > self.config.warmup_epochs:
+        if self.current_epoch > self.config.model.warmup_epochs:
             mu, log_var, output_fingerprint = self.model(input_fingerprint)
             # Reconstruction loss
             recon_loss = F.mse_loss(output_fingerprint, input_fingerprint)

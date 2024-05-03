@@ -1,0 +1,2 @@
+dataset_path: "${paths.data_dir}/fingerprint.pkl"
+batch_size: 128
