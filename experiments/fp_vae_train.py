@@ -12,6 +12,7 @@ from omegaconf import DictConfig
 
 from molbind.data.components.datasets import FingerprintVAEDataset as FingerprintDataset
 from molbind.models.components.fp_vae_lightningmodule import FingerprintEncoderModule
+from molbind.utils.instantiators import instantiate_loggers
 
 
 @hydra.main(version_base="1.3", config_path="../configs", config_name="train_fp-vae.yaml")
@@ -35,11 +36,14 @@ def main(cfg: DictConfig):
     #    entity=os.getenv("WANDB_ENTITY"),
     #)
 
+    loggers = instantiate_loggers(cfg.logger)
+    print("loggers object is", loggers)
+
     trainer = Trainer(
         max_epochs=cfg.trainer.max_epochs,
         accelerator=cfg.trainer.accelerator,
         log_every_n_steps=cfg.trainer.log_every_n_steps,
-        #logger=cfg.logger,
+        logger=loggers,
         devices=cfg.trainer.devices,
     )
 
