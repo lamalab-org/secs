@@ -19,7 +19,7 @@ conda activate molbind
 - MolCLR $\rightarrow$ `molbind/scripts/download_moclr_data.py`. The script can be ran with the following command:
 
 ```bash
-python download_data.py --save_dir "../data/pretrain_example.csv" --dataset_name "AdrianM0/molbind"
+python download_molclr_data.py --save_dir "../data/pretrain_example.csv" --dataset_name "AdrianM0/molbind"
 ```
 
 -
