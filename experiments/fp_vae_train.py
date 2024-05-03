@@ -1,9 +1,10 @@
-# Description: Train a VAE on the fingerprint dataset
-import os
+import os  # noqa: I002
 import pickle as pkl
 
+import hydra
 import numpy as np
 import pytorch_lightning as L
+import rootutils
 import torch
 from dotenv import load_dotenv
 from lightning import Trainer
@@ -12,39 +13,18 @@ from omegaconf import DictConfig
 from molbind.data.components.datasets import FingerprintVAEDataset as FingerprintDataset
 from molbind.models.components.fp_vae_lightningmodule import FingerprintEncoderModule
 
-if __name__ == "__main__":
-    with open("fingerprint.pkl", "rb") as f:  # noqa: PTH123
-        data = pkl.load(f)
+rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 
-    cfg = {
-        "model": {
-            "input_dim": [2048, 1024, 768],
-            "output_dim": [768, 1024, 2048],
-            "latent_dim": 512,
-            "optimizer": {
-                "lr": 1e-4,
-                "weight_decay": 1e-5,
-            },
-            "loss": {
-                "beta_kl_loss": 1e-3,
-            },
-        },
-        "trainer": {
-            "max_epochs": 100,
-            "log_every_n_steps": 5,
-            "accelerator": "mps",
-            "devices": 1,
-        },
-        "data": {
-            "batch_size": 128,
-        },
-    }
-    cfg = DictConfig(cfg)
+
+@hydra.main(version_base="1.3", config_path="../configs", config_name="train_fp-vae.yaml")
+def main(cfg: DictConfig):
+    # load the dataset
+    with open(cfg.data.dataset_path, "rb") as f:  # noqa: PTH123
+        data = pkl.load(f)
 
     data = data.sample(frac=1, random_state=42)
     fingerprints = data["fingerprint"].to_list()
     fingerprints = np.vstack(fingerprints).astype(np.float32)
-    # load the data
 
     load_dotenv(".env")
 
@@ -75,3 +55,6 @@ if __name__ == "__main__":
         train_dataloaders=train_dataloader,
         val_dataloaders=val_dataloader,
     )
+
+if __name__ == "__main__":
+    main()
