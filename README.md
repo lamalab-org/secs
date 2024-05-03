@@ -13,6 +13,17 @@ conda env create -f environment.yaml
 conda activate molbind
 ```
 
+## Data availability
+
+- FP-VAE encoder $\rightarrow$ `molbind/data/fingerprint.pkl`
+- MolCLR $\rightarrow$ `molbind/scripts/download_moclr_data.py`. The script can be ran with the following command:
+
+```bash
+python download_data.py --save_dir "../data/pretrain_example.csv" --dataset_name "AdrianM0/molbind"
+```
+
+-
+
 ## Train individual encoders
 
 In `experiments/` you will find several training scripts. The global `train.py` script will refer exclusively to the multimodal model, while all the other scripts refer to specific encoders.
