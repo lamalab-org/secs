@@ -16,9 +16,9 @@ class FingerprintEncoderModule(LightningModule):
     def __init__(self, cfg: DictConfig) -> None:
         super().__init__()
         self.model = FingerprintEncoder(
-            input_dim=cfg.model.input_dims,
-            output_dim=cfg.model.output_dims,
-            latent_dim=cfg.model.latent_dims,
+            input_dims=cfg.model.input_dims,
+            output_dims=cfg.model.output_dims,
+            latent_dim=cfg.model.latent_dim,
         )
         self.config = cfg
         self.beta = cfg.model.loss.beta_kl_loss
@@ -53,7 +53,7 @@ class FingerprintEncoderModule(LightningModule):
         correct_recon = torch.sum(output_fingerprint == input_fingerprint).item()
         self.log(
             f"correct_recon_{prefix}",
-            correct_recon / self.batch_size / self.config.model.input_dim[0],
+            correct_recon / self.batch_size / self.config.model.input_dims[0],
         )
         return torch.mean(recon_loss + self.beta * kl_loss)
 
