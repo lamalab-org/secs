@@ -31,10 +31,10 @@ def main(cfg: DictConfig):
 
     load_dotenv(".env")
 
-    #wandb_logger = L.loggers.WandbLogger(
-    #    project=os.getenv("WANDB_PROJECT"),
-    #    entity=os.getenv("WANDB_ENTITY"),
-    #)
+    wandb_logger = L.loggers.WandbLogger(
+        project=os.getenv("WANDB_PROJECT"),
+        entity=os.getenv("WANDB_ENTITY"),
+    )
 
     loggers = instantiate_loggers(cfg.logger)
     print("loggers object is", loggers)
