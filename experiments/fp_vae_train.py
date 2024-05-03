@@ -1,10 +1,10 @@
-# Description: Train a VAE on the fingerprint dataset
-import hydra
-import os
+import os  # noqa: I002
 import pickle as pkl
 
+import hydra
 import numpy as np
 import pytorch_lightning as L
+import rootutils
 import torch
 from dotenv import load_dotenv
 from lightning import Trainer
@@ -12,20 +12,19 @@ from omegaconf import DictConfig
 
 from molbind.data.components.datasets import FingerprintVAEDataset as FingerprintDataset
 from molbind.models.components.fp_vae_lightningmodule import FingerprintEncoderModule
-from molbind.utils.instantiators import instantiate_loggers
+
+rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 
 
 @hydra.main(version_base="1.3", config_path="../configs", config_name="train_fp-vae.yaml")
 def main(cfg: DictConfig):
-
-
+    # load the dataset
     with open(cfg.data.dataset_path, "rb") as f:  # noqa: PTH123
         data = pkl.load(f)
 
     data = data.sample(frac=1, random_state=42)
     fingerprints = data["fingerprint"].to_list()
     fingerprints = np.vstack(fingerprints).astype(np.float32)
-    # load the data
 
     load_dotenv(".env")
 
@@ -33,8 +32,6 @@ def main(cfg: DictConfig):
         project=os.getenv("WANDB_PROJECT"),
         entity=os.getenv("WANDB_ENTITY"),
     )
-
-    loggers = instantiate_loggers(cfg.logger)
 
     trainer = Trainer(
         max_epochs=cfg.trainer.max_epochs,

@@ -40,7 +40,7 @@ class FingerprintEncoderModule(LightningModule):
             kl_loss = -0.5 * torch.mean(1 + log_var - mu**2 - torch.exp(log_var))
             total_loss = recon_loss + self.beta * kl_loss
         else:
-            kl_loss = torch.tensor(0)
+            kl_loss = torch.tensor(0, dtype=torch.float32)
             mu, log_var, output_fingerprint = self.model(input_fingerprint)
             recon_loss = F.mse_loss(output_fingerprint, input_fingerprint)
             total_loss = recon_loss + self.beta * kl_loss
