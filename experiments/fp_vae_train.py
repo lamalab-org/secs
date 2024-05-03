@@ -43,7 +43,7 @@ def main(cfg: DictConfig):
         max_epochs=cfg.trainer.max_epochs,
         accelerator=cfg.trainer.accelerator,
         log_every_n_steps=cfg.trainer.log_every_n_steps,
-        logger=loggers,
+        logger=wandb_logger,
         devices=cfg.trainer.devices,
     )
 
