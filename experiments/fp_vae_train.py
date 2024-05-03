@@ -18,8 +18,6 @@ from molbind.utils.instantiators import instantiate_loggers
 @hydra.main(version_base="1.3", config_path="../configs", config_name="train_fp-vae.yaml")
 def main(cfg: DictConfig):
 
-    print("config is\n")
-    print(cfg)
 
     with open(cfg.data.dataset_path, "rb") as f:  # noqa: PTH123
         data = pkl.load(f)
