@@ -24,20 +24,29 @@ python download_molclr_data.py --save_dir "../data/pretrain_example.csv" --datas
 
 - MolBind $\rightarrow$ `molbind/data/fingerprint.pkl` (same as for the FP-VAE encoder, but it is using more columns)
 
-## Train individual encoders
+## Environment file
+
+Your environment file should look like this:
+
+```
+WANDB_PROJECT="<your-wandb-project-name>"
+WANDB_ENTITY="<your-wandb-account-name>"
+TOKENIZERS_PARALLELISM=False
+```
+
+After you have defined your system variables in `.env`, it is read into the script as following:
+
+```python
+load_dotenv("path/to/.env")
+```
+
+## Train models
 
 In `experiments/` you will find several training scripts. The global `train.py` script will refer exclusively to the multimodal model, while all the other scripts refer to specific encoders.
 
 - `fp_vae_train.py` $\rightarrow$ Train a variational autoencoder for the Morgan fingerprints
 - `molclr_train.py` $\rightarrow$ Train the MolCLR model to be used as a graph encoder in `MolBind`
 
-## Train MolBind
-
-The training script is available in `experiments/`. Define your `WANDB_PROJECT` and `WANDB_ENTITY` in the `.env` file that is read into the training script trough:
-
-```python
-load_dotenv("path/to/.env")
-```
 
 ## Config tree
 
