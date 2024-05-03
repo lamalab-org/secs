@@ -11,17 +11,22 @@ from molbind.models.components.base_encoder import GraphEncoder
 class GCNModule(LightningModule):
     def __init__(self, cfg: DictConfig) -> None:
         super().__init__()
-        self.cfg = cfg
         self.model_config = cfg.model
-        self.loss_config = cfg.loss
         self.batch_size = cfg.data.batch_size
-        self.model = GraphEncoder(**self.model_config)
+        self.model = GraphEncoder(
+            num_layer=self.model_config.num_layer,
+            emb_dim=self.model_config.emb_dim,
+            feat_dim=self.model_config.feat_dim,
+            drop_ratio=self.model_config.drop_ratio,
+            pool=self.model_config.pool
+        )
         self.criterion = InfoNCE(
-            temperature=self.loss_config.temperature, negative_mode="unpaired"
+            temperature=self.model_config.loss.temperature,
+            negative_mode="unpaired"
         )
         # log hyperparameters
         self.log(name="batch_size", value=self.batch_size, batch_size=self.batch_size)
-        self.log("learning_rate", self.cfg.optimizer.lr)
+        self.log("learning_rate", self.model_config.optimizer.lr)
 
     def forward(self, batch):
         xis, xjs = batch
@@ -54,6 +59,6 @@ class GCNModule(LightningModule):
     def configure_optimizers(self) -> torch.optim.Optimizer:
         return torch.optim.AdamW(
             self.model.parameters(),
-            lr=self.cfg.optimizer.lr,
-            weight_decay=self.cfg.optimizer.weight_decay,
+            lr=self.model_config.optimizer.lr,
+            weight_decay=self.model_config.optimizer.weight_decay,
         )

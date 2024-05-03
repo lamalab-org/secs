@@ -1,0 +1,7 @@
+defaults:
+  - _self_
+  - data: molclr
+  - model: molclr
+  - logger: tensorboard
+  - paths: default
+  - trainer: gpu
