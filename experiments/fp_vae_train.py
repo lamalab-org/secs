@@ -13,13 +13,13 @@ from molbind.data.components.datasets import FingerprintVAEDataset as Fingerprin
 from molbind.models.components.fp_vae_lightningmodule import FingerprintEncoderModule
 
 if __name__ == "__main__":
-    with open("fingerprint.pkl", "rb") as f:  # noqa: PTH123
+    with open("../data/fingerprint.pkl", "rb") as f:  # noqa: PTH123
         data = pkl.load(f)
 
     cfg = {
         "model": {
-            "input_dim": [2048, 1024, 768],
-            "output_dim": [768, 1024, 2048],
+            "input_dims": [2048, 1024, 768],
+            "output_dims": [768, 1024, 2048],
             "latent_dim": 512,
             "optimizer": {
                 "lr": 1e-4,
@@ -32,12 +32,13 @@ if __name__ == "__main__":
         "trainer": {
             "max_epochs": 100,
             "log_every_n_steps": 5,
-            "accelerator": "mps",
+            "accelerator": "gpu",
             "devices": 1,
         },
         "data": {
             "batch_size": 128,
         },
+        "warmup_epochs": 10 # TODO: no idea what you used, Adrian
     }
     cfg = DictConfig(cfg)
 
@@ -48,16 +49,16 @@ if __name__ == "__main__":
 
     load_dotenv(".env")
 
-    wandb_logger = L.loggers.WandbLogger(
-        project=os.getenv("WANDB_PROJECT"),
-        entity=os.getenv("WANDB_ENTITY"),
-    )
+    #wandb_logger = L.loggers.WandbLogger(
+    #    project=os.getenv("WANDB_PROJECT"),
+    #    entity=os.getenv("WANDB_ENTITY"),
+    #)
 
     trainer = Trainer(
         max_epochs=cfg.trainer.max_epochs,
         accelerator=cfg.trainer.accelerator,
         log_every_n_steps=cfg.trainer.log_every_n_steps,
-        logger=wandb_logger,
+        #logger=wandb_logger,
         devices=cfg.trainer.devices,
     )
 
