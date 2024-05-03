@@ -35,7 +35,6 @@ def main(cfg: DictConfig):
     )
 
     loggers = instantiate_loggers(cfg.logger)
-    print("loggers object is", loggers)
 
     trainer = Trainer(
         max_epochs=cfg.trainer.max_epochs,
