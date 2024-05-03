@@ -1,0 +1,4 @@
+batch_size: 512
+num_workers: 4
+data_path: "../data/pretrain_example.csv"
+valid_size: 0.2
