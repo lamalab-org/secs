@@ -2,6 +2,7 @@ from typing import Dict, Tuple, Union  # noqa: UP035, I002
 
 import torch
 import torch.nn as nn
+from omegaconf import DictConfig
 from torch import Tensor
 
 from molbind.data.available import AVAILABLE_ENCODERS
@@ -10,7 +11,7 @@ from molbind.utils.utils import select_device
 
 
 class MolBind(nn.Module):
-    def __init__(self, cfg):
+    def __init__(self, cfg: DictConfig) -> None:
         super().__init__()
 
         modalities = cfg.data.modalities
