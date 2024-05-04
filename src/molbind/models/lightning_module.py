@@ -1,6 +1,7 @@
 from typing import Dict  # noqa: UP035, I002
 
 import torch
+from faiss import IndexFlatL2
 from info_nce import InfoNCE
 from pytorch_lightning import LightningModule
 from torch import Tensor
@@ -18,6 +19,8 @@ class MolBindModule(LightningModule):
         )
         self.batch_size = cfg.data.batch_size
         self.central_modality = cfg.data.central_modality
+        self.multimodal_embeddings_storage_val = {}
+        self.multimodal_embeddings_storage_val[self.central_modality] = {}
 
     def forward(self, batch: Dict) -> Dict:  # noqa: UP006
         try:
@@ -36,6 +39,15 @@ class MolBindModule(LightningModule):
             embeddings_dict[modality_pair[0]], embeddings_dict[modality_pair[1]]
         )
         self.log(f"{prefix}_loss", loss)
+        # compute cosine similarity between the embeddings of the central modality
+        # and the other modality
+        similarity = torch.nn.functional.cosine_similarity(
+            embeddings_dict[modality_pair[0]], embeddings_dict[modality_pair[1]], dim=1
+        )
+        self.log(
+            f"{prefix}_{modality_pair[0]}_{modality_pair[1]}_similarity",
+            similarity.mean(),
+        )
         return loss
 
     def training_step(self, batch: Dict):  # noqa: UP006
@@ -53,7 +65,7 @@ class MolBindModule(LightningModule):
             weight_decay=self.config.model.optimizer.weight_decay,
         )
 
-    def _treat_graph_batch(self, batch):
+    def _treat_graph_batch(self, batch: Dict) -> Dict:  # noqa: UP006
         # this adjusts the shape of the central modality data to be compatible with the model
         if not hasattr(batch[0][0], "input_ids"):
             central_modality_data = batch[0][0].central_modality_data.reshape(
@@ -62,7 +74,7 @@ class MolBindModule(LightningModule):
         else:
             central_modality_data = (
                 batch[0][0].input_ids.reshape(self.batch_size, -1),
-                batch[0][0].attention_mask.reshape(self.batch_size, -1)
+                batch[0][0].attention_mask.reshape(self.batch_size, -1),
             )
         return {
             self.central_modality: central_modality_data,
