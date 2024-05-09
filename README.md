@@ -8,6 +8,8 @@
 
 It is recommmended using `mamba` or `conda` for creating a virtual environment.
 
+For GPU (e.g., on MacOS) use the `environment.yaml` file. If your system has `CUDA`, please use the `cuda_environment.yaml` file instead.
+
 ```conda
 conda env create -f environment.yaml
 conda activate molbind
