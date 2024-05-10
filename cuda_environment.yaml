@@ -10,7 +10,7 @@ channels:
 dependencies:
   - python>=3.9
   - pip
-  - faiss-gpu
+  - faiss-cpu
   - pip:
     - --extra-index-url https://download.pytorch.org/whl/cu117
     - torch==2.0.0+cu117
