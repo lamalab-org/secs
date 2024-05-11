@@ -10,8 +10,9 @@ class MolBindDataModule(LightningDataModule):
         data: Dict,  # noqa: UP006
     ) -> None:
         super().__init__()
-        self.train_dataloaders = data["train"]
-        self.val_dataloaders = data["val"]
+        for subset in ["train", "val", "test"]:
+            if subset in [*data]:
+                setattr(self, f"{subset}_dataloaders", data[subset])
 
     def setup(self, stage: Optional[str] = None) -> None:
         # for now the train/val data loaders are already set up
@@ -23,4 +24,8 @@ class MolBindDataModule(LightningDataModule):
 
     def val_dataloader(self) -> CombinedLoader:
         # iter through val data loaders
-        return self.val_dataloaders
+        return self.val_dataloaders if hasattr(self, "val_dataloaders") else None
+
+    def test_dataloader(self) -> CombinedLoader:
+        # iter through test data loaders
+        return self.test_dataloaders if hasattr(self, "test_dataloaders") else None
