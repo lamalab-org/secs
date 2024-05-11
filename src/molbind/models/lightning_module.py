@@ -1,16 +1,17 @@
 from typing import Dict  # noqa: UP035, I002
 
 import torch
-from faiss import IndexFlatL2
 from info_nce import InfoNCE
+from omegaconf import DictConfig
 from pytorch_lightning import LightningModule
 from torch import Tensor
 
-from molbind.models.model import MolBind
+from molbind.metrics.retrieval import compute_top_k_retrieval
+from molbind.models import MolBind
 
 
 class MolBindModule(LightningModule):
-    def __init__(self, cfg):
+    def __init__(self, cfg: DictConfig) -> None:
         super().__init__()
         self.model = MolBind(cfg=cfg)
         self.config = cfg
@@ -19,8 +20,7 @@ class MolBindModule(LightningModule):
         )
         self.batch_size = cfg.data.batch_size
         self.central_modality = cfg.data.central_modality
-        self.multimodal_embeddings_storage_val = {}
-        self.multimodal_embeddings_storage_val[self.central_modality] = {}
+        self.store_embeddings = []
 
     def forward(self, batch: Dict) -> Dict:  # noqa: UP006
         try:
@@ -38,7 +38,7 @@ class MolBindModule(LightningModule):
         loss = self._info_nce_loss(
             embeddings_dict[modality_pair[0]], embeddings_dict[modality_pair[1]]
         )
-        self.log(f"{prefix}_loss", loss)
+        self.log(f"{prefix}_loss", loss, batch_size=self.batch_size)
         # compute cosine similarity between the embeddings of the central modality
         # and the other modality
         similarity = torch.nn.functional.cosine_similarity(
@@ -47,7 +47,21 @@ class MolBindModule(LightningModule):
         self.log(
             f"{prefix}_{modality_pair[0]}_{modality_pair[1]}_similarity",
             similarity.mean(),
+            batch_size=self.batch_size,
         )
+        # compute retrieval metrics
+        k_list = [1, 5, 10]
+
+        for k in k_list:
+            self.log(
+                f"{prefix}_top_{k}_retrieval",
+                compute_top_k_retrieval(
+                    embeddings_dict[modality_pair[0]],
+                    embeddings_dict[modality_pair[1]],
+                    k,
+                ),
+                batch_size=self.batch_size,
+            )
         return loss
 
     def training_step(self, batch: Dict):  # noqa: UP006
@@ -57,6 +71,11 @@ class MolBindModule(LightningModule):
     def validation_step(self, batch: Dict) -> Tensor:  # noqa: UP006
         embeddings_dict = self.forward(batch)
         return self._multimodal_loss(embeddings_dict, "valid")
+
+    def test_step(self, batch: Dict) -> Tensor:  # noqa: UP006
+        embeddings_dict = self.forward(batch)
+        self.store_embeddings.append(embeddings_dict)
+        return self._multimodal_loss(embeddings_dict, "test")
 
     def configure_optimizers(self):
         return torch.optim.AdamW(
