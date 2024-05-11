@@ -5,14 +5,14 @@ import torch.nn as nn
 from omegaconf import DictConfig
 from torch import Tensor
 
-from molbind.data.available import AVAILABLE_ENCODERS
 from molbind.models.components.head import ProjectionHead
-from molbind.utils.utils import select_device
+from molbind.utils import select_device
 
 
 class MolBind(nn.Module):
     def __init__(self, cfg: DictConfig) -> None:
         super().__init__()
+        from molbind.data.available import AVAILABLE_ENCODERS
 
         modalities = cfg.data.modalities
         central_modality = cfg.data.central_modality
