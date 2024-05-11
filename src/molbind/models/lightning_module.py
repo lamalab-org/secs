@@ -54,7 +54,7 @@ class MolBindModule(LightningModule):
 
         for k in k_list:
             self.log(
-                f"{prefix}_top_{k}_retrieval",
+                f"{modality_pair[0]}_{modality_pair[1]}_{prefix}_top_{k}_retrieval",
                 compute_top_k_retrieval(
                     embeddings_dict[modality_pair[0]],
                     embeddings_dict[modality_pair[1]],
