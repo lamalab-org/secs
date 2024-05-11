@@ -109,7 +109,7 @@ class GraphDataset(Dataset):
         self.smiles_list = graph_data[self.modality].to_list()
         self.central_modality_data = central_modality_data
         self.central_modality_data_type = MODALITY_DATA_TYPES[central_modality]
-
+        # modality handler functions if a modality is the central modality
         self.central_modality_handlers = {
             StringModalities.SMILES: self._string,
             StringModalities.SELFIES: self._string,
@@ -125,9 +125,8 @@ class GraphDataset(Dataset):
 
     def __getitem__(self, index: int) -> Tuple:  # noqa: UP006
         """
-            For graph data, the central modality is added as an attribute to the graph data.
-            Then the data is reshaped to a Tensor of size (batch_size, N),
-            where N is the length of the central modality data component(s).
+        For graph data, the central modality is added as an attribute to the graph data.
+        Then the data is reshaped to a Tensor of size (batch_size, N).
         """
         data_i, data_j = smiles_to_graph(self.smiles_list[index])
         data_i.central_modality = self.central_modality
@@ -136,9 +135,9 @@ class GraphDataset(Dataset):
                 data_i.central_modality
             ](self.central_modality_data[index])
         else:
-            data_i.input_ids = self.central_modality_handlers[
-                data_i.central_modality
-            ](self.central_modality_data[0][index])
+            data_i.input_ids = self.central_modality_handlers[data_i.central_modality](
+                self.central_modality_data[0][index]
+            )
             data_i.attention_mask = self.central_modality_handlers[
                 data_i.central_modality
             ](self.central_modality_data[1][index])
@@ -147,9 +146,7 @@ class GraphDataset(Dataset):
     def _fingerprint(self, fingerprint: List[int]) -> Tensor:  # noqa: UP006
         return Tensor(fingerprint)
 
-    def _string(
-        self, input
-    ) -> Tuple[Tensor, Tensor]:  # noqa: UP006
+    def _string(self, input: Tuple[Tensor, Tensor]) -> Tuple[Tensor, Tensor]:  # noqa: UP006
         return input
 
 
