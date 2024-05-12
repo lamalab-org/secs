@@ -10,13 +10,21 @@ def compute_L2_min(
     )
 
 
+def compute_cosine_similarity(
+    central_modality_embeddings: Tensor, other_modality_embedding: Tensor
+) -> Tensor:
+    return torch.nn.functional.cosine_similarity(
+        central_modality_embeddings, other_modality_embedding.unsqueeze(0), dim=1
+    )
+
+
 def compute_top_k_retrieval(
     embeddings_other_mod: Tensor, embeddings_central_mod: Tensor, k: int
 ) -> Tensor:
     in_top_k = []
     for id_embed, embedding_other_mod in enumerate(embeddings_other_mod):
         top_k = topk(
-            compute_L2_min(embeddings_central_mod, embedding_other_mod),
+            compute_cosine_similarity(embeddings_central_mod, embedding_other_mod),
             k,
             largest=False,
         ).indices.tolist()
@@ -25,5 +33,4 @@ def compute_top_k_retrieval(
             in_top_k.append(1)
         else:
             in_top_k.append(0)
-
-    return sum(in_top_k)/len(in_top_k)
+    return sum(in_top_k) / len(in_top_k)
