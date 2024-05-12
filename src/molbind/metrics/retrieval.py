@@ -26,7 +26,7 @@ def compute_top_k_retrieval(
         top_k = topk(
             compute_cosine_similarity(embeddings_central_mod, embedding_other_mod),
             k,
-            largest=False,
+            largest=True,
         ).indices.tolist()
 
         if id_embed in top_k:
