@@ -48,16 +48,6 @@ class MolBindModule(LightningModule):
             embeddings_dict[modality_pair[0]], embeddings_dict[modality_pair[1]]
         )
         self.log(f"{prefix}_loss", loss, batch_size=self.batch_size)
-        # compute cosine similarity between the embeddings of the central modality
-        # and the other modality
-        similarity = torch.nn.functional.cosine_similarity(
-            embeddings_dict[modality_pair[0]], embeddings_dict[modality_pair[1]], dim=1
-        )
-        self.log(
-            f"{prefix}_{modality_pair[0]}_{modality_pair[1]}_similarity",
-            similarity.mean(),
-            batch_size=self.batch_size,
-        )
         # compute retrieval metrics
         k_list = [1, 5, 10]
 
@@ -66,6 +56,7 @@ class MolBindModule(LightningModule):
             embeddings_dict[modality_pair[1]],
             *modality_pair,
             k_list,
+            prefix=prefix,
         )
         return loss
 
@@ -96,6 +87,7 @@ class MolBindModule(LightningModule):
         central_modality: str,
         other_modality: str,
         k_list: List[int],  # noqa: UP006
+        prefix: str,
     ) -> None:
         metrics = [
             RetrievalMRR,
@@ -127,7 +119,7 @@ class MolBindModule(LightningModule):
                 metric_to_log = metric(top_k=k_val)
                 metric_to_log.update(flatten_cos_sim, target, indexes)
                 self.log(
-                    f"{central_modality}_{other_modality}_{metric_name}_top_{k_val}",
+                    f"{prefix}_{central_modality}_{other_modality}_{metric_name}_top_{k_val}",
                     metric_to_log.compute(),
                     batch_size=self.batch_size,
                 )
