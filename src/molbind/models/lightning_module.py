@@ -1,13 +1,22 @@
-from typing import Dict  # noqa: UP035, I002
+from typing import Dict, List  # noqa: UP035, I002
 
 import torch
 from info_nce import InfoNCE
 from omegaconf import DictConfig
 from pytorch_lightning import LightningModule
 from torch import Tensor
+from torch.nn.functional import cosine_similarity
+from torchmetrics.retrieval import (
+    RetrievalAUROC,
+    RetrievalMAP,
+    RetrievalMRR,
+    RetrievalPrecision,
+    RetrievalRecall,
+)
 
-from molbind.metrics.retrieval import compute_top_k_retrieval
+# from molbind.metrics.retrieval import compute_top_k_retrieval
 from molbind.models import MolBind
+from molbind.utils import select_device
 
 
 class MolBindModule(LightningModule):
@@ -52,16 +61,12 @@ class MolBindModule(LightningModule):
         # compute retrieval metrics
         k_list = [1, 5, 10]
 
-        for k in k_list:
-            self.log(
-                f"{modality_pair[0]}_{modality_pair[1]}_{prefix}_top_{k}_retrieval",
-                compute_top_k_retrieval(
-                    embeddings_dict[modality_pair[0]],
-                    embeddings_dict[modality_pair[1]],
-                    k,
-                ),
-                batch_size=self.batch_size,
-            )
+        self.retrieval_metrics(
+            embeddings_dict[modality_pair[0]],
+            embeddings_dict[modality_pair[1]],
+            *modality_pair,
+            k_list,
+        )
         return loss
 
     def training_step(self, batch: Dict):  # noqa: UP006
@@ -83,6 +88,48 @@ class MolBindModule(LightningModule):
             lr=self.config.model.optimizer.lr,
             weight_decay=self.config.model.optimizer.weight_decay,
         )
+
+    def retrieval_metrics(
+        self,
+        embeddings_central_mod: Tensor,
+        embeddings_other_mod: Tensor,
+        central_modality: str,
+        other_modality: str,
+        k_list: List[int],  # noqa: UP006
+    ) -> None:
+        metrics = [
+            RetrievalMRR,
+            RetrievalMAP,
+            RetrievalPrecision,
+            RetrievalRecall,
+            RetrievalAUROC,
+        ]
+        metric_names = [metric.__name__ for metric in metrics]
+        # compute cosine similarity matrix between embeddings of the central modality and the other modality
+        self.cos_sim = cosine_similarity(
+            embeddings_central_mod.unsqueeze(1),
+            embeddings_other_mod.unsqueeze(0),
+            dim=2,
+        )
+        # preds, target, indexes
+        flatten_cos_sim = self.cos_sim.flatten()
+        indexes = torch.arange(embeddings_central_mod.shape[0]).repeat(
+            embeddings_central_mod.shape[0]
+        )
+        target = (
+            torch.eye(embeddings_central_mod.shape[0], dtype=torch.long)
+            .flatten()
+            .to(select_device())
+        )
+
+        for k_val, metric, metric_name in zip(k_list, metrics, metric_names):
+            metric_to_log = metric(top_k=k_val)
+            metric_to_log.update(flatten_cos_sim, target, indexes)
+            self.log(
+                f"{central_modality}_{other_modality}_{metric_name}_top_{k_val}",
+                metric_to_log.compute(),
+                batch_size=self.batch_size,
+            )
 
     def _treat_graph_batch(self, batch: Dict) -> Dict:  # noqa: UP006
         # this adjusts the shape of the central modality data to be compatible with the model
