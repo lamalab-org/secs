@@ -6,6 +6,7 @@ from omegaconf import DictConfig
 from pytorch_lightning import LightningModule
 from torch import Tensor
 from torch.nn.functional import cosine_similarity
+from torch.optim import Optimizer
 from torchmetrics.retrieval import (
     RetrievalAUROC,
     RetrievalMAP,
@@ -14,7 +15,6 @@ from torchmetrics.retrieval import (
     RetrievalRecall,
 )
 
-# from molbind.metrics.retrieval import compute_top_k_retrieval
 from molbind.models import MolBind
 from molbind.utils import select_device
 
@@ -73,7 +73,7 @@ class MolBindModule(LightningModule):
         self.store_embeddings.append(embeddings_dict)
         return self._multimodal_loss(embeddings_dict, "test")
 
-    def configure_optimizers(self):
+    def configure_optimizers(self) -> Optimizer:
         return torch.optim.AdamW(
             self.model.parameters(),
             lr=self.config.model.optimizer.lr,
