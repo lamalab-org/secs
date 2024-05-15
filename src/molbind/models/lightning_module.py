@@ -122,14 +122,15 @@ class MolBindModule(LightningModule):
             .to(select_device())
         )
 
-        for k_val, metric, metric_name in zip(k_list, metrics, metric_names):
-            metric_to_log = metric(top_k=k_val)
-            metric_to_log.update(flatten_cos_sim, target, indexes)
-            self.log(
-                f"{central_modality}_{other_modality}_{metric_name}_top_{k_val}",
-                metric_to_log.compute(),
-                batch_size=self.batch_size,
-            )
+        for metric, metric_name in zip(metrics, metric_names):
+            for k_val in k_list:
+                metric_to_log = metric(top_k=k_val)
+                metric_to_log.update(flatten_cos_sim, target, indexes)
+                self.log(
+                    f"{central_modality}_{other_modality}_{metric_name}_top_{k_val}",
+                    metric_to_log.compute(),
+                    batch_size=self.batch_size,
+                )
 
     def _treat_graph_batch(self, batch: Dict) -> Dict:  # noqa: UP006
         # this adjusts the shape of the central modality data to be compatible with the model
