@@ -39,7 +39,7 @@ class IREncoder(BaseModalityEncoder):
 
 class NMREncoder(BaseModalityEncoder):
     def __init__(self, freeze_encoder: bool = False, pretrained: bool = True):
-        super().__init__("meta-llama/Meta-Llama-3-8B", freeze_encoder, pretrained)
+        super().__init__("Undi95/Meta-Llama-3-8B-hf", freeze_encoder, pretrained)
 
     def _initialize_encoder(self):
         self.encoder = AutoPeftModelForCausalLM.from_pretrained(
