@@ -7,7 +7,11 @@ from molbind.data.components.datasets import (
     GraphDataset,
     StringDataset,
 )
-from molbind.data.components.tokenizers import SELFIES_TOKENIZER, SMILES_TOKENIZER
+from molbind.data.components.mb_tokenizers import (
+    LLAMA_3_8B_TOKENIZER,
+    SELFIES_TOKENIZER,
+    SMILES_TOKENIZER,
+)
 from molbind.models.components.custom_encoders import (
     CustomFingerprintEncoder,
     CustomGraphEncoder,
@@ -36,7 +40,7 @@ MODALITY_DATA_TYPES = {
 STRING_TOKENIZERS = {
     "smiles": SMILES_TOKENIZER,
     "selfies": SELFIES_TOKENIZER,
-    "iupac_name": "iupac_name_tokenizer",
+    "nmr": LLAMA_3_8B_TOKENIZER,
 }
 
 MODALITY_DATASETS = {
