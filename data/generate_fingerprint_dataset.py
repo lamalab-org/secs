@@ -1,4 +1,4 @@
-import fire
+import fire  # noqa: I002
 import pandas as pd
 
 from molbind.data.utils.fingerprint_utils import get_morgan_fingerprint_from_smiles
