@@ -10,6 +10,7 @@ from molbind.models.components.base_encoder import (
     GraphEncoder,
 )
 from molbind.utils import rename_keys_with_prefix, select_device
+from peft import AutoPeftModelForCausalLM
 
 
 class SmilesEncoder(BaseModalityEncoder):
@@ -37,7 +38,19 @@ class IREncoder(BaseModalityEncoder):
 
 
 class NMREncoder(BaseModalityEncoder):
-    pass
+    def __init__(self, freeze_encoder: bool = False, pretrained: bool = True):
+        super().__init__("meta-llama/Meta-Llama-3-8B", freeze_encoder, pretrained)
+
+    def _initialize_encoder(self):
+        self.encoder = AutoPeftModelForCausalLM.from_pretrained(
+            self.model_name,
+            torch_dtype=torch.float16,
+            quantization_config={"load_in_4bit": True},
+            device_map="auto",
+        )
+        if self.freeze_encoder:
+            for param in self.encoder.parameters():
+                param.requires_grad = False
 
 
 class CustomFingerprintEncoder(FingerprintEncoder):
@@ -85,7 +98,7 @@ class CustomGraphEncoder(GraphEncoder):
         )
         self.drop_ratio = drop_ratio
 
-    def forward(self, data : tuple) -> Tensor:
+    def forward(self, data: tuple) -> Tensor:
         xis, xjs = data
         ris, zis = self.forward_single(xis)  # [N,C]
 
