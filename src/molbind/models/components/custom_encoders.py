@@ -3,6 +3,7 @@ from typing import List  # noqa: UP035, I002
 import torch
 import torch.nn.functional as F
 from torch import Tensor
+from transformers import OPTForCausalLM
 
 from molbind.models.components.base_encoder import (
     BaseModalityEncoder,
@@ -10,7 +11,6 @@ from molbind.models.components.base_encoder import (
     GraphEncoder,
 )
 from molbind.utils import rename_keys_with_prefix, select_device
-from peft import AutoPeftModelForCausalLM
 
 
 class SmilesEncoder(BaseModalityEncoder):
@@ -39,18 +39,21 @@ class IREncoder(BaseModalityEncoder):
 
 class NMREncoder(BaseModalityEncoder):
     def __init__(self, freeze_encoder: bool = False, pretrained: bool = True):
-        super().__init__("Undi95/Meta-Llama-3-8B-hf", freeze_encoder, pretrained)
+        super().__init__("facebook/galactica-125m", freeze_encoder, pretrained)
 
-    def _initialize_encoder(self):
-        self.encoder = AutoPeftModelForCausalLM.from_pretrained(
-            self.model_name,
-            torch_dtype=torch.float16,
-            quantization_config={"load_in_4bit": True},
-            device_map="auto",
-        )
+    def _initialize_encoder(self) -> None:
+        self.encoder = OPTForCausalLM.from_pretrained(self.model_name)
         if self.freeze_encoder:
             for param in self.encoder.parameters():
                 param.requires_grad = False
+
+    # def _non_pad_token_embed_averaging(
+    #     self, last_hidden_state: Tensor, attention_mask: Tensor
+    # ) -> Tensor:
+    #     attention_mask = attention_mask.float().unsqueeze(-1)
+    #     sum_ = (last_hidden_state * attention_mask).sum(dim=1)
+    #     norm = attention_mask.squeeze(-1).sum(dim=1).unsqueeze(1)
+    #     return sum_ / norm
 
 
 class CustomFingerprintEncoder(FingerprintEncoder):
