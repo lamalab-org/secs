@@ -1,6 +1,6 @@
 import warnings  # noqa: I002
 from importlib.util import find_spec
-from typing import Any, Callable, Dict, Optional, Tuple  # noqa: UP035
+from typing import Any, Callable, Dict, List, Optional, Tuple  # noqa: UP035
 
 import torch
 from omegaconf import DictConfig
@@ -97,7 +97,8 @@ def task_wrapper(task_func: Callable) -> Callable:
 
 
 def get_metric_value(
-    metric_dict: Dict[str, Any], metric_name: Optional[str] # noqa: UP006
+    metric_dict: Dict[str, Any],  # noqa: UP006
+    metric_name: Optional[str],
 ) -> Optional[float]:
     """Safely retrieves value of the metric logged in LightningModule.
 
@@ -143,3 +144,8 @@ def select_device() -> str:
     else:
         device = "cpu"
     return device
+
+
+def find_all_pairs_in_list(lst: List[Any]) -> List[Tuple[Any, Any]]:  # noqa: UP006
+    """Finds all pairs in a list."""
+    return [(lst[i], lst[j]) for i in range(len(lst)) for j in range(i + 1, len(lst))]

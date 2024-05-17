@@ -9,7 +9,7 @@ from molbind.models.components.base_encoder import (
     FingerprintEncoder,
     GraphEncoder,
 )
-from molbind.utils.utils import rename_keys_with_prefix, select_device
+from molbind.utils import rename_keys_with_prefix, select_device
 
 
 class SmilesEncoder(BaseModalityEncoder):

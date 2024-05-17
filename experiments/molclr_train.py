@@ -7,7 +7,7 @@ from omegaconf import DictConfig
 
 from molbind.data.utils.graph_utils import get_train_valid_loaders_from_dataset
 from molbind.models.components.molclr_lightningmodule import GCNModule
-from molbind.utils.utils import select_device
+from molbind.utils import select_device
 
 load_dotenv(".env")
 

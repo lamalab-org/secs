@@ -5,7 +5,7 @@ from torch.utils.data import Dataset, random_split
 
 
 def split_torch_dataset(
-    dataset: Dataset, valid_size: float, seed: int = 42
+    dataset: Dataset, valid_size: float, seed: int = 0
 ) -> Tuple[Dataset, Dataset]:  # noqa: UP006
     """Split a torch dataset into train and test sets.
 
