@@ -89,6 +89,36 @@ class MolBindModule(LightningModule):
         k_list: List[int],  # noqa: UP006
         prefix: str,
     ) -> None:
+        """
+        Example:
+
+        .unsqueeze(1) modality 1 embeddings of shape (Batch_Size, Embedding_Size) is equivalent
+        to Tensor[:, None, :].
+        .unsqueeze(0) modality 2 embeddings of shape (Batch_Size, Embedding_Size) is equivalent
+        to Tensor[None, :, :].
+
+        This allows to compute the matrix of cosine similarities between all pairs of embeddings
+        across two tensors containing embeddings for different modalities.
+
+        preds, targets, indexes are tensors of shape (Batch_Size*Batch_size)
+
+        Example on a 2x2 matrix
+
+        metric = RetrievalMRR(top_k=1)
+        preds = torch.tensor([0.56, 0.3, 0.2, 0.7])
+        preds = torch.tensor([[0.56, 0.3], [0.2, 0.7]]).flatten()
+        preds shape change: (Batch_Size, Batch_Size) -> (Batch_Size*Batch_Size)
+        # True corresponds to diagonal elements in our case
+        # for larger examples we can use torch.eye(Batch_Size).flatten()
+        target = torch.tensor([True, False, False, True])
+        # These are query ids. Metrics are computed after grouping by query id and then averaging.
+        # For large matrices we can use torch.repeat_interleave(torch.arange(Batch_Size))
+        indexes = torch.tensor([0, 0, 1, 1], dtype=torch.long)
+        metric.update(preds, target, indexes)
+        metric.compute()
+        # tensor(1.) output: since the cosine similarity on the diagonals is the highest in their corresponding row
+        """
+
         metrics = [
             RetrievalMRR,
             RetrievalMAP,
@@ -97,17 +127,21 @@ class MolBindModule(LightningModule):
             RetrievalAUROC,
         ]
         metric_names = [metric.__name__ for metric in metrics]
-        # compute cosine similarity matrix between embeddings of the central modality and the other modality
-        self.cos_sim = cosine_similarity(
+        # reference: https://medium.com/@dhruvbird/all-pairs-cosine-similarity-in-pytorch-867e722c8572
+        cos_sim = cosine_similarity(
             embeddings_central_mod.unsqueeze(1),
-            embeddings_other_mod.unsqueeze(0),
+            embeddings_other_mod.unsqueeze(0), # adding a third dim allows to compute pairwise cosine sim.
             dim=2,
         )
         # preds, target, indexes
-        flatten_cos_sim = self.cos_sim.flatten()
+        flatten_cos_sim = cos_sim.flatten() # (Batch Size*Batch Size)
+
+        # the metric calculations are grouped by indexes and then averaged
+        # repeat interleave creates tensors of the form [0, 0, 1, 1, 2, 2]
         indexes = torch.arange(embeddings_central_mod.shape[0]).repeat_interleave(
             embeddings_central_mod.shape[0]
         )
+        # Diagonal elements are the true querries, the rest are false querries
         target = (
             torch.eye(embeddings_central_mod.shape[0], dtype=torch.long)
             .flatten()
