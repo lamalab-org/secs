@@ -105,7 +105,7 @@ class MolBindModule(LightningModule):
         )
         # preds, target, indexes
         flatten_cos_sim = self.cos_sim.flatten()
-        indexes = torch.arange(embeddings_central_mod.shape[0]).repeat(
+        indexes = torch.arange(embeddings_central_mod.shape[0]).repeat_interleave(
             embeddings_central_mod.shape[0]
         )
         target = (
