@@ -134,10 +134,7 @@ class MolBindModule(LightningModule):
             dim=2,
         )
         # preds, target, indexes
-        flatten_cos_sim = cos_sim.flatten() # (Batch Size*Batch Size)
-
-        # the metric calculations are grouped by indexes and then averaged
-        # repeat interleave creates tensors of the form [0, 0, 1, 1, 2, 2]
+        flatten_cos_sim = self.cos_sim.flatten()
         indexes = torch.arange(embeddings_central_mod.shape[0]).repeat_interleave(
             embeddings_central_mod.shape[0]
         )
