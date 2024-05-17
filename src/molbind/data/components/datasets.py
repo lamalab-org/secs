@@ -113,7 +113,7 @@ class GraphDataset(Dataset):
         self.central_modality_handlers = {
             StringModalities.SMILES: self._string,
             StringModalities.SELFIES: self._string,
-            StringModalities.INCHI: self._string,
+            StringModalities.IUPAC_NAME: self._string,
             StringModalities.IR: self._string,
             StringModalities.NMR: self._string,
             StringModalities.MASS: self._string,

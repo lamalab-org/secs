@@ -1,7 +1,7 @@
 central_modality: smiles
 context_length: 256
 modalities:
-  - nmr
+  - iupac_name
   - fingerprint
   - graph
   - selfies
@@ -11,5 +11,5 @@ drop_last: true
 num_workers: 1
 seed: 42
 fraction_data: 1.0
-dataset_path: "${paths.data_dir}/fingerprint_nmr.pkl"
+dataset_path: "${paths.data_dir}/fingerprint_iupac.pkl"
 batch_size: 128

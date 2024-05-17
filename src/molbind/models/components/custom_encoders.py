@@ -30,7 +30,10 @@ class SelfiesEncoder(BaseModalityEncoder):
 
 
 class IUPACNameEncoder(BaseModalityEncoder):
-    pass
+    def __init__(
+        self, freeze_encoder: bool = False, pretrained: bool = True, **kwargs
+    ) -> None:
+        super().__init__("gumgo91/IUPAC_BERT", freeze_encoder, pretrained, **kwargs)
 
 
 class IREncoder(BaseModalityEncoder):

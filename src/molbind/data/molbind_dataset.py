@@ -43,7 +43,7 @@ class MolBindDataset:
         self.central_modality_handlers = {
             StringModalities.SMILES: init_str_fn,
             StringModalities.SELFIES: init_str_fn,
-            StringModalities.INCHI: init_str_fn,
+            StringModalities.IUPAC_NAME: init_str_fn,
             StringModalities.IR: init_str_fn,
             StringModalities.NMR: init_str_fn,
             StringModalities.MASS: init_str_fn,
@@ -100,7 +100,7 @@ class MolBindDataset:
             elif modality in [
                 StringModalities.SMILES,
                 StringModalities.SELFIES,
-                StringModalities.INCHI,
+                StringModalities.IUPAC_NAME,
                 StringModalities.IR,
                 StringModalities.NMR,
                 StringModalities.MASS,

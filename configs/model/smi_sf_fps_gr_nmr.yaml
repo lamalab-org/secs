@@ -9,7 +9,7 @@ encoders:
     pretrained: True
     freeze_encoder: False
 
-  nmr:
+  iupac_name:
     pretrained: True
     freeze_encoder: False
 
@@ -44,7 +44,7 @@ projection_heads:
     dims: [256, 128]
     activation: LeakyReLU
     batch_norm: False
-  nmr:
+  iupac_name:
     dims: [768, 256, 128]
     activation: LeakyReLU
     batch_norm: False
