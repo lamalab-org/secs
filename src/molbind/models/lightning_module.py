@@ -1,4 +1,5 @@
-from typing import Dict, List  # noqa: UP035, I002
+import contextlib  # noqa: I002
+from typing import Dict, List  # noqa: UP035
 
 import torch
 from info_nce import InfoNCE
@@ -16,13 +17,20 @@ from torchmetrics.retrieval import (
 )
 
 from molbind.models import MolBind
-from molbind.utils import select_device
+from molbind.utils import rename_keys_with_prefix, select_device
 
 
 class MolBindModule(LightningModule):
     def __init__(self, cfg: DictConfig) -> None:
         super().__init__()
         self.model = MolBind(cfg=cfg)
+
+        if hasattr(cfg, "ckpt_path") and cfg.ckpt_path is not None:
+            with contextlib.suppress(FileNotFoundError):
+                self.model.load_state_dict(
+                    rename_keys_with_prefix(torch.load(cfg.ckpt_path)["state_dict"])
+                )
+
         self.config = cfg
         self.loss = InfoNCE(
             temperature=cfg.model.loss.temperature, negative_mode="unpaired"
