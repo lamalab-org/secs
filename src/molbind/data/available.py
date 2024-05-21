@@ -7,7 +7,7 @@ from molbind.data.components.datasets import (
     GraphDataset,
     StringDataset,
 )
-from molbind.data.components.tokenizers import SELFIES_TOKENIZER, SMILES_TOKENIZER
+from molbind.data.components.mb_tokenizers import SELFIES_TOKENIZER, SMILES_TOKENIZER
 from molbind.models.components.custom_encoders import (
     CustomFingerprintEncoder,
     CustomGraphEncoder,
