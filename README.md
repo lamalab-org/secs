@@ -52,7 +52,7 @@ In `experiments/` you will find several training scripts. The global `train.py` 
 To run the `train.py`:
 
 ```python
-python train.py --config-name "<yaml-file-path-from-configs>"
+python train.py --config-name "<yaml-filename-from-configs>"
 ```
 
 To run multiple experiments, you can use or adapt the `SLURM` submission script at `experiments/submit_experiments.sh`. If you are in the main project directory, change the `DIR` to experiments.
