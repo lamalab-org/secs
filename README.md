@@ -49,6 +49,17 @@ In `experiments/` you will find several training scripts. The global `train.py` 
 - `fp_vae_train.py` $\rightarrow$ Train a variational autoencoder for the Morgan fingerprints
 - `molclr_train.py` $\rightarrow$ Train the MolCLR model to be used as a graph encoder in `MolBind`
 
+To run the `train.py`:
+
+```python
+python train.py --config-name "<yaml-file-path-from-configs>"
+```
+
+To run multiple experiments, you can use or adapt the `SLURM` submission script at `experiments/submit_experiments.sh`. If you are in the main project directory, change the `DIR` to experiments.
+
+```bash
+cd experiments; sh submit_experiments.sh
+```
 
 ## Config tree
 

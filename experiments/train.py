@@ -23,6 +23,7 @@ def train_molbind(config: DictConfig):
     wandb_logger = L.loggers.WandbLogger(
         project=os.getenv("WANDB_PROJECT"),
         entity=os.getenv("WANDB_ENTITY"),
+        id=config.run_id if hasattr(config, "run_id") else None,
     )
 
     device_count = torch.cuda.device_count()
@@ -95,7 +96,7 @@ def train_molbind(config: DictConfig):
     )
 
 
-@hydra.main(version_base="1.3", config_path="../configs", config_name="train_4mods.yaml")
+@hydra.main(version_base="1.3", config_path="../configs")
 def main(config: DictConfig):
     train_molbind(config)
 
