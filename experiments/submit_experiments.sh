@@ -1,6 +1,6 @@
 #!/bin/bash
 # List of configuration names
-CONFIG_NAMES=("smi_graph", "smi_graph_sf", "smi_sf_fps_graph")
+CONFIG_NAMES=("smi_graph.yaml", "smi_graph_sf.yaml", "smi_sf_fps_graph.yaml")
 
 # Submit jobs
 for CONFIG in "${CONFIG_NAMES[@]}"; do
