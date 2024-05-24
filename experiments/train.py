@@ -1,4 +1,5 @@
-import os  # noqa: I002
+import datetime  # noqa: I002
+import os
 from pathlib import Path
 
 import hydra
@@ -14,6 +15,8 @@ from molbind.data.molbind_dataset import MolBindDataset
 from molbind.data.utils.file_utils import csv_load_function, pickle_load_function
 from molbind.models.lightning_module import MolBindModule
 
+TRAIN_DATE = datetime.datetime.now().strftime("%Y%m%d_%H%M")
+
 load_dotenv(".env")
 
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
@@ -23,7 +26,9 @@ def train_molbind(config: DictConfig):
     wandb_logger = L.loggers.WandbLogger(
         project=os.getenv("WANDB_PROJECT"),
         entity=os.getenv("WANDB_ENTITY"),
-        id=config.run_id if hasattr(config, "run_id") else None,
+        id=config.run_id + "_" + TRAIN_DATE
+        if hasattr(config, "run_id")
+        else TRAIN_DATE,
     )
 
     device_count = torch.cuda.device_count()
@@ -34,6 +39,7 @@ def train_molbind(config: DictConfig):
         logger=wandb_logger,
         devices=device_count if device_count > 1 else "auto",
         strategy="ddp" if device_count > 1 else "auto",
+        precision=config.trainer.precision,
     )
 
     # extract format of dataset file
