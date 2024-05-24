@@ -2,6 +2,7 @@ from typing import Dict, Tuple, Union  # noqa: UP035, I002
 
 import torch
 import torch.nn as nn
+from loguru import logger
 from omegaconf import DictConfig
 from torch import Tensor
 
@@ -15,6 +16,7 @@ class MolBind(nn.Module):
         from molbind.data.available import AVAILABLE_ENCODERS
 
         modalities = cfg.data.modalities
+        logger.info(f"Modalities: {modalities}")
         central_modality = cfg.data.central_modality
         self.central_modality = central_modality
 
