@@ -1,5 +1,7 @@
 import contextlib  # noqa: I002
+from pathlib import Path
 from typing import Dict, List  # noqa: UP035
+from uuid import uuid1
 
 import torch
 from info_nce import InfoNCE
@@ -37,7 +39,7 @@ class MolBindModule(LightningModule):
         )
         self.batch_size = cfg.data.batch_size
         self.central_modality = cfg.data.central_modality
-        self.store_embeddings = []
+        self.tracker = 0
 
     def forward(self, batch: Dict) -> Dict:  # noqa: UP006
         try:
@@ -78,7 +80,28 @@ class MolBindModule(LightningModule):
 
     def test_step(self, batch: Dict) -> Tensor:  # noqa: UP006
         embeddings_dict = self.forward(batch)
-        self.store_embeddings.append(embeddings_dict)
+        # self.store_embeddings.append(embeddings_dict)
+        # store embeddings to file
+
+        file_template = "{}/{}_embeddings_{}.pth"
+        directory_for_embeddings = self.config.store_embeddings_directory
+        # create a directory for embeddings if it does not exist
+        if self.tracker == 0:
+            if not Path(directory_for_embeddings).exists():
+                Path.mkdir(directory_for_embeddings)
+            else:
+                logger.info(f"Directory {directory_for_embeddings} already exists.")
+                logger.info("Creating new directory for embeddings..")
+                new_directory_for_embeddings = directory_for_embeddings + uuid1()
+                Path(new_directory_for_embeddings).mkdir()
+                logger.info(f"New directory created at {new_directory_for_embeddings}")
+        # convert to numpy array and then store to .pth file
+        for modality, embeddings in embeddings_dict.items():
+            torch.save(
+                embeddings,
+                file_template.format(directory_for_embeddings, modality, self.tracker),
+            )
+        self.tracker += 1
         return self._multimodal_loss(embeddings_dict, "test")
 
     def configure_optimizers(self) -> Optimizer:
@@ -167,14 +190,14 @@ class MolBindModule(LightningModule):
 
     def _treat_graph_batch(self, batch: Dict) -> Dict:  # noqa: UP006
         # this adjusts the shape of the central modality data to be compatible with the model
-        if not hasattr(batch[0][0], "input_ids"):
-            central_modality_data = batch[0][0].central_modality_data.reshape(
+        if not hasattr(batch[0], "input_ids"):
+            central_modality_data = batch[0].central_modality_data.reshape(
                 self.batch_size, -1
             )
         else:
             central_modality_data = (
-                batch[0][0].input_ids.reshape(self.batch_size, -1),
-                batch[0][0].attention_mask.reshape(self.batch_size, -1),
+                batch[0].input_ids.reshape(self.batch_size, -1),
+                batch[0].attention_mask.reshape(self.batch_size, -1),
             )
         return {
             self.central_modality: central_modality_data,
