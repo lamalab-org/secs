@@ -3,16 +3,14 @@ from typing import Dict, List  # noqa: UP035
 
 import torch
 from info_nce import InfoNCE
+from loguru import logger
 from omegaconf import DictConfig
 from pytorch_lightning import LightningModule
 from torch import Tensor
 from torch.nn.functional import cosine_similarity
 from torch.optim import Optimizer
 from torchmetrics.retrieval import (
-    RetrievalAUROC,
-    RetrievalMAP,
     RetrievalMRR,
-    RetrievalPrecision,
     RetrievalRecall,
 )
 
@@ -30,7 +28,9 @@ class MolBindModule(LightningModule):
                 self.model.load_state_dict(
                     rename_keys_with_prefix(torch.load(cfg.ckpt_path)["state_dict"])
                 )
-
+                logger.info("Successfully loaded model from checkpoint.")
+        else:
+            logger.info("No checkpoint path found. Training from scratch.")
         self.config = cfg
         self.loss = InfoNCE(
             temperature=cfg.model.loss.temperature, negative_mode="unpaired"
@@ -57,15 +57,15 @@ class MolBindModule(LightningModule):
         )
         self.log(f"{prefix}_loss", loss, batch_size=self.batch_size)
         # compute retrieval metrics
-        k_list = [1, 5, 10]
-
-        self.retrieval_metrics(
-            embeddings_dict[modality_pair[0]],
-            embeddings_dict[modality_pair[1]],
-            *modality_pair,
-            k_list,
-            prefix=prefix,
-        )
+        k_list = [1, 5]
+        if prefix in ["valid", "test"]:
+            self.retrieval_metrics(
+                embeddings_dict[modality_pair[0]],
+                embeddings_dict[modality_pair[1]],
+                *modality_pair,
+                k_list,
+                prefix=prefix,
+            )
         return loss
 
     def training_step(self, batch: Dict):  # noqa: UP006
@@ -129,10 +129,7 @@ class MolBindModule(LightningModule):
 
         metrics = [
             RetrievalMRR,
-            RetrievalMAP,
-            RetrievalPrecision,
             RetrievalRecall,
-            RetrievalAUROC,
         ]
         metric_names = [metric.__name__ for metric in metrics]
         # reference: https://medium.com/@dhruvbird/all-pairs-cosine-similarity-in-pytorch-867e722c8572
