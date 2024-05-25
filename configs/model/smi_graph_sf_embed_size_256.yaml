@@ -1,6 +1,6 @@
 # model architecture
 encoders:
-  embedding_size: 128
+  embedding_size: 256
   smiles:
     pretrained: True
     freeze_encoder: False

@@ -34,7 +34,7 @@ run_id: "retrieval_4_modalities"
 # you can overwrite this in experiment configs
 # overwrite from command line with `python train.py tags="[first_tag, second_tag]"`
 tags: ["dev"]
-
+store_embeddings_directory: "embeddings_retrieval_4_modalities"
 # set False to skip model training
 train: False
 

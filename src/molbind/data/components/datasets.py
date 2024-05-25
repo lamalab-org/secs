@@ -138,9 +138,9 @@ class GraphDataset(Dataset):
             data.input_ids = self.central_modality_handlers[data.central_modality](
                 self.central_modality_data[0][index]
             )
-            data.attention_mask = self.central_modality_handlers[
-                data.central_modality
-            ](self.central_modality_data[1][index])
+            data.attention_mask = self.central_modality_handlers[data.central_modality](
+                self.central_modality_data[1][index]
+            )
         return data
 
     def _fingerprint(self, fingerprint: List[int]) -> Tensor:  # noqa: UP006
