@@ -57,7 +57,7 @@ class MolBindModule(LightningModule):
         loss = self._info_nce_loss(
             embeddings_dict[modality_pair[0]], embeddings_dict[modality_pair[1]]
         )
-        self.log(f"{prefix}_loss", loss, batch_size=self.batch_size)
+        self.log(f"{prefix}_loss", loss, batch_size=self.batch_size, sync_dist=True)
         # compute retrieval metrics
         k_list = [1, 5]
         if prefix in ["valid", "test"]:
@@ -164,12 +164,16 @@ class MolBindModule(LightningModule):
             dim=2,
         )
         # preds, target, indexes
-        flatten_cos_sim = cos_sim.flatten()  # (Batch Size*Batch Size)
+        flatten_cos_sim = cos_sim.flatten().to(
+            select_device()
+        )  # (Batch Size*Batch Size)
 
         # the metric calculations are grouped by indexes and then averaged
         # repeat interleave creates tensors of the form [0, 0, 1, 1, 2, 2]
-        indexes = torch.arange(embeddings_central_mod.shape[0]).repeat_interleave(
-            embeddings_central_mod.shape[0]
+        indexes = (
+            torch.arange(embeddings_central_mod.shape[0])
+            .repeat_interleave(embeddings_central_mod.shape[0])
+            .to(select_device())
         )
         # Diagonal elements are the true querries, the rest are false querries
         target = (
@@ -186,6 +190,7 @@ class MolBindModule(LightningModule):
                     f"{prefix}_{central_modality}_{other_modality}_{metric_name}_top_{k_val}",
                     metric_to_log.compute(),
                     batch_size=self.batch_size,
+                    sync_dist=True,
                 )
 
     def _treat_graph_batch(self, batch: Dict) -> Dict:  # noqa: UP006

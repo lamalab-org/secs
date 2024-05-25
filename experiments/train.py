@@ -38,7 +38,7 @@ def train_molbind(config: DictConfig):
         log_every_n_steps=config.trainer.log_every_n_steps,
         logger=wandb_logger,
         devices=device_count if device_count > 1 else "auto",
-        strategy="ddp" if device_count > 1 else "auto",
+        strategy="ddp_find_unused_parameters_true" if device_count > 1 else "auto",
         precision=config.trainer.precision,
     )
 
