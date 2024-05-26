@@ -4,6 +4,7 @@ from typing import Dict, List  # noqa: UP035
 from uuid import uuid1
 
 import torch
+import torch.distributed as dist
 from info_nce import InfoNCE
 from loguru import logger
 from omegaconf import DictConfig
@@ -50,6 +51,8 @@ class MolBindModule(LightningModule):
         return forward_pass
 
     def _info_nce_loss(self, z1: Tensor, z2: Tensor) -> float:
+        self.all_gather(z1, sync_grads=True)
+        self.all_gather(z2, sync_grads=True)
         return self.loss(z1, z2)
 
     def _multimodal_loss(self, embeddings_dict: Dict, prefix: str) -> float:  # noqa: UP006
@@ -92,9 +95,9 @@ class MolBindModule(LightningModule):
             else:
                 logger.info(f"Directory {directory_for_embeddings} already exists.")
                 logger.info("Creating new directory for embeddings..")
-                new_directory_for_embeddings = directory_for_embeddings + uuid1()
-                Path(new_directory_for_embeddings).mkdir()
-                logger.info(f"New directory created at {new_directory_for_embeddings}")
+                directory_for_embeddings = directory_for_embeddings + "_" + str(uuid1())
+                Path(directory_for_embeddings).mkdir()
+                logger.info(f"New directory created at {directory_for_embeddings}")
         # convert to numpy array and then store to .pth file
         for modality, embeddings in embeddings_dict.items():
             torch.save(
@@ -155,6 +158,8 @@ class MolBindModule(LightningModule):
             RetrievalRecall,
         ]
         metric_names = [metric.__name__ for metric in metrics]
+        self.all_gather(embeddings_central_mod, sync_grads=True)
+        self.all_gather(embeddings_other_mod, sync_grads=True)
         # reference: https://medium.com/@dhruvbird/all-pairs-cosine-similarity-in-pytorch-867e722c8572
         cos_sim = cosine_similarity(
             embeddings_central_mod.unsqueeze(1),
