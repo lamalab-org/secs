@@ -9,6 +9,7 @@ import torch
 from dotenv import load_dotenv
 from loguru import logger
 from omegaconf import DictConfig
+from pytorch_lightning import seed_everything
 
 from molbind.data.datamodule import MolBindDataModule
 from molbind.data.molbind_dataset import MolBindDataset
@@ -108,4 +109,5 @@ def main(config: DictConfig):
 
 
 if __name__ == "__main__":
+    seed_everything(42)
     main()
