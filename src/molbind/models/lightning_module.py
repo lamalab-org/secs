@@ -51,9 +51,12 @@ class MolBindModule(LightningModule):
         return forward_pass
 
     def _info_nce_loss(self, z1: Tensor, z2: Tensor) -> float:
-        self.all_gather(z1, sync_grads=True)
-        self.all_gather(z2, sync_grads=True)
-        return self.loss(z1, z2)
+        all_z1 = self.all_gather(z1, sync_grads=True)
+        all_z2 = self.all_gather(z2, sync_grads=True) # shape (World_Size, Batch_Size, Embedding_Size)
+        all_z1 = all_z1.flatten(0, 1)  # shape (World_Size*Batch_Size, Embedding_Size)
+        all_z2 = all_z2.flatten(0, 1)  # shape (World_Size*Batch_Size, Embedding_Size)
+        logger.debug(f"Shape of z1: {all_z1.shape}")
+        return self.loss(all_z1, all_z2)
 
     def _multimodal_loss(self, embeddings_dict: Dict, prefix: str) -> float:  # noqa: UP006
         modality_pair = [*embeddings_dict]
@@ -158,16 +161,21 @@ class MolBindModule(LightningModule):
             RetrievalRecall,
         ]
         metric_names = [metric.__name__ for metric in metrics]
-        self.all_gather(embeddings_central_mod, sync_grads=True)
-        self.all_gather(embeddings_other_mod, sync_grads=True)
+        # both all gather calls return tensors of shape (World_Size*Batch_Size, Embedding_Size)
+        all_embeddings_central_mod = self.all_gather(embeddings_central_mod, sync_grads=True)
+        all_embeddings_other_mod = self.all_gather(embeddings_other_mod, sync_grads=True)
+        # flatten the tensors to shape (World_Size*Batch_Size, Embedding_Size)
+        all_embeddings_central_mod = all_embeddings_central_mod.flatten(0, 1)
+        all_embeddings_other_mod = all_embeddings_other_mod.flatten(0, 1)
+        logger.debug(f"Shape of embeddings_central_mod: {all_embeddings_other_mod.shape}")
         # reference: https://medium.com/@dhruvbird/all-pairs-cosine-similarity-in-pytorch-867e722c8572
         cos_sim = cosine_similarity(
-            embeddings_central_mod.unsqueeze(1),
-            embeddings_other_mod.unsqueeze(
+            all_embeddings_central_mod.unsqueeze(1),
+            all_embeddings_other_mod.unsqueeze(
                 0
             ),  # adding a third dim allows to compute pairwise cosine sim.
             dim=2,
-        )
+    )
         # preds, target, indexes
         flatten_cos_sim = cos_sim.flatten().to(
             select_device()
@@ -176,13 +184,13 @@ class MolBindModule(LightningModule):
         # the metric calculations are grouped by indexes and then averaged
         # repeat interleave creates tensors of the form [0, 0, 1, 1, 2, 2]
         indexes = (
-            torch.arange(embeddings_central_mod.shape[0])
-            .repeat_interleave(embeddings_central_mod.shape[0])
+            torch.arange(all_embeddings_central_mod.shape[0])
+            .repeat_interleave(all_embeddings_other_mod.shape[0])
             .to(select_device())
         )
         # Diagonal elements are the true querries, the rest are false querries
         target = (
-            torch.eye(embeddings_central_mod.shape[0], dtype=torch.long)
+            torch.eye(all_embeddings_central_mod.shape[0], dtype=torch.long)
             .flatten()
             .to(select_device())
         )
@@ -194,7 +202,7 @@ class MolBindModule(LightningModule):
                 self.log(
                     f"{prefix}_{central_modality}_{other_modality}_{metric_name}_top_{k_val}",
                     metric_to_log.compute(),
-                    batch_size=self.batch_size,
+                    batch_size=self.config.data.batch_size*dist.get_world_size(),
                     sync_dist=True,
                 )
 

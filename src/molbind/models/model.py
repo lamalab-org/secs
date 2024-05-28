@@ -1,4 +1,4 @@
-from typing import Dict, Tuple, Union  # noqa: UP035, I002
+from typing import Dict, Tuple, Union  # noqa: UP035, I002, I001
 
 import torch
 import torch.nn as nn
@@ -54,28 +54,32 @@ class MolBind(nn.Module):
         input_data: Dict[str, Union[Tuple[Tensor, Tensor], Tensor]],  # noqa: UP006
     ) -> Tensor:
         store_embeddings = {}
-        # input_data = [data, batch_index, dataloader_index]
+        # Input data = [data, batch_index, dataloader_index]
         if isinstance(input_data, tuple):
             input_data, _, _ = input_data
             modality = [*input_data][1]
         if isinstance(input_data, dict):
             modality = [*input_data][1]
 
-        # input_data is a dictionary with (central_modality, modality) pairs (where the central modality is at index 0)
-        # store embeddings as store_embeddings[modality] = (central_modality_embedding, modality_embedding)
-        # forward through respective encoder and projection head
-        central_modality_embedding = self.dict_encoders[self.central_modality].forward(
-            input_data[self.central_modality]
+        # Input data is a dictionary with (central_modality, modality) pairs (where the central modality is at index 0)
+        # Store embeddings as store_embeddings[modality] = (central_modality_embedding, modality_embedding)
+        # Forward through respective encoder and projection head
+        central_modality_embedding = self.dict_encoders[
+            self.central_modality
+        ].forward(input_data[self.central_modality])
+        modality_embedding = self.dict_encoders[modality].forward(
+            input_data[modality]
         )
-        modality_embedding = self.dict_encoders[modality].forward(input_data[modality])
         central_modality_embedding_projected = self.dict_projection_heads[
             self.central_modality
         ](central_modality_embedding)
         modality_embedding_projected = self.dict_projection_heads[modality](
             modality_embedding
         )
-        # projection heads
-        store_embeddings[self.central_modality] = central_modality_embedding_projected
+        # Projection heads
+        store_embeddings[self.central_modality] = (
+            central_modality_embedding_projected
+        )
         store_embeddings[modality] = modality_embedding_projected
         return store_embeddings
 
