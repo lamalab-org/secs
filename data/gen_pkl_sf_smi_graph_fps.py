@@ -1,6 +1,7 @@
 import fire  # noqa: I002
 import pandas as pd
 import selfies as sf
+from rdkit import Chem
 
 from molbind.data.utils.fingerprint_utils import get_morgan_fingerprint_from_smiles
 
@@ -17,6 +18,22 @@ def smiles_to_selfies(smiles: str) -> str:
     """
     try:
         return sf.encoder(smiles)
+    except Exception:
+        return None
+
+
+def canonicalize_smiles(smiles: str) -> str:
+    """
+    Convert a SMILES string to a canonical SMILES string.
+
+    Args:
+        smiles (str): SMILES string
+
+    Returns:
+        str: Canonical SMILES string
+    """
+    try:
+        return Chem.MolToSmiles(Chem.MolFromSmiles(smiles))
     except Exception:
         return None
 
@@ -39,8 +56,10 @@ def add_fingerprint_column_to_dataframe(
     # Load data
     data = pd.read_csv(csv_data_path)
     data = data[["smiles"]]
+    # canonicalize smiles
+    data["smiles"] = data["smiles"].apply(lambda x: canonicalize_smiles(x))
+    data = data.dropna()
     data["selfies"] = data["smiles"].apply(lambda x: smiles_to_selfies(x))
-    print("Finished SELFIES conversion")
     # Add fingerprint column
     data["fingerprint"] = data["smiles"].apply(
         lambda smi: get_morgan_fingerprint_from_smiles(smi, radius, nbits)
