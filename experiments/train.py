@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from loguru import logger
 from omegaconf import DictConfig
 from pytorch_lightning import seed_everything
+from pytorch_lightning.strategies.ddp import DDPStrategy
 
 from molbind.data.datamodule import MolBindDataModule
 from molbind.data.molbind_dataset import MolBindDataset
@@ -32,20 +33,9 @@ def train_molbind(config: DictConfig):
         else TRAIN_DATE,
     )
 
-    device_count = torch.cuda.device_count()
-    trainer = L.Trainer(
-        max_epochs=config.trainer.max_epochs,
-        accelerator=config.trainer.accelerator,
-        log_every_n_steps=config.trainer.log_every_n_steps,
-        logger=wandb_logger,
-        devices=device_count if device_count > 1 else "auto",
-        strategy="ddp_find_unused_parameters_true" if device_count > 1 else "auto",
-        precision=config.trainer.precision,
-    )
-
+    world_size = torch.cuda.device_count()
     # extract format of dataset file
     data_format = Path(config.data.dataset_path).suffix
-
     handlers = {
         ".csv": csv_load_function,
         ".pickle": pickle_load_function,
@@ -74,27 +64,36 @@ def train_molbind(config: DictConfig):
             other_modalities=config.data.modalities,
             data=train_shuffled_data,
             context_length=config.data.context_length,
-        ).build_multimodal_dataloader(
-            config.data.batch_size,
-            shuffle=True,
-            drop_last=config.data.drop_last,
-            num_workers=config.data.num_workers,
-        ),
+        ).build_datasets_for_modalities(),
         MolBindDataset(
             central_modality=config.data.central_modality,
             other_modalities=config.data.modalities,
             data=valid_shuffled_data,
             context_length=config.data.context_length,
-        ).build_multimodal_dataloader(
-            config.data.batch_size,
-            shuffle=False,
-            drop_last=config.data.drop_last,
-            num_workers=config.data.num_workers,
-        ),
+        ).build_datasets_for_modalities(),
     )
 
     datamodule = MolBindDataModule(
-        data={"train": train_dataloader, "val": valid_dataloader},
+        data={
+            "train": train_dataloader,
+            "val": valid_dataloader,
+            "dataloader_arguments": {
+                "batch_size": config.data.batch_size,
+                "num_workers": config.data.num_workers,
+            },
+        },
+    )
+
+    trainer = L.Trainer(
+        max_epochs=config.trainer.max_epochs,
+        accelerator=config.trainer.accelerator,
+        log_every_n_steps=config.trainer.log_every_n_steps,
+        logger=wandb_logger,
+        devices=world_size if world_size > 1 else "auto",
+        strategy=DDPStrategy(find_unused_parameters=True) if world_size > 1 else "auto",
+        gradient_clip_val=0.5,
+        precision=config.trainer.precision,
+        deterministic=True,
     )
 
     trainer.fit(
