@@ -4,7 +4,6 @@ from typing import Dict, List  # noqa: UP035
 from uuid import uuid1
 
 import torch
-import torch.distributed as dist
 from info_nce import InfoNCE
 from loguru import logger
 from omegaconf import DictConfig
@@ -25,7 +24,7 @@ class MolBindModule(LightningModule):
     def __init__(self, cfg: DictConfig) -> None:
         super().__init__()
         self.model = MolBind(cfg=cfg)
-
+        self.world_size = torch.cuda.device_count()
         if hasattr(cfg, "ckpt_path") and cfg.ckpt_path is not None:
             with contextlib.suppress(FileNotFoundError):
                 self.model.load_state_dict(
@@ -34,11 +33,13 @@ class MolBindModule(LightningModule):
                 logger.info("Successfully loaded model from checkpoint.")
         else:
             logger.info("No checkpoint path found. Training from scratch.")
+
         self.config = cfg
         self.loss = InfoNCE(
             temperature=cfg.model.loss.temperature, negative_mode="unpaired"
         )
-        self.batch_size = cfg.data.batch_size
+        self.per_device_batch_size = cfg.data.batch_size
+        self.batch_size = self.per_device_batch_size * self.world_size
         self.central_modality = cfg.data.central_modality
         self.tracker = 0
 
@@ -51,12 +52,16 @@ class MolBindModule(LightningModule):
         return forward_pass
 
     def _info_nce_loss(self, z1: Tensor, z2: Tensor) -> float:
-        # shape (World_Size, Batch_Size, Embedding_Size)
-        all_z1 = self.all_gather(z1, sync_grads=True)
-        all_z2 = self.all_gather(z2, sync_grads=True)
-        all_z1 = all_z1.flatten(0, 1)  # shape (World_Size*Batch_Size, Embedding_Size)
-        all_z2 = all_z2.flatten(0, 1)  # shape (World_Size*Batch_Size, Embedding_Size)
-        return self.loss(all_z1, all_z2)
+        if self.world_size > 1:
+            # shape (World_Size, Batch_Size, Embedding_Size)
+            all_z1 = self.all_gather(z1, sync_grads=True)
+            all_z2 = self.all_gather(z2, sync_grads=True)
+            # flattened shape (World_Size*Batch_Size, Embedding_Size)
+            all_z1 = all_z1.flatten(0, 1)
+            all_z2 = all_z2.flatten(0, 1)
+            return self.loss(all_z1, all_z2)
+        else:
+            return self.loss(z1, z2)
 
     def _multimodal_loss(self, embeddings_dict: Dict, prefix: str) -> float:  # noqa: UP006
         modality_pair = [*embeddings_dict]
@@ -161,16 +166,22 @@ class MolBindModule(LightningModule):
             RetrievalRecall,
         ]
         metric_names = [metric.__name__ for metric in metrics]
-        # both all gather calls return tensors of shape (World_Size, Batch_Size, Embedding_Size)
-        all_embeddings_central_mod = self.all_gather(
-            embeddings_central_mod, sync_grads=True
-        )
-        all_embeddings_other_mod = self.all_gather(
-            embeddings_other_mod, sync_grads=True
-        )
-        # flatten the tensors to shape (World_Size*Batch_Size, Embedding_Size)
-        all_embeddings_central_mod = all_embeddings_central_mod.flatten(0, 1)
-        all_embeddings_other_mod = all_embeddings_other_mod.flatten(0, 1)
+        logger.info(f"World size {self.world_size}")
+        if self.world_size > 1:
+            # both all gather calls return tensors of shape (World_Size, Batch_Size, Embedding_Size)
+            all_embeddings_central_mod = self.all_gather(
+                embeddings_central_mod, sync_grads=True
+            )
+            all_embeddings_other_mod = self.all_gather(
+                embeddings_other_mod, sync_grads=True
+            )
+            all_embeddings_central_mod = all_embeddings_central_mod.flatten(0, 1)
+            all_embeddings_other_mod = all_embeddings_other_mod.flatten(0, 1)
+        else:
+            all_embeddings_central_mod = embeddings_central_mod.copy_()
+            all_embeddings_other_mod = embeddings_other_mod.copy_()
+        # run all next lines just on one device
+        device = select_device()
 
         # reference: https://medium.com/@dhruvbird/all-pairs-cosine-similarity-in-pytorch-867e722c8572
         # adding a third dim allows to compute pairwise cosine sim.
@@ -178,26 +189,23 @@ class MolBindModule(LightningModule):
             all_embeddings_central_mod.unsqueeze(1),
             all_embeddings_other_mod.unsqueeze(0),
             dim=2,
-        )
+        ).to(device)
         # preds, target, indexes
-        flatten_cos_sim = cos_sim.flatten().to(
-            select_device()
-        )  # (Batch Size*Batch Size)
+        flatten_cos_sim = cos_sim.flatten().to(device)  # (Batch Size*Batch Size)
 
         # the metric calculations are grouped by indexes and then averaged
         # repeat interleave creates tensors of the form [0, 0, 1, 1, 2, 2]
         indexes = (
             torch.arange(all_embeddings_central_mod.shape[0])
             .repeat_interleave(all_embeddings_other_mod.shape[0])
-            .to(select_device())
+            .to(device)
         )
         # Diagonal elements are the true querries, the rest are false querries
         target = (
             torch.eye(all_embeddings_central_mod.shape[0], dtype=torch.long)
             .flatten()
-            .to(select_device())
+            .to(device)
         )
-
         for metric, metric_name in zip(metrics, metric_names):
             for k_val in k_list:
                 metric_to_log = metric(top_k=k_val)
@@ -205,8 +213,8 @@ class MolBindModule(LightningModule):
                 self.log(
                     f"{prefix}_{central_modality}_{other_modality}_{metric_name}_top_{k_val}",
                     metric_to_log.compute(),
-                    batch_size=self.config.data.batch_size * dist.get_world_size(),
-                    sync_dist=True,
+                    batch_size=self.batch_size,
+                    sync_dist=self.world_size > 1,
                 )
 
     def _treat_graph_batch(self, batch: Dict) -> Dict:  # noqa: UP006
@@ -217,8 +225,8 @@ class MolBindModule(LightningModule):
             )
         else:
             central_modality_data = (
-                batch[0].input_ids.reshape(self.batch_size, -1),
-                batch[0].attention_mask.reshape(self.batch_size, -1),
+                batch[0].input_ids.reshape(self.per_device_batch_size, -1),
+                batch[0].attention_mask.reshape(self.per_device_batch_size, -1),
             )
         return {
             self.central_modality: central_modality_data,
