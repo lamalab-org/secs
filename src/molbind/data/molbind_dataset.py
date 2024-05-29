@@ -1,12 +1,10 @@
 from functools import partial  # noqa: I002
-from typing import List, Tuple, Union  # noqa: UP035
+from typing import Dict, List, Tuple, Union  # noqa: UP035
 
 import polars as pl
 import selfies as sf
-from lightning.pytorch.utilities.combined_loader import CombinedLoader
 from torch import Tensor
-from torch.utils.data import DataLoader
-from torch_geometric.loader import DataLoader as GeometricDataLoader
+from torch.utils.data import Dataset
 
 from molbind.data.available import (
     MODALITY_DATA_TYPES,
@@ -90,10 +88,10 @@ class MolBindDataset:
             central_modality_data=self.central_modality_data,
         )
 
-    def build_multimodal_dataloader(
-        self, batch_size: int, drop_last: bool, shuffle: bool, num_workers: int
-    ) -> CombinedLoader:
-        datasets, dataloaders = {}, {}
+    def build_datasets_for_modalities(
+        self,
+    ) -> Dict[str, Dataset]:  # noqa: UP006
+        datasets = {}
         for modality in self.other_modalities:
             if modality == NonStringModalities.GRAPH:
                 dataset = self.build_graph_dataset()
@@ -109,25 +107,9 @@ class MolBindDataset:
             elif modality == NonStringModalities.FINGERPRINT:
                 dataset = self.build_fp_dataset()
             datasets[modality] = dataset
-
-        for modality in datasets:
-            if modality == NonStringModalities.GRAPH:
-                dataloaders[modality] = GeometricDataLoader(
-                    datasets[modality],
-                    batch_size=batch_size,
-                    shuffle=shuffle,
-                    num_workers=num_workers,
-                    drop_last=drop_last,
-                )
-            else:
-                dataloaders[modality] = DataLoader(
-                    datasets[modality],
-                    batch_size=batch_size,
-                    shuffle=shuffle,
-                    num_workers=num_workers,
-                    drop_last=drop_last,
-                )
-        return CombinedLoader(dataloaders, "sequential")
+        # CombinedLoader does not work with DDPSampler directly
+        # Thus this ^ is added to the dataloaders in the datamodule
+        return datasets
 
     # private class methods
     @staticmethod
