@@ -44,9 +44,9 @@ class MolBindModule(LightningModule):
         self.tracker = 0
 
     def forward(self, batch: Dict) -> Dict:  # noqa: UP006
-        try:
+        if isinstance(batch, tuple):
             forward_pass = self.model(batch)
-        except Exception:
+        elif isinstance(batch, dict):
             dict_input_data = self._treat_graph_batch(batch)
             forward_pass = self.model(dict_input_data)
         return forward_pass
@@ -166,7 +166,6 @@ class MolBindModule(LightningModule):
             RetrievalRecall,
         ]
         metric_names = [metric.__name__ for metric in metrics]
-        logger.info(f"World size {self.world_size}")
         if self.world_size > 1:
             # both all gather calls return tensors of shape (World_Size, Batch_Size, Embedding_Size)
             all_embeddings_central_mod = self.all_gather(
@@ -221,7 +220,7 @@ class MolBindModule(LightningModule):
         # this adjusts the shape of the central modality data to be compatible with the model
         if not hasattr(batch[0], "input_ids"):
             central_modality_data = batch[0].central_modality_data.reshape(
-                self.batch_size, -1
+                self.per_device_batch_size, -1
             )
         else:
             central_modality_data = (
