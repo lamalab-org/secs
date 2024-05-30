@@ -4,8 +4,8 @@
 # order of defaults determines the order in which configs override each other
 defaults:
   - _self_
-  - data: smi_sf_fps_graph
-  - model: smi_sf_fps_graph
+  - data: smi_sf_fps_graph_retrieval
+  - model: smi_sf_fps_graph_embed_size_1024
   - logger: wandb
   - paths: default
   - trainer: gpu
@@ -34,7 +34,7 @@ run_id: "retrieval_4_modalities"
 # you can overwrite this in experiment configs
 # overwrite from command line with `python train.py tags="[first_tag, second_tag]"`
 tags: ["dev"]
-store_embeddings_directory: "embeddings_retrieval_4_modalities"
+store_embeddings_directory: "retrieval_4_modalities"
 # set False to skip model training
 train: False
 
@@ -43,7 +43,7 @@ train: False
 test: True
 
 # simply provide checkpoint path to resume training
-ckpt_path: ${paths.pretrained_models_dir}/../molbind_ckpts/epoch=49-step=45600.ckpt
+ckpt_path: ${paths.pretrained_models_dir}/../molbind_ckpts/1024_768_4_mods_e103_s107328.ckpt
 
 # seed for random number generators in pytorch, numpy and python.random
 seed: 42

@@ -28,7 +28,7 @@ defaults:
 
 # task name, determines output directory path
 task_name: "train"
-run_id: four_modalities_1024_1024
+run_id: smi_sf_fps_graph_1024
 
 # tags to help you identify your experiments
 # you can overwrite this in experiment configs
