@@ -11,6 +11,7 @@ from pytorch_lightning import LightningModule
 from torch import Tensor
 from torch.nn.functional import cosine_similarity
 from torch.optim import Optimizer
+from torch_geometric.data import Batch
 from torchmetrics.retrieval import (
     RetrievalMRR,
     RetrievalRecall,
@@ -43,12 +44,15 @@ class MolBindModule(LightningModule):
         self.central_modality = cfg.data.central_modality
         self.tracker = 0
 
+        logger.info(f"Per device batch size: {self.per_device_batch_size}")
+        logger.info(f"Loss batch size: {self.batch_size}")
+
     def forward(self, batch: Dict) -> Dict:  # noqa: UP006
-        if isinstance(batch, tuple):
-            forward_pass = self.model(batch)
-        elif isinstance(batch, dict):
+        if isinstance(batch, tuple) and isinstance(batch[0], Batch):
             dict_input_data = self._treat_graph_batch(batch)
             forward_pass = self.model(dict_input_data)
+        else:
+            forward_pass = self.model(batch)
         return forward_pass
 
     def _info_nce_loss(self, z1: Tensor, z2: Tensor) -> float:
@@ -68,10 +72,15 @@ class MolBindModule(LightningModule):
         loss = self._info_nce_loss(
             embeddings_dict[modality_pair[0]], embeddings_dict[modality_pair[1]]
         )
-        self.log(f"{prefix}_loss", loss, batch_size=self.batch_size, sync_dist=True)
+        self.log(
+            f"{prefix}_loss",
+            loss,
+            batch_size=self.batch_size,
+            sync_dist=self.world_size > 1,
+        )
         # compute retrieval metrics
         k_list = [1, 5]
-        if prefix in ["valid", "test"]:
+        if prefix in ["valid", "test", "predict"]:
             self.retrieval_metrics(
                 embeddings_dict[modality_pair[0]],
                 embeddings_dict[modality_pair[1]],
@@ -88,6 +97,9 @@ class MolBindModule(LightningModule):
     def validation_step(self, batch: Dict) -> Tensor:  # noqa: UP006
         embeddings_dict = self.forward(batch)
         return self._multimodal_loss(embeddings_dict, "valid")
+
+    def predict_step(self, batch: Dict) -> Tensor:  # noqa: UP006
+        return self.forward(batch)
 
     def test_step(self, batch: Dict) -> Tensor:  # noqa: UP006
         embeddings_dict = self.forward(batch)
@@ -179,7 +191,6 @@ class MolBindModule(LightningModule):
         else:
             all_embeddings_central_mod = embeddings_central_mod.copy_()
             all_embeddings_other_mod = embeddings_other_mod.copy_()
-        # run all next lines just on one device
         device = select_device()
 
         # reference: https://medium.com/@dhruvbird/all-pairs-cosine-similarity-in-pytorch-867e722c8572
@@ -205,10 +216,11 @@ class MolBindModule(LightningModule):
             .flatten()
             .to(device)
         )
-        for metric, metric_name in zip(metrics, metric_names):
-            for k_val in k_list:
+        assert target.sum() == all_embeddings_central_mod.shape[0]
+        for k_val in k_list:
+            for metric, metric_name in zip(metrics, metric_names):
                 metric_to_log = metric(top_k=k_val)
-                metric_to_log.update(flatten_cos_sim, target, indexes)
+                metric_to_log.update(flatten_cos_sim, target, indexes=indexes)
                 self.log(
                     f"{prefix}_{central_modality}_{other_modality}_{metric_name}_top_{k_val}",
                     metric_to_log.compute(),

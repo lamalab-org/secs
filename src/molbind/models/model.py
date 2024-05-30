@@ -60,8 +60,6 @@ class MolBind(nn.Module):
             modality = [*input_data][1]
         if isinstance(input_data, dict):
             modality = [*input_data][1]
-        else:
-            raise ValueError("Input data should be a `tuple` or a `dictionary`.")
         # Input data is a dictionary with (central_modality, modality) pairs (where the central modality is at index 0)
         # Store embeddings as store_embeddings[modality] = (central_modality_embedding, modality_embedding)
         # Forward through respective encoder and projection head

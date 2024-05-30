@@ -1,5 +1,6 @@
 import datetime  # noqa: I002
 import os
+import pickle as pkl
 from pathlib import Path
 
 import hydra
@@ -15,12 +16,10 @@ from molbind.data.molbind_dataset import MolBindDataset
 from molbind.data.utils.file_utils import csv_load_function, pickle_load_function
 from molbind.models.lightning_module import MolBindModule
 
-RETRIEVAL_DATE = datetime.datetime.now().strftime("%Y%m%d_%H%M")
-
-
 load_dotenv(".env")
-
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
+# set an unique identifier for the retrieval run
+RETRIEVAL_DATE = datetime.datetime.now().strftime("%Y%m%d_%H%M")
 
 
 def train_molbind(config: DictConfig):
@@ -62,28 +61,36 @@ def train_molbind(config: DictConfig):
         int(config.data.valid_frac * dataset_length)
     )
 
-    valid_dataloader = (
+    valid_datasets = (
         MolBindDataset(
             central_modality=config.data.central_modality,
             other_modalities=config.data.modalities,
             data=valid_shuffled_data,
             context_length=config.data.context_length,
-        ).build_multimodal_dataloader(
-            batch_size=config.data.batch_size,
-            shuffle=False,
-            drop_last=config.data.drop_last,
-            num_workers=config.data.num_workers,
-        ),
+        ).build_datasets_for_modalities(),
+    )
+    valid_shuffled_data[[config.data.central_modality]].write_csv(
+        f"{config.store_embeddings_directory}.csv"
     )
 
     datamodule = MolBindDataModule(
-        data={"test": valid_dataloader},
+        data={
+            "predict": valid_datasets,
+            "dataloader_arguments": {
+                "batch_size": config.data.batch_size,
+                "num_workers": config.data.num_workers,
+            },
+        },
     )
 
-    trainer.test(
+    predictions = trainer.predict(
         model=MolBindModule(config),
         datamodule=datamodule,
     )
+    # concatenate predictions outside of this script
+
+    with open(f"{config.store_embeddings_directory}.pkl", "wb") as f:
+        pkl.dump(predictions, f, protocol=pkl.HIGHEST_PROTOCOL)
 
 
 @hydra.main(version_base="1.3", config_path="../configs")
