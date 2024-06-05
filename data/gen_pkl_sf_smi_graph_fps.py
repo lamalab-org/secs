@@ -2,8 +2,11 @@ import fire  # noqa: I002
 import pandas as pd
 import selfies as sf
 from rdkit import Chem
+from tqdm.auto import tqdm
 
-from molbind.data.utils.fingerprint_utils import get_morgan_fingerprint_from_smiles
+from molbind.data.utils.fingerprint_utils import compute_fragprint
+
+tqdm.pandas()
 
 
 def smiles_to_selfies(smiles: str) -> str:
@@ -37,9 +40,8 @@ def canonicalize_smiles(smiles: str) -> str:
     except Exception:
         return None
 
-def add_fingerprint_column_to_dataframe(
-    csv_data_path: str, radius: int = 4, nbits: int = 2048
-) -> None:
+
+def add_fingerprint_column_to_dataframe(csv_data_path: str) -> None:
     """
     Add fingerprint column to a pandas dataframe. The dataframe is saved as a
     pickle file with the same name as the csv_data_path (str) input variable,
@@ -61,10 +63,9 @@ def add_fingerprint_column_to_dataframe(
     data = data.dropna()
     data["selfies"] = data["smiles"].apply(lambda x: smiles_to_selfies(x))
     # Add fingerprint column
-    data["fingerprint"] = data["smiles"].apply(
-        lambda smi: get_morgan_fingerprint_from_smiles(smi, radius, nbits)
+    data["fingerprint"] = data["smiles"].progress_apply(
+        lambda smi: compute_fragprint(smi)[0]
     )
-
 
     data["graph"] = data["smiles"].apply(lambda x: x)
     data = data.dropna()

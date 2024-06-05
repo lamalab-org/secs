@@ -31,7 +31,7 @@ class MolBindModule(LightningModule):
                 self.model.load_state_dict(
                     rename_keys_with_prefix(torch.load(cfg.ckpt_path)["state_dict"])
                 )
-                logger.info("Successfully loaded model from checkpoint.")
+                logger.info(f"Successfully loaded model from checkpoint: {cfg.ckpt_path}")
         else:
             logger.info("No checkpoint path found. Training from scratch.")
 
@@ -189,8 +189,8 @@ class MolBindModule(LightningModule):
             all_embeddings_central_mod = all_embeddings_central_mod.flatten(0, 1)
             all_embeddings_other_mod = all_embeddings_other_mod.flatten(0, 1)
         else:
-            all_embeddings_central_mod = embeddings_central_mod.copy_()
-            all_embeddings_other_mod = embeddings_other_mod.copy_()
+            all_embeddings_central_mod = embeddings_central_mod.detach().clone()
+            all_embeddings_other_mod = embeddings_other_mod.detach().clone()
         device = select_device()
 
         # reference: https://medium.com/@dhruvbird/all-pairs-cosine-similarity-in-pytorch-867e722c8572
@@ -230,14 +230,15 @@ class MolBindModule(LightningModule):
 
     def _treat_graph_batch(self, batch: Dict) -> Dict:  # noqa: UP006
         # this adjusts the shape of the central modality data to be compatible with the model
+        batch_size = len(batch[0].central_modality) # for drop_last to work
         if not hasattr(batch[0], "input_ids"):
             central_modality_data = batch[0].central_modality_data.reshape(
-                self.per_device_batch_size, -1
+                self.batch_size, -1
             )
         else:
             central_modality_data = (
-                batch[0].input_ids.reshape(self.per_device_batch_size, -1),
-                batch[0].attention_mask.reshape(self.per_device_batch_size, -1),
+                batch[0].input_ids.reshape(batch_size, -1),
+                batch[0].attention_mask.reshape(batch_size, -1),
             )
         return {
             self.central_modality: central_modality_data,

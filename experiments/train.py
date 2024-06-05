@@ -17,11 +17,11 @@ from molbind.data.molbind_dataset import MolBindDataset
 from molbind.data.utils.file_utils import csv_load_function, pickle_load_function
 from molbind.models.lightning_module import MolBindModule
 
-TRAIN_DATE = datetime.datetime.now().strftime("%Y%m%d_%H%M")
-
-load_dotenv(".env")
+load_dotenv()
 
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
+
+TRAIN_DATE = datetime.datetime.now().strftime("%Y%m%d_%H%M")
 
 
 def train_molbind(config: DictConfig):

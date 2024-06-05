@@ -7,7 +7,11 @@ encoders:
 
   selfies:
     pretrained: True
-    freeze_encoder: False
+    freeze_encoder: True
+
+  description:
+    pretrained: True
+    freeze_encoder: True
   
   graph:
     "ckpt_path": "${paths.pretrained_models_dir}/graph/molclr.ckpt"
@@ -36,6 +40,10 @@ projection_heads:
     activation: LeakyReLU
     batch_norm: False
   fingerprint:
+    dims: [768, 1024, 1024, 1024]
+    activation: LeakyReLU
+    batch_norm: False
+  description:
     dims: [768, 1024, 1024, 1024]
     activation: LeakyReLU
     batch_norm: False

@@ -45,7 +45,7 @@ train: False
 test: True
 
 # simply provide checkpoint path to resume training (or run inference)
-ckpt_path: ${paths.pretrained_models_dir}/../molbind_ckpts/1024_768_3_mods_e98_s68112.ckpt
+ckpt_path: ${paths.pretrained_models_dir}/../molbind_ckpts/1024_768_3_mods_e149.ckpt
 
 # seed for random number generators in pytorch, numpy and python.random
 seed: 42

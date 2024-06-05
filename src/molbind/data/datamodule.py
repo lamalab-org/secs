@@ -1,8 +1,8 @@
 from typing import Dict  # noqa: UP035, I002
 
+import torch
 from lightning.pytorch.utilities.combined_loader import CombinedLoader
 from pytorch_lightning import LightningDataModule
-from pytorch_lightning.utilities.types import EVAL_DATALOADERS
 from torch.utils.data import DataLoader, DistributedSampler
 from torch_geometric.loader import DataLoader as GeometricDataLoader
 
@@ -32,16 +32,24 @@ class MolBindDataModule(LightningDataModule):
         mode: str,
     ) -> CombinedLoader:
         dataloaders = {}
+
         for modality in self.datasets[mode]:
+            if torch.cuda.device_count() > 1:
+                distributed_sampler = DistributedSampler(
+                    self.datasets[mode][modality],
+                    shuffle=shuffle,
+                )
+                shuffle = None
+            else:
+                distributed_sampler = None
             if modality == NonStringModalities.GRAPH:
                 dataloaders[modality] = GeometricDataLoader(
                     self.datasets[mode][modality],
                     batch_size=batch_size,
                     num_workers=num_workers,
                     drop_last=drop_last,
-                    sampler=DistributedSampler(
-                        self.datasets[mode][modality], shuffle=shuffle
-                    ),
+                    sampler=distributed_sampler,
+                    shuffle=shuffle,
                 )
             else:
                 dataloaders[modality] = DataLoader(
@@ -49,9 +57,8 @@ class MolBindDataModule(LightningDataModule):
                     batch_size=batch_size,
                     num_workers=num_workers,
                     drop_last=drop_last,
-                    sampler=DistributedSampler(
-                        self.datasets[mode][modality], shuffle=shuffle
-                    ),
+                    sampler=distributed_sampler,
+                    shuffle=shuffle,
                 )
         # CombinedLoader does not work with DDPSampler directly
         # So each dataloader has a DistributedSampler
@@ -87,7 +94,7 @@ class MolBindDataModule(LightningDataModule):
         # iter through test data loaders
         test_dataloaders = self.build_predict_dataloader(
             batch_size=self.dataloader_arguments["batch_size"],
-            drop_last=True,
+            drop_last=False,
             shuffle=False,
             num_workers=self.dataloader_arguments["num_workers"],
             mode="predict",

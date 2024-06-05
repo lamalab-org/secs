@@ -47,6 +47,13 @@ class IUPACNameEncoder(BaseModalityEncoder):
                 param.requires_grad = False
 
 
+class DescriptionEncoder(BaseModalityEncoder):
+    def __init__(
+        self, freeze_encoder: bool = False, pretrained: bool = True, **kwargs
+    ) -> None:
+        super().__init__("allenai/scibert_scivocab_uncased", freeze_encoder, pretrained, **kwargs)
+
+
 class IREncoder(BaseModalityEncoder):
     pass
 

@@ -2,6 +2,7 @@ import datetime  # noqa: I002
 import os
 import pickle as pkl
 from pathlib import Path
+from pprint import pformat
 
 import hydra
 import pytorch_lightning as L
@@ -11,9 +12,11 @@ from dotenv import load_dotenv
 from loguru import logger
 from omegaconf import DictConfig
 
+from molbind.data.analysis.moleculenet import aggregate_embeddings
 from molbind.data.datamodule import MolBindDataModule
 from molbind.data.molbind_dataset import MolBindDataset
 from molbind.data.utils.file_utils import csv_load_function, pickle_load_function
+from molbind.metrics.retrieval import full_database_retrieval
 from molbind.models.lightning_module import MolBindModule
 
 load_dotenv(".env")
@@ -87,11 +90,29 @@ def train_molbind(config: DictConfig):
         model=MolBindModule(config),
         datamodule=datamodule,
     )
+
+    aggregated_embeddings = aggregate_embeddings(
+        embeddings=predictions,
+        smiles=valid_shuffled_data["smiles"].to_list(),
+        modalities=config.data.modalities,
+        central_modality=config.data.central_modality,
+    )
+
     # concatenate predictions outside of this script
 
     with open(f"{config.store_embeddings_directory}.pkl", "wb") as f:
-        pkl.dump(predictions, f, protocol=pkl.HIGHEST_PROTOCOL)
+        pkl.dump(aggregated_embeddings, f, protocol=pkl.HIGHEST_PROTOCOL)
+    logger.info(f"Saved embeddings to {config.store_embeddings_directory}.pkl")
 
+    retrieval_metrics = full_database_retrieval(
+        ids=valid_shuffled_data["smiles"].to_list(),
+        other_modalities=config.data.modalities,
+        central_modality=config.data.central_modality,
+        embeddings=aggregated_embeddings,
+        top_k=[1, 5]
+    )
+
+    logger.info(f"Database level retrieval metrics: {pformat(retrieval_metrics)}")
 
 @hydra.main(version_base="1.3", config_path="../configs")
 def main(config: DictConfig):

@@ -4,8 +4,8 @@
 # order of defaults determines the order in which configs override each other
 defaults:
   - _self_
-  - data: smi_sf_fps_graph_embed_size_1024
-  - model: smi_graph
+  - data: smi_graph
+  - model: smi_sf_fps_graph_embed_size_1024
   - logger: wandb
   - paths: default
   - trainer: gpu
@@ -45,7 +45,7 @@ train: False
 test: True
 
 # simply provide checkpoint path to resume training
-ckpt_path: ${paths.pretrained_models_dir}/../molbind_ckpts/epoch=49-step=15200.ckpt
+ckpt_path: ${paths.pretrained_models_dir}/../molbind_ckpts/1024_768_2_mods_e25.ckpt
 
 # seed for random number generators in pytorch, numpy and python.random
 seed: 42
