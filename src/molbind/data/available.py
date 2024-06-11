@@ -6,6 +6,7 @@ from molbind.data.components.datasets import (
     FingerprintMolBindDataset,
     GraphDataset,
     StringDataset,
+    StructureDataset,
 )
 from molbind.data.components.mb_tokenizers import (
     DESCRIPTION_TOKENIZER,
@@ -15,20 +16,23 @@ from molbind.data.components.mb_tokenizers import (
 from molbind.models.components.custom_encoders import (
     CustomFingerprintEncoder,
     CustomGraphEncoder,
+    CustomStructureEncoder,
     DescriptionEncoder,
     IUPACNameEncoder,
+    NMREncoder,
     SelfiesEncoder,
     SmilesEncoder,
 )
 
 AVAILABLE_ENCODERS = {
+    "description": DescriptionEncoder,
+    "fingerprint": CustomFingerprintEncoder,
+    "graph": CustomGraphEncoder,
+    "iupac_name": IUPACNameEncoder,
     "smiles": SmilesEncoder,
     "selfies": SelfiesEncoder,
-    "graph": CustomGraphEncoder,
-    "nmr": None,
-    "fingerprint": CustomFingerprintEncoder,
-    "iupac_name": IUPACNameEncoder,
-    "description": DescriptionEncoder,
+    "structure": CustomStructureEncoder,
+    "nmr": NMREncoder,
 }
 
 MODALITY_DATA_TYPES = {
@@ -40,6 +44,7 @@ MODALITY_DATA_TYPES = {
     "smiles": str,
     "selfies": str,
     "graph": Graph,
+    "structure": Graph,
 }
 
 STRING_TOKENIZERS = {
@@ -49,14 +54,15 @@ STRING_TOKENIZERS = {
 }
 
 MODALITY_DATASETS = {
-    "fingerprint": FingerprintMolBindDataset,
     "description": StringDataset,
-    "iupac_name": StringDataset,
-    "smiles": StringDataset,
-    "selfies": StringDataset,
+    "fingerprint": FingerprintMolBindDataset,
     "graph": GraphDataset,
-    "nmr": StringDataset,
     "ir": StringDataset,
+    "iupac_name": StringDataset,
+    "nmr": StringDataset,
+    "selfies": StringDataset,
+    "smiles": StringDataset,
+    "structure": StructureDataset,
 }
 
 
@@ -71,5 +77,6 @@ class StringModalities(StrEnum):
 
 
 class NonStringModalities(StrEnum):
+    STRUCTURE = "structure"
     GRAPH = "graph"
     FINGERPRINT = "fingerprint"
