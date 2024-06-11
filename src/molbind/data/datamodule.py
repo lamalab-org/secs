@@ -1,4 +1,4 @@
-from typing import Dict  # noqa: UP035, I002
+from typing import Dict, Literal, Union  # noqa: UP035, I002
 
 import torch
 from lightning.pytorch.utilities.combined_loader import CombinedLoader
@@ -21,15 +21,16 @@ class MolBindDataModule(LightningDataModule):
         for subset in ["train", "val", "test", "predict"]:
             if subset in data:
                 self.datasets[subset] = data[subset]
-        self.dataloader_arguments = data["dataloader_arguments"]
+        if "dataloader_arguments" in data:
+            self.dataloader_arguments = data["dataloader_arguments"]
 
     def build_multimodal_dataloader(
         self,
-        batch_size: int,
+        mode: Literal["train", "val", "test"],
+        batch_size: Union[int, Dict[str, int]],  # noqa: UP006
         drop_last: bool,
         shuffle: bool,
-        num_workers: int,
-        mode: str,
+        num_workers: int = 2,
     ) -> CombinedLoader:
         dataloaders = {}
 
@@ -42,7 +43,10 @@ class MolBindDataModule(LightningDataModule):
                 shuffle = None
             else:
                 distributed_sampler = None
-            if modality == NonStringModalities.GRAPH:
+            if (
+                modality == NonStringModalities.GRAPH
+                or modality == NonStringModalities.STRUCTURE
+            ):
                 dataloaders[modality] = GeometricDataLoader(
                     self.datasets[mode][modality],
                     batch_size=batch_size,
@@ -50,6 +54,7 @@ class MolBindDataModule(LightningDataModule):
                     drop_last=drop_last,
                     sampler=distributed_sampler,
                     shuffle=shuffle,
+                    prefetch_factor=num_workers,
                 )
             else:
                 dataloaders[modality] = DataLoader(
@@ -59,6 +64,7 @@ class MolBindDataModule(LightningDataModule):
                     drop_last=drop_last,
                     sampler=distributed_sampler,
                     shuffle=shuffle,
+                    prefetch_factor=num_workers,
                 )
         # CombinedLoader does not work with DDPSampler directly
         # So each dataloader has a DistributedSampler
@@ -108,13 +114,13 @@ class MolBindDataModule(LightningDataModule):
         shuffle: bool,
         num_workers: int,
         mode: str,
-    ) -> CombinedLoader:
+    ) -> Dict[str, DataLoader]:  # noqa: UP006
         """
         Build dataloaders for the predict step.
         This function is similar to `build_multimodal_dataloader` but does not use the DistributedSampler.
         Hence, it can be ran on a single GPU.
 
-        After in the `retrieval.py` script the predictions are concatenated.
+        After, in the `retrieval.py` script the predictions are concatenated.
         """
         dataloaders = {}
         for modality in self.datasets[mode][0]:
@@ -125,6 +131,7 @@ class MolBindDataModule(LightningDataModule):
                     num_workers=num_workers,
                     drop_last=drop_last,
                     shuffle=shuffle,
+                    prefech_factor=num_workers,
                 )
             else:
                 dataloaders[modality] = DataLoader(
@@ -133,6 +140,7 @@ class MolBindDataModule(LightningDataModule):
                     num_workers=num_workers,
                     drop_last=drop_last,
                     shuffle=shuffle,
+                    prefetch_factor=num_workers,
                 )
         # CombinedLoader does not work with DDPSampler directly
         # So each dataloader has a DistributedSampler

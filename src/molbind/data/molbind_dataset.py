@@ -16,6 +16,7 @@ from molbind.data.components.datasets import (
     FingerprintMolBindDataset,
     GraphDataset,
     StringDataset,
+    StructureDataset,
 )
 
 
@@ -46,6 +47,7 @@ class MolBindDataset:
             StringModalities.IR: init_str_fn,
             StringModalities.NMR: init_str_fn,
             StringModalities.MASS: init_str_fn,
+            NonStringModalities.STRUCTURE: lambda x: x,
             NonStringModalities.GRAPH: lambda x: x,
             NonStringModalities.FINGERPRINT: lambda x: x,
         }
@@ -62,6 +64,16 @@ class MolBindDataset:
         # add graph dataset logic here
         return GraphDataset(
             graph_data=graph_data,
+            central_modality=self.central_modality,
+            central_modality_data=self.central_modality_data,
+        )
+
+    def build_3D_coordinates_dataset(self) -> GraphDataset:
+        modality = "structure"
+        struc_data = self.data[[self.central_modality, modality]].drop_nulls()
+        return StructureDataset(
+            smiles_list=struc_data[self.modality].to_list(),
+            dataset_mode="molbind",
             central_modality=self.central_modality,
             central_modality_data=self.central_modality_data,
         )
