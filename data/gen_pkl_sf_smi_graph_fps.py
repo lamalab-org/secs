@@ -60,6 +60,8 @@ def add_fingerprint_column_to_dataframe(csv_data_path: str) -> None:
     data = data[["smiles"]]
     # canonicalize smiles
     data["smiles"] = data["smiles"].apply(lambda x: canonicalize_smiles(x))
+    # data drop duplicates
+    data = data.drop_duplicates(subset=["smiles"])
     data = data.dropna()
     data["selfies"] = data["smiles"].apply(lambda x: smiles_to_selfies(x))
     # Add fingerprint column
