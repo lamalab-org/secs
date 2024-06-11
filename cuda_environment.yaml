@@ -14,5 +14,9 @@ dependencies:
   - pip:
     - "--editable=git+https://github.com/hyperopt/hyperopt-sklearn"
     - --extra-index-url https://download.pytorch.org/whl/cu117
+    - --extra-index-url https://pytorch-geometric.com/whl/torch-2.0.1+cu117.html
+    - torch-sparse==0.6.18+pt20cu117
+    - torch-scatter==2.1.2+pt20cu117
+    - torch-cluster==1.6.3+pt20cu117
     - torch==2.0.0+cu117
     - --editable "."
