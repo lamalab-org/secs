@@ -154,6 +154,10 @@ notebooks/*.pkl
 notebooks/*.png
 notebooks/*.txt
 notebooks/*.yaml
+notebooks/lightning_logs/*
+notebooks/wandb/*
+notebooks/outputs/*
+notebooks/molbind/*
 
 # Data & Models
 *.h5
