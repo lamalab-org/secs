@@ -3,6 +3,7 @@ from typing import Dict, List  # noqa: UP035
 
 import chromadb
 import numpy as np
+from loguru import logger
 
 
 def full_database_retrieval(
@@ -12,25 +13,41 @@ def full_database_retrieval(
     central_modality: str,
     top_k: List[int],  # noqa: UP006
 ) -> Dict[str, Dict[str, float]]:  # noqa: UP006
-    client = chromadb.Client()
-    with contextlib.suppress(ValueError):
-        client.delete_collection(f"{central_modality}_embeds")
-    collection = client.create_collection(
-        name=f"{central_modality}_embeds", metadata={"hnsw:space": "cosine"}
-    )
+    all_modalities = [central_modality, *other_modalities]
 
-    collection.add(
-        embeddings=embeddings[central_modality].cpu().numpy(), documents=ids, ids=ids
-    )
-    modalities_retrieval = {}
     retrieval_metrics = {}
-    for modality in other_modalities:
-        modalities_retrieval[modality] = collection.query(
-            query_embeddings=embeddings[modality].cpu().numpy(), n_results=max(top_k)
+    for index_mod_1, modality_1 in enumerate(all_modalities):
+        client = chromadb.Client()
+        with contextlib.suppress(ValueError):
+            client.delete_collection(f"{modality_1}_embeds")
+        collection = client.create_collection(
+            name=f"{modality_1}_embeds", metadata={"hnsw:space": "cosine"}
         )
-        retrieval_metrics[modality] = compute_retrieval_metrics_from_query(
-            ids, modalities_retrieval[modality], top_k=top_k
+        collection.add(
+            embeddings=embeddings[modality_1].cpu().numpy(),
+            documents=ids,
+            ids=ids,
         )
+        modalities_retrieval = {}
+        for index_mod_2, modality_2 in enumerate(all_modalities):
+            if (
+                modality_2 != modality_1
+                and modality_2 != central_modality
+                and index_mod_1 < index_mod_2
+            ):
+                modalities_retrieval[modality_2] = collection.query(
+                    query_embeddings=embeddings[modality_2].cpu().numpy(),
+                    n_results=max(top_k),
+                )
+                retrieval_metrics[f"{modality_1}_{modality_2}"] = (
+                    compute_retrieval_metrics_from_query(
+                        ids, modalities_retrieval[modality_2], top_k=top_k
+                    )
+                )
+                logger.info(
+                    f"Retrieval metrics for {modality_1} and {modality_2}:\
+                    {retrieval_metrics[f'{modality_1}_{modality_2}']}"
+                )
     return retrieval_metrics
 
 
