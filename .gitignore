@@ -136,9 +136,29 @@ dmypy.json
 *.code-workspace
 **/.vscode
 
-# JetBrains
-.idea/
+# Notebooks and experiments
 experiments/slurm*
+experiments/*.csv
+experiments/*.json
+experiments/*.pkl
+experiments/*.png
+experiments/*.txt
+experiments/*.yaml
+experiments/wandb/*
+experiments/outputs/*
+experiments/molbind/*
+experiments/lightning_logs/*
+notebooks/*.csv
+notebooks/*.json
+notebooks/*.pkl
+notebooks/*.png
+notebooks/*.txt
+notebooks/*.yaml
+notebooks/lightning_logs/*
+notebooks/wandb/*
+notebooks/outputs/*
+notebooks/molbind/*
+
 # Data & Models
 *.h5
 *.tar
