@@ -1,6 +1,8 @@
-from typing import List  # noqa: UP035, I002
+from collections.abc import Iterable  # noqa: I002
+from typing import List  # noqa: UP035
 
-from rdkit.Chem import AllChem, MolFromSmiles
+import numpy as np
+from rdkit.Chem import AllChem, Descriptors, MolFromSmiles, MolToSmiles
 
 
 def get_morgan_fingerprint_from_smiles(
@@ -24,3 +26,28 @@ def get_morgan_fingerprint_from_smiles(
     # Generate Morgan fingerprint
     fingerprint = AllChem.GetMorganFingerprintAsBitVect(mol, radius, nbits)
     return list(fingerprint)
+
+
+def compute_morgan_fingerprints(
+    smiles_list: Iterable[str],  # list of SMILEs
+    n_bits: int = 2048,  # number of bits in the fingerprint
+) -> np.ndarray:
+    rdkit_mols = [MolFromSmiles(smiles) for smiles in smiles_list]
+    rdkit_smiles = [MolToSmiles(mol, isomericSmiles=False) for mol in rdkit_mols]
+    rdkit_mols = [MolFromSmiles(smiles) for smiles in rdkit_smiles]
+    X = [
+        AllChem.GetMorganFingerprintAsBitVect(mol, 4, nBits=n_bits)
+        for mol in rdkit_mols
+    ]
+    return np.asarray(X)
+
+
+def compute_fragprint(smiles: str) -> List[float]:  # noqa: UP006
+    X = compute_morgan_fingerprints([smiles])
+
+    fragments = {d[0]: d[1] for d in Descriptors.descList[115:]}
+    X1 = np.zeros((1, len(fragments)))
+    mol = MolFromSmiles(smiles)
+    features = [fragments[d](mol) for d in fragments]
+    X1[0, :] = features
+    return np.concatenate((X, X1), axis=1).tolist()

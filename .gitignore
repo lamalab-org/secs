@@ -138,7 +138,7 @@ dmypy.json
 
 # JetBrains
 .idea/
-
+experiments/slurm*
 # Data & Models
 *.h5
 *.tar

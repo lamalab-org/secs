@@ -10,8 +10,9 @@ channels:
 dependencies:
   - python>=3.9
   - pip
-  - faiss-cpu
+  - chromadb
   - pip:
+    - "--editable=git+https://github.com/hyperopt/hyperopt-sklearn"
     - --extra-index-url https://download.pytorch.org/whl/cu117
     - torch==2.0.0+cu117
     - --editable "."

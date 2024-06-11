@@ -2,6 +2,6 @@ defaults:
   - default
 
 accelerator: gpu
-max_epochs: 100
-log_every_n_steps: 10
-devices: 1
+precision: "16-mixed"
+max_epochs: 150
+log_every_n_steps: 3

@@ -1,18 +1,19 @@
 import contextlib  # noqa: I002
+from pathlib import Path
 from typing import Dict, List  # noqa: UP035
+from uuid import uuid1
 
 import torch
 from info_nce import InfoNCE
+from loguru import logger
 from omegaconf import DictConfig
 from pytorch_lightning import LightningModule
 from torch import Tensor
 from torch.nn.functional import cosine_similarity
 from torch.optim import Optimizer
+from torch_geometric.data import Batch
 from torchmetrics.retrieval import (
-    RetrievalAUROC,
-    RetrievalMAP,
     RetrievalMRR,
-    RetrievalPrecision,
     RetrievalRecall,
 )
 
@@ -24,48 +25,69 @@ class MolBindModule(LightningModule):
     def __init__(self, cfg: DictConfig) -> None:
         super().__init__()
         self.model = MolBind(cfg=cfg)
-
+        self.world_size = torch.cuda.device_count()
         if hasattr(cfg, "ckpt_path") and cfg.ckpt_path is not None:
             with contextlib.suppress(FileNotFoundError):
                 self.model.load_state_dict(
                     rename_keys_with_prefix(torch.load(cfg.ckpt_path)["state_dict"])
                 )
+                logger.info(f"Successfully loaded model from checkpoint: {cfg.ckpt_path}")
+        else:
+            logger.info("No checkpoint path found. Training from scratch.")
 
         self.config = cfg
         self.loss = InfoNCE(
             temperature=cfg.model.loss.temperature, negative_mode="unpaired"
         )
-        self.batch_size = cfg.data.batch_size
+        self.per_device_batch_size = cfg.data.batch_size
+        self.batch_size = self.per_device_batch_size * self.world_size
         self.central_modality = cfg.data.central_modality
-        self.store_embeddings = []
+        self.tracker = 0
+
+        logger.info(f"Per device batch size: {self.per_device_batch_size}")
+        logger.info(f"Loss batch size: {self.batch_size}")
 
     def forward(self, batch: Dict) -> Dict:  # noqa: UP006
-        try:
-            forward_pass = self.model(batch)
-        except Exception:
+        if isinstance(batch, tuple) and isinstance(batch[0], Batch):
             dict_input_data = self._treat_graph_batch(batch)
             forward_pass = self.model(dict_input_data)
+        else:
+            forward_pass = self.model(batch)
         return forward_pass
 
     def _info_nce_loss(self, z1: Tensor, z2: Tensor) -> float:
-        return self.loss(z1, z2)
+        if self.world_size > 1:
+            # shape (World_Size, Batch_Size, Embedding_Size)
+            all_z1 = self.all_gather(z1, sync_grads=True)
+            all_z2 = self.all_gather(z2, sync_grads=True)
+            # flattened shape (World_Size*Batch_Size, Embedding_Size)
+            all_z1 = all_z1.flatten(0, 1)
+            all_z2 = all_z2.flatten(0, 1)
+            return self.loss(all_z1, all_z2)
+        else:
+            return self.loss(z1, z2)
 
     def _multimodal_loss(self, embeddings_dict: Dict, prefix: str) -> float:  # noqa: UP006
         modality_pair = [*embeddings_dict]
         loss = self._info_nce_loss(
             embeddings_dict[modality_pair[0]], embeddings_dict[modality_pair[1]]
         )
-        self.log(f"{prefix}_loss", loss, batch_size=self.batch_size)
-        # compute retrieval metrics
-        k_list = [1, 5, 10]
-
-        self.retrieval_metrics(
-            embeddings_dict[modality_pair[0]],
-            embeddings_dict[modality_pair[1]],
-            *modality_pair,
-            k_list,
-            prefix=prefix,
+        self.log(
+            f"{prefix}_loss",
+            loss,
+            batch_size=self.batch_size,
+            sync_dist=self.world_size > 1,
         )
+        # compute retrieval metrics
+        k_list = [1, 5]
+        if prefix in ["valid", "test", "predict"]:
+            self.retrieval_metrics(
+                embeddings_dict[modality_pair[0]],
+                embeddings_dict[modality_pair[1]],
+                *modality_pair,
+                k_list,
+                prefix=prefix,
+            )
         return loss
 
     def training_step(self, batch: Dict):  # noqa: UP006
@@ -76,9 +98,33 @@ class MolBindModule(LightningModule):
         embeddings_dict = self.forward(batch)
         return self._multimodal_loss(embeddings_dict, "valid")
 
+    def predict_step(self, batch: Dict) -> Tensor:  # noqa: UP006
+        return self.forward(batch)
+
     def test_step(self, batch: Dict) -> Tensor:  # noqa: UP006
         embeddings_dict = self.forward(batch)
-        self.store_embeddings.append(embeddings_dict)
+        # self.store_embeddings.append(embeddings_dict)
+        # store embeddings to file
+
+        file_template = "{}/{}_embeddings_{}.pth"
+        directory_for_embeddings = self.config.store_embeddings_directory
+        # create a directory for embeddings if it does not exist
+        if self.tracker == 0:
+            if not Path(directory_for_embeddings).exists():
+                Path.mkdir(directory_for_embeddings)
+            else:
+                logger.info(f"Directory {directory_for_embeddings} already exists.")
+                logger.info("Creating new directory for embeddings..")
+                directory_for_embeddings = directory_for_embeddings + "_" + str(uuid1())
+                Path(directory_for_embeddings).mkdir()
+                logger.info(f"New directory created at {directory_for_embeddings}")
+        # convert to numpy array and then store to .pth file
+        for modality, embeddings in embeddings_dict.items():
+            torch.save(
+                embeddings,
+                file_template.format(directory_for_embeddings, modality, self.tracker),
+            )
+        self.tracker += 1
         return self._multimodal_loss(embeddings_dict, "test")
 
     def configure_optimizers(self) -> Optimizer:
@@ -129,55 +175,70 @@ class MolBindModule(LightningModule):
 
         metrics = [
             RetrievalMRR,
-            RetrievalMAP,
-            RetrievalPrecision,
             RetrievalRecall,
-            RetrievalAUROC,
         ]
         metric_names = [metric.__name__ for metric in metrics]
+        if self.world_size > 1:
+            # both all gather calls return tensors of shape (World_Size, Batch_Size, Embedding_Size)
+            all_embeddings_central_mod = self.all_gather(
+                embeddings_central_mod, sync_grads=True
+            )
+            all_embeddings_other_mod = self.all_gather(
+                embeddings_other_mod, sync_grads=True
+            )
+            all_embeddings_central_mod = all_embeddings_central_mod.flatten(0, 1)
+            all_embeddings_other_mod = all_embeddings_other_mod.flatten(0, 1)
+        else:
+            all_embeddings_central_mod = embeddings_central_mod.detach().clone()
+            all_embeddings_other_mod = embeddings_other_mod.detach().clone()
+        device = select_device()
+
         # reference: https://medium.com/@dhruvbird/all-pairs-cosine-similarity-in-pytorch-867e722c8572
+        # adding a third dim allows to compute pairwise cosine sim.
         cos_sim = cosine_similarity(
-            embeddings_central_mod.unsqueeze(1),
-            embeddings_other_mod.unsqueeze(
-                0
-            ),  # adding a third dim allows to compute pairwise cosine sim.
+            all_embeddings_central_mod.unsqueeze(1),
+            all_embeddings_other_mod.unsqueeze(0),
             dim=2,
-        )
+        ).to(device)
         # preds, target, indexes
-        flatten_cos_sim = cos_sim.flatten()  # (Batch Size*Batch Size)
+        flatten_cos_sim = cos_sim.flatten().to(device)  # (Batch Size*Batch Size)
 
         # the metric calculations are grouped by indexes and then averaged
         # repeat interleave creates tensors of the form [0, 0, 1, 1, 2, 2]
-        indexes = torch.arange(embeddings_central_mod.shape[0]).repeat_interleave(
-            embeddings_central_mod.shape[0]
+        indexes = (
+            torch.arange(all_embeddings_central_mod.shape[0])
+            .repeat_interleave(all_embeddings_other_mod.shape[0])
+            .to(device)
         )
         # Diagonal elements are the true querries, the rest are false querries
         target = (
-            torch.eye(embeddings_central_mod.shape[0], dtype=torch.long)
+            torch.eye(all_embeddings_central_mod.shape[0], dtype=torch.long)
             .flatten()
-            .to(select_device())
+            .to(device)
         )
-
-        for metric, metric_name in zip(metrics, metric_names):
-            for k_val in k_list:
+        assert target.sum() == all_embeddings_central_mod.shape[0]
+        for k_val in k_list:
+            for metric, metric_name in zip(metrics, metric_names):
                 metric_to_log = metric(top_k=k_val)
-                metric_to_log.update(flatten_cos_sim, target, indexes)
+                metric_to_log.update(flatten_cos_sim, target, indexes=indexes)
                 self.log(
                     f"{prefix}_{central_modality}_{other_modality}_{metric_name}_top_{k_val}",
                     metric_to_log.compute(),
                     batch_size=self.batch_size,
+                    sync_dist=self.world_size > 1,
                 )
 
     def _treat_graph_batch(self, batch: Dict) -> Dict:  # noqa: UP006
         # this adjusts the shape of the central modality data to be compatible with the model
-        if not hasattr(batch[0][0], "input_ids"):
-            central_modality_data = batch[0][0].central_modality_data.reshape(
+        batch_size = len(batch[0].central_modality) # for drop_last to work
+        if not hasattr(batch[0], "input_ids"):
+            central_modality_data = batch[0].central_modality_data.reshape(
                 self.batch_size, -1
             )
         else:
             central_modality_data = (
-                batch[0][0].input_ids.reshape(self.batch_size, -1),
-                batch[0][0].attention_mask.reshape(self.batch_size, -1),
+                batch[0].input_ids.reshape(batch_size, -1),
+                batch[0].attention_mask.reshape(batch_size, -1),
             )
         return {
             self.central_modality: central_modality_data,

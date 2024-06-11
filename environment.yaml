@@ -10,7 +10,7 @@ channels:
 dependencies:
   - python>=3.11
   - pip
-  - faiss-cpu
+  - chromadb
   - pip:
     - torch>=2.0.0
     - --editable "."

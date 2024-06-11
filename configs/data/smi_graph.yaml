@@ -1,9 +1,7 @@
 central_modality: smiles
 context_length: 128
 modalities:
-  - fingerprint
   - graph
-  - selfies
 train_frac : 0.9
 valid_frac : 0.1
 drop_last: true

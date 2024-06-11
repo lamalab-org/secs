@@ -4,7 +4,7 @@ import polars as pl
 from torch import Tensor
 from torch.utils.data import Dataset
 
-from molbind.data.utils.graph_utils import smiles_to_graph
+from molbind.data.utils.graph_utils import smiles_to_graph_without_augment
 
 
 class StringDataset(Dataset):
@@ -113,7 +113,7 @@ class GraphDataset(Dataset):
         self.central_modality_handlers = {
             StringModalities.SMILES: self._string,
             StringModalities.SELFIES: self._string,
-            StringModalities.INCHI: self._string,
+            StringModalities.IUPAC_NAME: self._string,
             StringModalities.IR: self._string,
             StringModalities.NMR: self._string,
             StringModalities.MASS: self._string,
@@ -128,20 +128,20 @@ class GraphDataset(Dataset):
         For graph data, the central modality is added as an attribute to the graph data.
         Then the data is reshaped to a Tensor of size (batch_size, N).
         """
-        data_i, data_j = smiles_to_graph(self.smiles_list[index])
-        data_i.central_modality = self.central_modality
+        data = smiles_to_graph_without_augment(self.smiles_list[index])
+        data.central_modality = self.central_modality
         if self.central_modality_data_type != str:
-            data_i.central_modality_data = self.central_modality_handlers[
-                data_i.central_modality
+            data.central_modality_data = self.central_modality_handlers[
+                data.central_modality
             ](self.central_modality_data[index])
         else:
-            data_i.input_ids = self.central_modality_handlers[data_i.central_modality](
+            data.input_ids = self.central_modality_handlers[data.central_modality](
                 self.central_modality_data[0][index]
             )
-            data_i.attention_mask = self.central_modality_handlers[
-                data_i.central_modality
-            ](self.central_modality_data[1][index])
-        return data_i, data_j
+            data.attention_mask = self.central_modality_handlers[data.central_modality](
+                self.central_modality_data[1][index]
+            )
+        return data
 
     def _fingerprint(self, fingerprint: List[int]) -> Tensor:  # noqa: UP006
         return Tensor(fingerprint)

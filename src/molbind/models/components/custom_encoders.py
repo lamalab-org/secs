@@ -3,6 +3,7 @@ from typing import List  # noqa: UP035, I002
 import torch
 import torch.nn.functional as F
 from torch import Tensor
+from transformers import AutoConfig, RobertaForCausalLM
 
 from molbind.models.components.base_encoder import (
     BaseModalityEncoder,
@@ -29,7 +30,28 @@ class SelfiesEncoder(BaseModalityEncoder):
 
 
 class IUPACNameEncoder(BaseModalityEncoder):
-    pass
+    def __init__(
+        self, freeze_encoder: bool = False, pretrained: bool = True, **kwargs
+    ) -> None:
+        super().__init__(
+            "FacebookAI/roberta-base", freeze_encoder, pretrained, **kwargs
+        )
+
+    def _initialize_encoder(self) -> None:
+        config = AutoConfig.from_pretrained(self.model_name)
+        self.encoder = RobertaForCausalLM.from_pretrained(
+            self.model_name, config=config
+        )
+        if self.freeze_encoder:
+            for param in self.encoder.parameters():
+                param.requires_grad = False
+
+
+class DescriptionEncoder(BaseModalityEncoder):
+    def __init__(
+        self, freeze_encoder: bool = False, pretrained: bool = True, **kwargs
+    ) -> None:
+        super().__init__("allenai/scibert_scivocab_uncased", freeze_encoder, pretrained, **kwargs)
 
 
 class IREncoder(BaseModalityEncoder):
@@ -85,20 +107,7 @@ class CustomGraphEncoder(GraphEncoder):
         )
         self.drop_ratio = drop_ratio
 
-    def forward(self, data : tuple) -> Tensor:
-        xis, xjs = data
-        ris, zis = self.forward_single(xis)  # [N,C]
-
-        # get the representations and the projections
-        rjs, zjs = self.forward_single(xjs)  # [N,C]
-
-        # normalize projection feature vectors
-        zis = F.normalize(zis, dim=1)
-        zjs = F.normalize(zjs, dim=1)
-        # return averaged projection features
-        return (zis + zjs) / 2
-
-    def forward_single(self, data) -> tuple:
+    def forward(self, data) -> tuple:
         x = data.x
         edge_index = data.edge_index
         edge_attr = data.edge_attr
@@ -115,5 +124,4 @@ class CustomGraphEncoder(GraphEncoder):
         # global pooling
         h = self.pool(h, data.batch)
         h = self.feat_lin(h)
-        out = self.out_lin(h)
-        return h, out
+        return self.out_lin(h)
