@@ -1,6 +1,6 @@
 from typing import List, Literal, Optional, Tuple, Union  # noqa: UP035, I002
 
-import polars as pl
+import pandas as pd
 from torch import Tensor
 from torch.utils.data import Dataset
 from torch_geometric.data import Data
@@ -64,7 +64,7 @@ class FingerprintMolBindDataset(Dataset):
     def __init__(
         self,
         central_modality_data: Tuple[Tensor, Tensor],  # noqa: UP006
-        fingerprint_data: Tensor,
+        fingerprint_data: List[List[int]],  # noqa: UP006
         central_modality: str,
     ) -> None:
         """Dataset for fingerprints.
@@ -84,7 +84,7 @@ class FingerprintMolBindDataset(Dataset):
     def __len__(self):
         return len(self.fingerprints)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> dict:
         return {
             self.central_modality: [i[idx] for i in self.central_modality_data],
             self.other_modality: Tensor(self.fingerprints[idx]),
@@ -94,7 +94,7 @@ class FingerprintMolBindDataset(Dataset):
 class GraphDataset(Dataset):
     def __init__(
         self,
-        graph_data: pl.DataFrame,
+        graph_data: pd.DataFrame,
         central_modality: str,
         central_modality_data: Union[List[int], Tensor, Tuple[Tensor, Tensor]],  # noqa: UP006
     ) -> None:
@@ -153,6 +153,7 @@ class GraphDataset(Dataset):
             data.attention_mask = self.central_modality_handlers[data.central_modality](
                 self.central_modality_data[1][index]
             )
+        data.modality = self.modality
         return data
 
 
@@ -201,7 +202,6 @@ class StructureDataset(Dataset):
 
     def __getitem__(self, idx: int) -> Data:
         data = get_item_for_dimenet(sdf_file=self.sdf_file_list[idx], i=idx)
-
         if self.mode == "encoder":
             return data
         elif self.mode == "molbind":
@@ -217,6 +217,7 @@ class StructureDataset(Dataset):
                 data.attention_mask = self.central_modality_handlers[
                     data.central_modality
                 ](self.central_modality_data[1][idx])
+            data.modality = self.other_modality
             return data
         raise ValueError(
             f"'{self.mode}' is an invalid mode. Accepted values are 'encoder' and 'molbind'"

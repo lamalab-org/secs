@@ -24,6 +24,8 @@ class MolBindDataModule(LightningDataModule):
         if "dataloader_arguments" in data:
             self.dataloader_arguments = data["dataloader_arguments"]
 
+        self.distributed = torch.cuda.device_count() > 1
+
     def build_multimodal_dataloader(
         self,
         mode: Literal["train", "val", "test"],
@@ -35,7 +37,7 @@ class MolBindDataModule(LightningDataModule):
         dataloaders = {}
 
         for modality in self.datasets[mode]:
-            if torch.cuda.device_count() > 1:
+            if self.distributed:
                 distributed_sampler = DistributedSampler(
                     self.datasets[mode][modality],
                     shuffle=shuffle,
@@ -109,7 +111,7 @@ class MolBindDataModule(LightningDataModule):
 
     def build_predict_dataloader(
         self,
-        batch_size: int,
+        batch_size: Union[int, Dict[str, int]],  # noqa: UP006
         drop_last: bool,
         shuffle: bool,
         num_workers: int,
@@ -124,14 +126,17 @@ class MolBindDataModule(LightningDataModule):
         """
         dataloaders = {}
         for modality in self.datasets[mode][0]:
-            if modality == NonStringModalities.GRAPH:
+            if (
+                modality == NonStringModalities.GRAPH
+                or modality == NonStringModalities.STRUCTURE
+            ):
                 dataloaders[modality] = GeometricDataLoader(
                     self.datasets[mode][0][modality],
                     batch_size=batch_size,
                     num_workers=num_workers,
                     drop_last=drop_last,
                     shuffle=shuffle,
-                    prefech_factor=num_workers,
+                    prefetch_factor=num_workers,
                 )
             else:
                 dataloaders[modality] = DataLoader(

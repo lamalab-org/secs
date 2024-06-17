@@ -1,21 +1,22 @@
 from typing import (  # noqa: I002, UP035
     Callable,
     List,
-    Literal,
     Optional,
     Union,
 )
 
 import torch
 import torch.nn.functional as F
+from loguru import logger
 from torch import Tensor
+from torch_geometric.data import Data
 from torch_geometric.nn import radius_graph
 from torch_geometric.nn.models.dimenet import (
     DimeNet,
     OutputBlock,
     triplets,
 )
-from torch_geometric.typing import OptTensor
+from torch_geometric.nn.resolver import activation_resolver
 from torch_geometric.utils import scatter
 from transformers import AutoConfig, RobertaForCausalLM
 
@@ -43,15 +44,6 @@ class SelfiesEncoder(BaseModalityEncoder):
         super().__init__("HUBioDataLab/SELFormer", freeze_encoder, pretrained, **kwargs)
 
 
-class StructureEncoder(DimeNet):
-    """
-    Wrapper around DimeNet model from `torch_geometric.nn.models` to allow for
-    easy configuration via Hydra.
-    """
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-
 class IUPACNameEncoder(BaseModalityEncoder):
     def __init__(
         self, freeze_encoder: bool = False, pretrained: bool = True, **kwargs
@@ -70,13 +62,8 @@ class IUPACNameEncoder(BaseModalityEncoder):
                 param.requires_grad = False
 
 
-class DescriptionEncoder(BaseModalityEncoder):
-    def __init__(
-        self, freeze_encoder: bool = False, pretrained: bool = True, **kwargs
-    ) -> None:
-        super().__init__(
-            "allenai/scibert_scivocab_uncased", freeze_encoder, pretrained, **kwargs
-        )
+class DescriptionEncoder:
+    pass
 
 
 class IREncoder(BaseModalityEncoder):
@@ -132,7 +119,7 @@ class CustomGraphEncoder(GraphEncoder):
         )
         self.drop_ratio = drop_ratio
 
-    def forward(self, data) -> tuple:
+    def forward(self, data: Data) -> tuple:
         x = data.x
         edge_index = data.edge_index
         edge_attr = data.edge_attr
@@ -163,12 +150,12 @@ class OutputBlockMolBind(OutputBlock):
         output_initializer: str = "zeros",
     ) -> None:
         super().__init__(
-            num_radial,
-            hidden_channels,
-            out_channels,
-            num_layers,
-            output_initializer,
-            act,
+            num_radial=num_radial,
+            hidden_channels=hidden_channels,
+            out_channels=out_channels,
+            num_layers=num_layers,
+            act=act,
+            output_initializer=output_initializer,
         )
 
     def forward(
@@ -181,10 +168,50 @@ class OutputBlockMolBind(OutputBlock):
         x = self.lin_rbf(rbf) * x
         x = scatter(x, i, dim=0, dim_size=num_nodes, reduce="sum")
         # copy value of x for molbind
-        embedding = x.clone()
         for lin in self.lins:
             x = self.act(lin(x))
-        return x, embedding
+        return x
+
+
+class StructureEncoder(DimeNet):
+    """
+    Wrapper around DimeNet model from `torch_geometric.nn.models` to allow for
+    easy configuration via Hydra.
+    """
+
+    def __init__(
+        self,
+        hidden_channels: int,
+        out_channels: int,
+        num_blocks: int,
+        num_bilinear: int,
+        num_spherical: int,
+        num_radial: int,
+        cutoff: float = 5.0,
+        max_num_neighbors: int = 32,
+        envelope_exponent: int = 5,
+        num_before_skip: int = 1,
+        num_after_skip: int = 2,
+        num_output_layers: int = 3,
+        act: Union[str, Callable] = "swish",
+        output_initializer: str = "zeros",
+    ):
+        super().__init__(
+            hidden_channels=hidden_channels,
+            out_channels=out_channels,
+            num_blocks=num_blocks,
+            num_bilinear=num_bilinear,
+            num_spherical=num_spherical,
+            num_radial=num_radial,
+            cutoff=cutoff,
+            max_num_neighbors=max_num_neighbors,
+            envelope_exponent=envelope_exponent,
+            num_before_skip=num_before_skip,
+            num_after_skip=num_after_skip,
+            num_output_layers=num_output_layers,
+            act=act,
+            output_initializer=output_initializer,
+        )
 
 
 class CustomStructureEncoder(StructureEncoder):
@@ -207,35 +234,31 @@ class CustomStructureEncoder(StructureEncoder):
         ckpt_path: Optional[str] = None,
     ):
         super().__init__(
-            hidden_channels,
-            out_channels,
-            num_blocks,
-            num_bilinear,
-            num_spherical,
-            num_radial,
-            cutoff,
-            max_num_neighbors,
-            envelope_exponent,
-            num_before_skip,
-            num_after_skip,
-            num_output_layers,
-            act,
-            output_initializer,
+            hidden_channels=hidden_channels,
+            out_channels=out_channels,
+            num_blocks=num_blocks,
+            num_bilinear=num_bilinear,
+            num_spherical=num_spherical,
+            num_radial=num_radial,
+            cutoff=cutoff,
+            max_num_neighbors=max_num_neighbors,
+            envelope_exponent=envelope_exponent,
+            num_before_skip=num_before_skip,
+            num_after_skip=num_after_skip,
+            num_output_layers=num_output_layers,
+            act=act,
+            output_initializer=output_initializer,
         )
 
-        if num_spherical < 2:
-            raise ValueError("'num_spherical' should be greater than 1")
-        del self.output_blocks
         self.output_blocks = torch.nn.ModuleList(
             [
                 OutputBlockMolBind(
-                    num_radial,
-                    hidden_channels,
-                    out_channels,
-                    num_output_layers,
-                    act,
-                    output_initializer,
-                    model=self.model,
+                    num_radial=num_radial,
+                    hidden_channels=hidden_channels,
+                    out_channels=out_channels,
+                    num_layers=num_output_layers,
+                    act=activation_resolver(act),
+                    output_initializer=output_initializer,
                 )
                 for _ in range(num_blocks + 1)
             ]
@@ -248,21 +271,15 @@ class CustomStructureEncoder(StructureEncoder):
 
     def forward(
         self,
-        z: Tensor,
-        pos: Tensor,
-        batch: OptTensor = None,
+        batch: Data,
     ) -> Tensor:
         r"""Forward pass.
 
         Args:
-            z (torch.Tensor): Atomic number of each atom with shape
-                :obj:`[num_atoms]`.
-            pos (torch.Tensor): Coordinates of each atom with shape
-                :obj:`[num_atoms, 3]`.
-            batch (torch.Tensor, optional): Batch indices assigning each atom
-                to a separate molecule with shape :obj:`[num_atoms]`.
-                (default: :obj:`None`)
+            batch (Data): The input data with all the necessary attributes.
         """
+
+        z, pos, batch = batch.z, batch.pos, batch.batch
         edge_index = radius_graph(
             pos, r=self.cutoff, batch=batch, max_num_neighbors=self.max_num_neighbors
         )
@@ -283,19 +300,17 @@ class CustomStructureEncoder(StructureEncoder):
         # Embedding block.
         x = self.emb(z, rbf, i, j)
         P = self.output_blocks[0](x, rbf, i, num_nodes=pos.size(0))
-
         # Interaction blocks.
         for interaction_block, output_block in zip(
             self.interaction_blocks, self.output_blocks[1:]
         ):
-            x = interaction_block(x, rbf, sbf, idx_kj, idx_ji)
-            if self.model == "dimenet":
-                P = P + output_block(
-                    x=x, rbf=rbf, i=i, num_nodes=pos.size(0), model=self.model
-                )
-            elif self.model == "molbind":
-                output_block_ = output_block(
-                    x=x, rbf=rbf, i=i, num_nodes=pos.size(0), model=self.model
-                )
-                P = P + output_block_[0]
-        return output_block_[1]
+            x = interaction_block(
+                x=x,
+                rbf=rbf,
+                sbf=sbf,
+                idx_kj=idx_kj,
+                idx_ji=idx_ji,
+            )
+            output_block_ = output_block(x=x, rbf=rbf, i=i, num_nodes=pos.size(0))
+            P += output_block_
+        return scatter(P, batch, dim=0, reduce="sum")

@@ -43,13 +43,18 @@ def read_smiles(data_path: str) -> List[str]:  # noqa: UP006
     return smiles_data[1:]
 
 
-def smiles_to_graph(smiles: str) -> Tuple[Data, Data]:  # noqa: UP006
+def construct_graph(smiles: str) -> tuple[tensor, tensor, tensor, int, int]:
+    """_summary_
+
+    Args:
+        smiles (str): smiles string
+
+    Returns:
+        tuple[tensor, tensor, tensor, int, int]: returns graph data and number of atoms and bonds
+    """
     mol = Chem.MolFromSmiles(smiles)
-    # mol = Chem.AddHs(mol)
-
-    N = mol.GetNumAtoms()
-    M = mol.GetNumBonds()
-
+    nr_of_atoms = mol.GetNumAtoms()
+    nr_of_bonds = mol.GetNumBonds()
     type_idx = []
     chirality_idx = []
     atomic_number = []
@@ -83,8 +88,18 @@ def smiles_to_graph(smiles: str) -> Tuple[Data, Data]:  # noqa: UP006
 
     edge_index = torch.tensor([row, col], dtype=torch.long)
     edge_attr = torch.tensor(np.array(edge_feat), dtype=torch.long)
+    return x, edge_index, edge_attr, nr_of_atoms, nr_of_bonds
 
+
+def smiles_to_graph_without_augment(smiles: str) -> Data:
+    x, edge_index, edge_attr, _, _ = construct_graph(smiles)
+    return Data(x=x, edge_index=edge_index, edge_attr=edge_attr)
+
+
+def smiles_to_graph(smiles: str) -> Tuple[Data, Data]:  # noqa: UP006
+    x, edge_index, edge_attr, N, M = construct_graph(smiles)
     # random mask a subgraph of the molecule
+    # start augmenting the data
     num_mask_nodes = max([1, math.floor(0.25 * N)])
     num_mask_edges = max([0, math.floor(0.25 * M)])
     mask_nodes_i = random.sample(list(range(N)), num_mask_nodes)
@@ -97,7 +112,6 @@ def smiles_to_graph(smiles: str) -> Tuple[Data, Data]:  # noqa: UP006
     mask_edges_j = [2 * i for i in mask_edges_j_single] + [
         2 * i + 1 for i in mask_edges_j_single
     ]
-
     x_i = deepcopy(x)
     for atom_idx in mask_nodes_i:
         x_i[atom_idx, :] = torch.tensor([len(ATOM_LIST), 0])
@@ -124,44 +138,6 @@ def smiles_to_graph(smiles: str) -> Tuple[Data, Data]:  # noqa: UP006
             count += 1
     data_j = Data(x=x_j, edge_index=edge_index_j, edge_attr=edge_attr_j)
     return data_i, data_j
-
-
-def smiles_to_graph_without_augment(smiles: str) -> Data:
-    mol = Chem.MolFromSmiles(smiles)
-    type_idx = []
-    chirality_idx = []
-    atomic_number = []
-
-    for atom in mol.GetAtoms():
-        type_idx.append(ATOM_LIST.index(atom.GetAtomicNum()))
-        chirality_idx.append(CHIRALITY_LIST.index(atom.GetChiralTag()))
-        atomic_number.append(atom.GetAtomicNum())
-
-    x1 = torch.tensor(type_idx, dtype=torch.long).view(-1, 1)
-    x2 = torch.tensor(chirality_idx, dtype=torch.long).view(-1, 1)
-    x = torch.cat([x1, x2], dim=-1)
-
-    row, col, edge_feat = [], [], []
-    for bond in mol.GetBonds():
-        start, end = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
-        row += [start, end]
-        col += [end, start]
-        edge_feat.append(
-            [
-                BOND_LIST.index(bond.GetBondType()),
-                BONDDIR_LIST.index(bond.GetBondDir()),
-            ]
-        )
-        edge_feat.append(
-            [
-                BOND_LIST.index(bond.GetBondType()),
-                BONDDIR_LIST.index(bond.GetBondDir()),
-            ]
-        )
-
-    edge_index = torch.tensor([row, col], dtype=torch.long)
-    edge_attr = torch.tensor(np.array(edge_feat), dtype=torch.long)
-    return Data(x=x, edge_index=edge_index, edge_attr=edge_attr)
 
 
 class MoleculeDataset(Dataset):
@@ -232,9 +208,9 @@ def get_item_for_dimenet(
     # AllChem.UFFOptimizeMolecule(mol)  # Optimize conformer
     read_sdf_from_file = Chem.SDMolSupplier(sdf_file, removeHs=False, sanitize=False)
     mol = read_sdf_from_file[0]
-    y = mol.GetProp("DFT:HOMO_LUMO_GAP")
+    y_in_eh = mol.GetProp("DFT:HOMO_LUMO_GAP")
     # convert hartree to eV
-    y = torch.tensor(float(y) * 27.2114)
+    y = torch.tensor(float(y_in_eh) * 27.2114)
     N = mol.GetNumAtoms()
     conf = mol.GetConformer()
     pos = conf.GetPositions()
@@ -284,7 +260,6 @@ def get_item_for_dimenet(
         .contiguous()
     )
     x = torch.cat([x1, x2], dim=-1)
-
     return Data(
         x=x,
         z=z,

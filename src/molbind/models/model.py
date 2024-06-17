@@ -1,13 +1,11 @@
 from typing import Dict, Tuple, Union  # noqa: I002, UP035
 
-import torch
 import torch.nn as nn
 from loguru import logger
 from omegaconf import DictConfig
 from torch import Tensor
 
 from molbind.models.components.head import ProjectionHead
-from molbind.utils import select_device
 
 
 class MolBind(nn.Module):
@@ -46,9 +44,6 @@ class MolBind(nn.Module):
         self.dict_encoders = nn.ModuleDict(self.dict_encoders)
         self.dict_projection_heads = nn.ModuleDict(self.dict_projection_heads)
 
-        # store the batch size
-        self.batch_size = cfg.data.batch_size
-
     def forward(
         self,
         input_data: Dict[str, Union[Tuple[Tensor, Tensor], Tensor]],  # noqa: UP006
@@ -77,6 +72,3 @@ class MolBind(nn.Module):
         store_embeddings[self.central_modality] = central_modality_embedding_projected
         store_embeddings[modality] = modality_embedding_projected
         return store_embeddings
-
-    def load_from_checkpoint(self, path: str):
-        return torch.load(path, map_location=select_device())["state_dict"]

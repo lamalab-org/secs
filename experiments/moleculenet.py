@@ -1,6 +1,6 @@
-import pickle as pkl
+import pickle as pkl  # noqa: I002
 
-import hydra  # noqa: I002
+import hydra
 import numpy as np
 import polars as pl
 import pytorch_lightning as L
