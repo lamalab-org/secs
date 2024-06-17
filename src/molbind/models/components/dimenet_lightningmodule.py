@@ -18,18 +18,18 @@ class StructureEncoderModule(LightningModule):
     def forward(self, data: Data) -> Tensor:
         return self.model(z=data.z, pos=data.pos, batch=data.batch)
 
-    def compute_loss(self, output: Tensor, target: Tensor, prefix) -> Tensor:
+    def _compute_loss(self, output: Tensor, target: Tensor, prefix) -> Tensor:
         loss = self.loss(output, target.unsqueeze(1))
         self.log(f"{prefix}_loss", loss, batch_size=output.shape[0])
         return loss
 
     def training_step(self, batch: Data) -> Tensor:
         output = self.model(z=batch.z, pos=batch.pos, batch=batch.batch)
-        return self.compute_loss(output, batch.y, "train")
+        return self._compute_loss(output, batch.y, "train")
 
     def validation_step(self, batch: Data) -> Tensor:
         output = self.model(z=batch.z, pos=batch.pos, batch=batch.batch)
-        return self.compute_loss(output, batch.y, "val")
+        return self._compute_loss(output, batch.y, "val")
 
     def configure_optimizers(self) -> torch.optim.Optimizer:
-        return torch.optim.AdamW(self.model.parameters(), lr=self.config.model.optimizer.lr)
+        return torch.optim.AdamW(self.parameters(), lr=self.config.model.optimizer.lr)
