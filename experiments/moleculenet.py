@@ -43,8 +43,8 @@ def embed_dataset_and_compute_metrics(config: DictConfig):
     valid_datasets = (
         MolBindDataset(
             central_modality=config.data.central_modality,
-            other_modalities=config.data.modalities,
-            data=data_to_embed_pl,
+            other_modalities=["smiles"],
+            data=data_to_embed_pl[["selfies", "smiles"]],
             context_length=config.data.context_length,
         ).build_datasets_for_modalities(),
     )
@@ -70,19 +70,24 @@ def embed_dataset_and_compute_metrics(config: DictConfig):
 
     aggregated_embeddings = aggregate_embeddings(
         embeddings=predictions,
-        smiles=data_to_embed["smiles"].tolist(),
-        modalities=config.data.modalities,
+        # smiles=data_to_embed["smiles"].tolist(),
+        modalities=["smiles"],
         central_modality=config.data.central_modality,
     )
 
     embed_central_modality = (
         aggregated_embeddings[config.data.central_modality].detach().cpu().numpy()
     )
-    # save all embeddings to file
-    with open(config.store_embeddings_directory + ".pkl", "wb") as f:
-        pkl.dump(aggregated_embeddings, f)
+    # import pickle as pkl
+    # # save all embeddings to file
+    # with open(config.store_embeddings_directory + ".pkl", "wb") as f:
+    #     pkl.dump(aggregated_embeddings, f)
 
-    train, test, valid = prep_split(data_to_embed, config.task_name, seed=42)
+    train, test, valid = prep_split(
+        data_to_embed,
+        config.task_name,
+        seed=config.task_seed if hasattr(config, "task_seed") else 42,
+    )
     # best_rf_models = random_forest_hyperopt(
     #     task_name=config.task_name,
     #     embedding_model=config.run_id,
@@ -97,7 +102,6 @@ def embed_dataset_and_compute_metrics(config: DictConfig):
     # task_average = np.mean([best_rf_models[subtask]["roc_auc"] for subtask in best_rf_models])
     # # save to file
     # logger.info(f"Task Average: {task_average}")
-
     if MoleculeNetTaskType[config.task_name] == "regression":
         task_metrics = linear_regression(
             task_name=config.task_name,
@@ -106,7 +110,9 @@ def embed_dataset_and_compute_metrics(config: DictConfig):
             valid_embeddings=embed_central_modality[valid.index],
             valid=valid,
         )
-        task_average = np.mean([task_metrics[subtask]["roc_auc"] for subtask in task_metrics])
+        task_average = np.mean(
+            [task_metrics[subtask]["mae"] for subtask in task_metrics]
+        )
     else:
         task_metrics = logistic_regression(
             task_name=config.task_name,
@@ -116,8 +122,9 @@ def embed_dataset_and_compute_metrics(config: DictConfig):
             valid=valid,
             class_weight="balanced",
         )
-
-        task_average = np.mean([task_metrics[subtask]["mae"] for subtask in task_metrics])
+        task_average = np.mean(
+            [task_metrics[subtask]["roc_auc"] for subtask in task_metrics]
+        )
         # save to file
     logger.info(f"Task Average: {task_average}")
 

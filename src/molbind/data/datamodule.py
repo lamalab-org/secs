@@ -134,7 +134,7 @@ class MolBindDataModule(LightningDataModule):
                     self.datasets[mode][0][modality],
                     batch_size=batch_size,
                     num_workers=num_workers,
-                    drop_last=drop_last,
+                    drop_last=False,
                     shuffle=shuffle,
                     prefetch_factor=num_workers,
                 )
@@ -143,7 +143,7 @@ class MolBindDataModule(LightningDataModule):
                     self.datasets[mode][0][modality],
                     batch_size=batch_size,
                     num_workers=num_workers,
-                    drop_last=drop_last,
+                    drop_last=False,
                     shuffle=shuffle,
                     prefetch_factor=num_workers,
                 )

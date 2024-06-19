@@ -6,6 +6,7 @@ from pprint import pformat
 
 import hydra
 import pandas as pd
+import polars as pl
 import pytorch_lightning as L
 import rootutils
 import torch
@@ -17,6 +18,7 @@ from molbind.data.analysis.moleculenet import aggregate_embeddings
 from molbind.data.datamodule import MolBindDataModule
 from molbind.data.molbind_dataset import MolBindDataset
 from molbind.data.utils.file_utils import csv_load_function, pickle_load_function
+from molbind.data.utils.fingerprint_utils import compute_fragprint
 from molbind.metrics.retrieval import full_database_retrieval
 from molbind.models.lightning_module import MolBindModule
 
@@ -56,7 +58,15 @@ def train_molbind(config: DictConfig):
         data = handlers[data_format](config.data.dataset_path)
     except KeyError:
         logger.error(f"Format {data_format} not supported")
-
+    data = data.with_columns(pl.col("smiles").alias("graph"))
+    data = data.drop_nulls(subset=["structure"])
+    data = data.with_columns(
+        pl.col("smiles")
+        .map_elements(compute_fragprint, return_dtype=pl.List[float])
+        .alias("fingerprint")
+    )
+    # drop duplicates in central modality column
+    data = data.unique(subset=[config.data.central_modality])
     shuffled_data = data.sample(
         fraction=config.data.fraction_data, shuffle=True, seed=config.data.seed
     )
@@ -89,6 +99,8 @@ def train_molbind(config: DictConfig):
         model=MolBindModule(config),
         datamodule=datamodule,
     )
+    with open(f"predictions_{RETRIEVAL_TIME}.pkl", "wb") as f:
+        pkl.dump(predictions, f, protocol=pkl.HIGHEST_PROTOCOL)
     aggregated_embeddings = aggregate_embeddings(
         embeddings=predictions,
         modalities=config.data.modalities,
@@ -101,7 +113,7 @@ def train_molbind(config: DictConfig):
 
     logger.info(f"Saved embeddings to {config.store_embeddings_directory}.pkl")
     retrieval_metrics = full_database_retrieval(
-        ids=valid_shuffled_data["smiles"].to_list(),
+        indices=valid_shuffled_data["smiles"].to_list(),
         other_modalities=config.data.modalities,
         central_modality=config.data.central_modality,
         embeddings=aggregated_embeddings,
