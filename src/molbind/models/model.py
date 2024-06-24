@@ -31,7 +31,7 @@ class MolBind(nn.Module):
         }
         # Add other modalities to `dict_encoders` and `dict_projection_heads`
         for modality in modalities:
-            if modality not in [*ModalityConstants]:
+            if modality not in [*vars(ModalityConstants)]:
                 raise ValueError(f"Modality {modality} not supported yet.")
             self.dict_encoders[modality] = ModalityConstants[modality].encoder(
                 **cfg.model.encoders[modality]

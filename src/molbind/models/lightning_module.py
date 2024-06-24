@@ -79,7 +79,7 @@ class MolBindModule(LightningModule):
         central_to_modality_loss = self._info_nce_loss(
             embeddings_dict[modality_pair[0]], embeddings_dict[modality_pair[1]]
         )
-        if self.config.data.symmetric:
+        if self.config.model.loss.symmetric:
             modality_to_central_loss = self._info_nce_loss(
                 embeddings_dict[modality_pair[1]], embeddings_dict[modality_pair[0]]
             )
