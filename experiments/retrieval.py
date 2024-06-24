@@ -1,15 +1,12 @@
 import datetime  # noqa: I002
-import os
 import pickle as pkl
 from pathlib import Path
 from pprint import pformat
 
 import hydra
 import pandas as pd
-import polars as pl
 import pytorch_lightning as L
 import rootutils
-import torch
 from dotenv import load_dotenv
 from loguru import logger
 from omegaconf import DictConfig
@@ -18,31 +15,22 @@ from molbind.data.analysis.moleculenet import aggregate_embeddings
 from molbind.data.datamodule import MolBindDataModule
 from molbind.data.molbind_dataset import MolBindDataset
 from molbind.data.utils.file_utils import csv_load_function, pickle_load_function
-from molbind.data.utils.fingerprint_utils import compute_fragprint
 from molbind.metrics.retrieval import full_database_retrieval
 from molbind.models.lightning_module import MolBindModule
 
-load_dotenv(".env")
+load_dotenv()
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 # set an unique identifier for the retrieval run
 RETRIEVAL_TIME = datetime.datetime.now().strftime("%Y%m%d_%H%M")
 
 
 def train_molbind(config: DictConfig):
-    wandb_logger = L.loggers.WandbLogger(
-        project=os.getenv("WANDB_PROJECT"),
-        entity=os.getenv("WANDB_ENTITY"),
-        id="retrieval_" + RETRIEVAL_TIME,
-    )
-
-    device_count = torch.cuda.device_count()
     trainer = L.Trainer(
         max_epochs=config.trainer.max_epochs,
         accelerator=config.trainer.accelerator,
         log_every_n_steps=config.trainer.log_every_n_steps,
-        logger=wandb_logger,
-        devices=device_count if device_count > 1 else "auto",
-        strategy="ddp" if device_count > 1 else "auto",
+        devices=1,
+        strategy="auto",
     )
 
     # extract format of dataset file
@@ -58,15 +46,15 @@ def train_molbind(config: DictConfig):
         data = handlers[data_format](config.data.dataset_path)
     except KeyError:
         logger.error(f"Format {data_format} not supported")
-    data = data.with_columns(pl.col("smiles").alias("graph"))
-    data = data.drop_nulls(subset=["structure"])
-    data = data.with_columns(
-        pl.col("smiles")
-        .map_elements(compute_fragprint, return_dtype=pl.List[float])
-        .alias("fingerprint")
-    )
-    # drop duplicates in central modality column
-    data = data.unique(subset=[config.data.central_modality])
+    # data = data.with_columns(pl.col("smiles").alias("graph"))
+    # data = data.drop_nulls(subset=["structure"])
+    # data = data.with_columns(
+    #     pl.col("smiles")
+    #     .map_elements(compute_fragprint, return_dtype=pl.List[float])
+    #     .alias("fingerprint")
+    # )
+    # # drop duplicates in central modality column
+    # data = data.unique(subset=[config.data.central_modality])
     shuffled_data = data.sample(
         fraction=config.data.fraction_data, shuffle=True, seed=config.data.seed
     )
@@ -99,7 +87,7 @@ def train_molbind(config: DictConfig):
         model=MolBindModule(config),
         datamodule=datamodule,
     )
-    with open(f"predictions_{RETRIEVAL_TIME}.pkl", "wb") as f:
+    with open(f"predictions_{RETRIEVAL_TIME}.pkl", "wb") as f:  # noqa: PTH123
         pkl.dump(predictions, f, protocol=pkl.HIGHEST_PROTOCOL)
     aggregated_embeddings = aggregate_embeddings(
         embeddings=predictions,
@@ -113,7 +101,7 @@ def train_molbind(config: DictConfig):
 
     logger.info(f"Saved embeddings to {config.store_embeddings_directory}.pkl")
     retrieval_metrics = full_database_retrieval(
-        indices=valid_shuffled_data["smiles"].to_list(),
+        indices=valid_shuffled_data.to_pandas(),
         other_modalities=config.data.modalities,
         central_modality=config.data.central_modality,
         embeddings=aggregated_embeddings,

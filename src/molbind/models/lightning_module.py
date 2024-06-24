@@ -1,4 +1,5 @@
 import contextlib  # noqa: I002
+import os
 from pathlib import Path
 from typing import Dict, List, Union  # noqa: UP035
 from uuid import uuid1
@@ -25,7 +26,11 @@ class MolBindModule(LightningModule):
     def __init__(self, cfg: DictConfig) -> None:
         super().__init__()
         self.model = MolBind(cfg=cfg)
-        self.world_size = torch.cuda.device_count()
+        self.world_size = int(
+            os.environ.get(
+                "WORLD_SIZE", cfg.trainer.gpus_per_node * cfg.trainer.num_nodes
+            )
+        )
         if hasattr(cfg, "ckpt_path") and cfg.ckpt_path is not None:
             with contextlib.suppress(FileNotFoundError):
                 self.model.load_state_dict(
@@ -71,9 +76,16 @@ class MolBindModule(LightningModule):
 
     def _multimodal_loss(self, embeddings_dict: Dict, prefix: str) -> float:  # noqa: UP006
         modality_pair = [*embeddings_dict]
-        loss = self._info_nce_loss(
+        central_to_modality_loss = self._info_nce_loss(
             embeddings_dict[modality_pair[0]], embeddings_dict[modality_pair[1]]
         )
+        if self.config.data.symmetric:
+            modality_to_central_loss = self._info_nce_loss(
+                embeddings_dict[modality_pair[1]], embeddings_dict[modality_pair[0]]
+            )
+            loss = central_to_modality_loss + modality_to_central_loss
+        else:
+            loss = central_to_modality_loss.detach().clone()
         #  check if loss is nan
         if torch.isnan(loss):
             logger.error(f"Loss is nan for {prefix} batch.")

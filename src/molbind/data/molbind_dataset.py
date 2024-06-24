@@ -8,8 +8,7 @@ from torch import Tensor
 from torch.utils.data import Dataset
 
 from molbind.data.available import (
-    MODALITY_DATA_TYPES,
-    STRING_TOKENIZERS,
+    ModalityConstants,
     NonStringModalities,
     StringModalities,
 )
@@ -32,7 +31,7 @@ class MolBindDataset:
         """Dataset for multimodal data."""
         self.data = data
         self.central_modality = central_modality
-        self.central_modality_data_type = MODALITY_DATA_TYPES[central_modality]
+        self.central_modality_data_type = ModalityConstants[central_modality].data_type
 
         # if self.central_modality_data_type == str:
         init_str_fn = partial(
@@ -150,7 +149,7 @@ class MolBindDataset:
         context_length: int,
         modality: str,
     ) -> Tuple[Tensor, Tensor]:  # noqa: UP006
-        tokenized_data = STRING_TOKENIZERS[modality](
+        tokenized_data = ModalityConstants[modality].tokenizer(
             dataset,
             padding="max_length",
             truncation=True,

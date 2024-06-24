@@ -32,10 +32,10 @@ class StringDataset(Dataset):
         Args:
             central_modality_data (Tuple[Tensor, Tensor]): pair of (central_modality, tokenized_central_modality)
             other_modality_data (Tuple[Tensor, Tensor]): pair of (other_modality, tokenized_other_modality)
-            central_modality (str): name of central modality as found in MODALITY_DATA_TYPES
-            other_modality (str): name of other modality as found in MODALITY_DATA_TYPES
+            central_modality (str): name of central modality as found in ModalityConstants
+            other_modality (str): name of other modality as found in ModalityConstants
         """
-        from molbind.data.available import MODALITY_DATA_TYPES
+        from molbind.data.available import ModalityConstants
 
         # modality pair definition
         self.central_modality = central_modality
@@ -43,8 +43,8 @@ class StringDataset(Dataset):
         # modality pair data
         self.central_modality_data = central_modality_data
         self.other_modality_data = other_modality_data
-        self.central_modality_data_type = MODALITY_DATA_TYPES[central_modality]
-        self.other_modality_data_type = MODALITY_DATA_TYPES[other_modality]
+        self.central_modality_data_type = ModalityConstants[central_modality].data_type
+        self.other_modality_data_type = ModalityConstants[other_modality].data_type
 
     def __len__(self):
         return len(self.other_modality_data[0])
@@ -72,7 +72,7 @@ class FingerprintMolBindDataset(Dataset):
         Args:
             central_modality_data (Tuple[Tensor, Tensor]): pair of (central_modality, tokenized_central_modality)
             fingerprint_data (Tensor): fingerprint data
-            central_modality (str): name of central modality as found in MODALITY_DATA_TYPES
+            central_modality (str): name of central modality as found in ModalityConstants
         Returns:
             None
         """
@@ -102,7 +102,7 @@ class GraphDataset(Dataset):
 
         Args:
             graph_data (pl.DataFrame): graph data as a polars DataFrame
-            central_modality (str): name of central modality as found in MODALITY_DATA_TYPES
+            central_modality (str): name of central modality as found in ModalityConstants
             central_modality_data (Union[Tensor, Tuple[Tensor, Tensor]]): central modality data
             that is either a tensor or a tuple of tensors depending on the data type
         Returns:
@@ -111,7 +111,7 @@ class GraphDataset(Dataset):
 
         super().__init__()
         from molbind.data.available import (
-            MODALITY_DATA_TYPES,
+            ModalityConstants,
             NonStringModalities,
             StringModalities,
         )
@@ -120,7 +120,7 @@ class GraphDataset(Dataset):
         self.modality = "graph"
         self.smiles_list = graph_data[self.modality].to_list()
         self.central_modality_data = central_modality_data
-        self.central_modality_data_type = MODALITY_DATA_TYPES[central_modality]
+        self.central_modality_data_type = ModalityConstants[central_modality].data_type
         # modality handler functions if a modality is the central modality
         self.central_modality_handlers = {
             StringModalities.SMILES: _string,
@@ -171,7 +171,7 @@ class StructureDataset(Dataset):
         **kwargs,
     ) -> None:
         from molbind.data.available import (
-            MODALITY_DATA_TYPES,
+            ModalityConstants,
             NonStringModalities,
             StringModalities,
         )
@@ -185,7 +185,9 @@ class StructureDataset(Dataset):
             self.central_modality = kwargs["central_modality"]
             self.other_modality = "structure"
             self.central_modality_data = kwargs["central_modality_data"]
-            self.central_modality_data_type = MODALITY_DATA_TYPES[self.central_modality]
+            self.central_modality_data_type = ModalityConstants[
+                self.central_modality
+            ].data_type
         # modality handler functions if a modality is the central modality
         self.central_modality_handlers = {
             StringModalities.SMILES: _string,
