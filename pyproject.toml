@@ -48,7 +48,6 @@ dependencies = [
   "hydra-colorlog==1.2.0",
   "hydra-optuna-sweeper==1.2.0",
   "omegaconf",
-  "torch_geometric",
   ]
 
 [project.optional-dependencies]

@@ -1,5 +1,6 @@
 import datetime  # noqa: I002
 import os
+import re
 from pathlib import Path
 
 import hydra
@@ -10,6 +11,7 @@ from dotenv import load_dotenv
 from loguru import logger
 from omegaconf import DictConfig
 from pytorch_lightning import seed_everything
+from pytorch_lightning.plugins.environments import SLURMEnvironment
 from pytorch_lightning.strategies.ddp import DDPStrategy
 
 from molbind.data.datamodule import MolBindDataModule
@@ -89,6 +91,7 @@ def train_molbind(config: DictConfig):
         accelerator=config.trainer.accelerator,
         log_every_n_steps=config.trainer.log_every_n_steps,
         logger=wandb_logger,
+        num_nodes=config.trainer.num_nodes,
         devices=world_size if world_size > 1 else "auto",
         strategy=DDPStrategy(find_unused_parameters=True) if world_size > 1 else "auto",
         gradient_clip_val=0.5,
@@ -102,11 +105,90 @@ def train_molbind(config: DictConfig):
     )
 
 
+def _get_first_node():
+    """Return the first node we can find in the Slurm node list."""
+    nodelist = os.getenv("SLURM_JOB_NODELIST")
+
+    bracket_re = re.compile(r"(.*?)\[(.*?)\]")
+    dash_re = re.compile("(.*?)-")
+    comma_re = re.compile("(.*?),")
+
+    bracket_result = bracket_re.match(nodelist)
+
+    if bracket_result:
+        node = bracket_result[1]
+        indices = bracket_result[2]
+
+        comma_result = comma_re.match(indices)
+        if comma_result:
+            indices = comma_result[1]
+
+        dash_result = dash_re.match(indices)
+        first_index = dash_result[1] if dash_result else indices
+
+        return node + first_index
+
+    comma_result = comma_re.match(nodelist)
+    if comma_result:
+        return comma_result[1]
+
+    return nodelist
+
+
+def init_distributed_mode(port=12354):
+    """Initialize some environment variables for PyTorch Distributed
+    using Slurm.
+    """
+    # The number of total processes started by Slurm.
+    os.environ["WORLD_SIZE"] = os.getenv("SLURM_NTASKS")
+    # Index of the current process.
+    os.environ["RANK"] = os.getenv("SLURM_PROCID")
+    # Index of the current process on this node only.
+    os.environ["LOCAL_RANK"] = os.getenv("SLURM_LOCALID")
+
+    master_addr = _get_first_node()
+    systemname = os.getenv("SYSTEMNAME", "")
+    # Need to append "i" on Jülich machines to connect across InfiniBand cells.
+    if systemname in ["juwels", "juwelsbooster", "jureca"]:
+        master_addr = master_addr + "i"
+    os.environ["MASTER_ADDR"] = master_addr
+
+    # An arbitrary free port on node 0.
+    os.environ["MASTER_PORT"] = str(port)
+    # print the environment variables
+    logger.info(f"MASTER_ADDR={os.getenv('MASTER_ADDR')}")
+    logger.info(f"MASTER_PORT={os.getenv('MASTER_PORT')}")
+    logger.info(f"WORLD_SIZE={os.getenv('WORLD_SIZE')}")
+    logger.info(f"RANK={os.getenv('RANK')}")
+    logger.info(f"CUDA_VISIBLE_DEVICES={os.getenv('CUDA_VISIBLE_DEVICES')}")
+
+
 @hydra.main(version_base="1.3", config_path="../configs")
 def main(config: DictConfig):
+    init_distributed_mode(12354)
     train_molbind(config)
 
 
+def patch_lightning_slurm_master_addr():
+    # Quit if we're not on a Jülich machine.
+    if os.getenv("SYSTEMNAME", "") not in [
+        "juwelsbooster",
+        "juwels",
+        "jurecadc",
+    ]:
+        return
+
+    old_resolver = SLURMEnvironment.resolve_root_node_address
+
+    def new_resolver(nodes):
+        # Append an i" for communication over InfiniBand.
+        return old_resolver(nodes) + "i"
+
+    SLURMEnvironment.__old_resolve_root_node_address = old_resolver
+    SLURMEnvironment.resolve_root_node_address = new_resolver
+
+
 if __name__ == "__main__":
+    patch_lightning_slurm_master_addr()
     seed_everything(42)
     main()
