@@ -1,6 +1,7 @@
 import contextlib  # noqa: I002
+import os
 from pathlib import Path
-from typing import Dict, List  # noqa: UP035
+from typing import Dict, List, Union  # noqa: UP035
 from uuid import uuid1
 
 import torch
@@ -11,7 +12,7 @@ from pytorch_lightning import LightningModule
 from torch import Tensor
 from torch.nn.functional import cosine_similarity
 from torch.optim import Optimizer
-from torch_geometric.data import Batch
+from torch_geometric.data import Data
 from torchmetrics.retrieval import (
     RetrievalMRR,
     RetrievalRecall,
@@ -25,13 +26,19 @@ class MolBindModule(LightningModule):
     def __init__(self, cfg: DictConfig) -> None:
         super().__init__()
         self.model = MolBind(cfg=cfg)
-        self.world_size = torch.cuda.device_count()
+        self.world_size = int(
+            os.environ.get(
+                "WORLD_SIZE", cfg.trainer.gpus_per_node * cfg.trainer.num_nodes
+            )
+        )
         if hasattr(cfg, "ckpt_path") and cfg.ckpt_path is not None:
             with contextlib.suppress(FileNotFoundError):
                 self.model.load_state_dict(
                     rename_keys_with_prefix(torch.load(cfg.ckpt_path)["state_dict"])
                 )
-                logger.info(f"Successfully loaded model from checkpoint: {cfg.ckpt_path}")
+                logger.info(
+                    f"Successfully loaded model from checkpoint: {cfg.ckpt_path}"
+                )
         else:
             logger.info("No checkpoint path found. Training from scratch.")
 
@@ -47,9 +54,9 @@ class MolBindModule(LightningModule):
         logger.info(f"Per device batch size: {self.per_device_batch_size}")
         logger.info(f"Loss batch size: {self.batch_size}")
 
-    def forward(self, batch: Dict) -> Dict:  # noqa: UP006
-        if isinstance(batch, tuple) and isinstance(batch[0], Batch):
-            dict_input_data = self._treat_graph_batch(batch)
+    def forward(self, batch: Union[tuple[Data], Dict]) -> Dict:  # noqa: UP006
+        if isinstance(batch, tuple) and isinstance(batch[0], Data):
+            dict_input_data = self._treat_graph_batch(batch[0])
             forward_pass = self.model(dict_input_data)
         else:
             forward_pass = self.model(batch)
@@ -69,9 +76,19 @@ class MolBindModule(LightningModule):
 
     def _multimodal_loss(self, embeddings_dict: Dict, prefix: str) -> float:  # noqa: UP006
         modality_pair = [*embeddings_dict]
-        loss = self._info_nce_loss(
+        central_to_modality_loss = self._info_nce_loss(
             embeddings_dict[modality_pair[0]], embeddings_dict[modality_pair[1]]
         )
+        if self.config.data.symmetric:
+            modality_to_central_loss = self._info_nce_loss(
+                embeddings_dict[modality_pair[1]], embeddings_dict[modality_pair[0]]
+            )
+            loss = central_to_modality_loss + modality_to_central_loss
+        else:
+            loss = central_to_modality_loss.detach().clone()
+        #  check if loss is nan
+        if torch.isnan(loss):
+            logger.error(f"Loss is nan for {prefix} batch.")
         self.log(
             f"{prefix}_loss",
             loss,
@@ -224,23 +241,23 @@ class MolBindModule(LightningModule):
                 self.log(
                     f"{prefix}_{central_modality}_{other_modality}_{metric_name}_top_{k_val}",
                     metric_to_log.compute(),
-                    batch_size=self.batch_size,
+                    batch_size=self.per_device_batch_size * self.world_size,
                     sync_dist=self.world_size > 1,
                 )
 
-    def _treat_graph_batch(self, batch: Dict) -> Dict:  # noqa: UP006
+    def _treat_graph_batch(self, batch: Data) -> Dict:  # noqa: UP006
+        # pos is only in "structure" modality and otherwise "graph"
+        modality = batch.modality[0]
         # this adjusts the shape of the central modality data to be compatible with the model
-        batch_size = len(batch[0].central_modality) # for drop_last to work
-        if not hasattr(batch[0], "input_ids"):
-            central_modality_data = batch[0].central_modality_data.reshape(
-                self.batch_size, -1
-            )
+        batch_size = len(batch.central_modality)
+        if not hasattr(batch, "input_ids"):
+            central_modality_data = batch.central_modality_data.reshape(batch_size, -1)
         else:
             central_modality_data = (
-                batch[0].input_ids.reshape(batch_size, -1),
-                batch[0].attention_mask.reshape(batch_size, -1),
+                batch.input_ids.reshape(batch_size, -1),
+                batch.attention_mask.reshape(batch_size, -1),
             )
         return {
             self.central_modality: central_modality_data,
-            "graph": batch[0],
+            modality: batch,
         }
