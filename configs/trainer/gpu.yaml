@@ -5,3 +5,5 @@ accelerator: gpu
 precision: "16-mixed"
 max_epochs: 150
 log_every_n_steps: 3
+num_nodes: 2
+gpus_per_node: 4
