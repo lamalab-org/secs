@@ -1,5 +1,5 @@
 import math  # noqa: I002
-from typing import List, Literal, Tuple  # noqa: UP035
+from typing import List, Literal, Optional, Tuple, Union  # noqa: UP035
 
 import torch
 import torch.nn as nn
@@ -12,6 +12,7 @@ from torch_geometric.nn import (
     global_max_pool,
     global_mean_pool,
 )
+from torch_geometric.typing import SparseTensor
 from torch_geometric.utils import add_self_loops
 from torch_geometric.utils.num_nodes import maybe_num_nodes
 from transformers import AutoModelForCausalLM
@@ -99,7 +100,10 @@ class FingerprintEncoder(nn.Module):
         return mu, log_var, output
 
 
-def gcn_norm(edge_index, num_nodes=None):
+def gcn_norm(
+    edge_index: Union[Tensor, Tuple[Tensor, Tensor], SparseTensor],  # noqa: UP006
+    num_nodes: Optional[int] = None,
+):
     num_nodes = maybe_num_nodes(edge_index, num_nodes)
 
     edge_weight = torch.ones((edge_index.size(1),), device=edge_index.device)

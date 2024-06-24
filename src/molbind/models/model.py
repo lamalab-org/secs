@@ -1,19 +1,17 @@
 from typing import Dict, Tuple, Union  # noqa: I002, UP035
 
-import torch
 import torch.nn as nn
 from loguru import logger
 from omegaconf import DictConfig
 from torch import Tensor
 
 from molbind.models.components.head import ProjectionHead
-from molbind.utils import select_device
 
 
 class MolBind(nn.Module):
     def __init__(self, cfg: DictConfig) -> None:
         super().__init__()
-        from molbind.data.available import AVAILABLE_ENCODERS
+        from molbind.data.available import ModalityConstants
 
         modalities = cfg.data.modalities
         logger.info(f"Modalities: {modalities}")
@@ -22,7 +20,7 @@ class MolBind(nn.Module):
 
         # Instantiate all encoders and projection heads
         self.dict_encoders = {
-            central_modality: AVAILABLE_ENCODERS[central_modality](
+            central_modality: ModalityConstants[central_modality].encoder(
                 **cfg.model.encoders[central_modality]
             )
         }
@@ -33,9 +31,9 @@ class MolBind(nn.Module):
         }
         # Add other modalities to `dict_encoders` and `dict_projection_heads`
         for modality in modalities:
-            if modality not in [*AVAILABLE_ENCODERS]:
+            if modality not in [*ModalityConstants]:
                 raise ValueError(f"Modality {modality} not supported yet.")
-            self.dict_encoders[modality] = AVAILABLE_ENCODERS[modality](
+            self.dict_encoders[modality] = ModalityConstants[modality].encoder(
                 **cfg.model.encoders[modality]
             )
             self.dict_projection_heads[modality] = ProjectionHead(
@@ -45,9 +43,6 @@ class MolBind(nn.Module):
         # convert dicts to nn.ModuleDict
         self.dict_encoders = nn.ModuleDict(self.dict_encoders)
         self.dict_projection_heads = nn.ModuleDict(self.dict_projection_heads)
-
-        # store the batch size
-        self.batch_size = cfg.data.batch_size
 
     def forward(
         self,
@@ -77,6 +72,3 @@ class MolBind(nn.Module):
         store_embeddings[self.central_modality] = central_modality_embedding_projected
         store_embeddings[modality] = modality_embedding_projected
         return store_embeddings
-
-    def load_from_checkpoint(self, path: str):
-        return torch.load(path, map_location=select_device())["state_dict"]

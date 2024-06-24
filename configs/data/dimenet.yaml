@@ -1,0 +1,2 @@
+directory_with_structures: "${paths.data_dir}/../structures"
+batch_size: 64

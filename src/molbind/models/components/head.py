@@ -11,7 +11,7 @@ ACTIVATION_RESOLVER = ClassResolver(
 class ProjectionHead(nn.Module):
     def __init__(
         self,
-        dims,
+        dims: List[int],  # noqa: UP006
         activation: Union[str, List[str]] = "leakyrelu",  # noqa: UP006
         batch_norm: bool = False,
     ) -> None:
