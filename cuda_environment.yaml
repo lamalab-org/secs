@@ -12,7 +12,11 @@ dependencies:
   - pip
   - chromadb
   - pip:
-    - "--editable=git+https://github.com/hyperopt/hyperopt-sklearn"
-    - --extra-index-url https://download.pytorch.org/whl/cu117
-    - torch==2.0.0+cu117
-    - --editable "."
+      -  --find-links https://download.pytorch.org/whl/torch_stable.html
+      - torch==2.2.0+cu121
+      - -f https://data.pyg.org/whl/torch-2.2.0+cu121.html
+      - torch_geometric
+      - torch_cluster==1.6.3+pt22cu121
+      - torch_scatter==2.1.2+pt22cu121
+      - torch_sparse==0.6.18+pt22cu121
+      - --editable "."
