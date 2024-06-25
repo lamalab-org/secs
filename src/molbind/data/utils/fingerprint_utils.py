@@ -44,10 +44,19 @@ def compute_morgan_fingerprints(
 
 def compute_fragprint(smiles: str) -> List[float]:  # noqa: UP006
     X = compute_morgan_fingerprints([smiles])
-
     fragments = {d[0]: d[1] for d in Descriptors.descList[115:]}
     X1 = np.zeros((1, len(fragments)))
     mol = MolFromSmiles(smiles)
     features = [fragments[d](mol) for d in fragments]
     X1[0, :] = features
-    return np.concatenate((X, X1), axis=1).tolist()
+    fingerprint = np.concatenate((X, X1), axis=1)
+    return fingerprint.tolist()[0]
+
+
+def fps(ls):
+    if ls[1] is None:
+        print("None")
+        return compute_fragprint(ls[0])
+    else:
+        print(ls[1])
+        return ls[1]

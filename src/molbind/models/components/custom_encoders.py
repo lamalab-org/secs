@@ -6,6 +6,7 @@ from typing import (  # noqa: I002, UP035
 )
 
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 from loguru import logger
 from torch import Tensor
@@ -311,6 +312,60 @@ class CustomStructureEncoder(StructureEncoder):
                 idx_kj=idx_kj,
                 idx_ji=idx_ji,
             )
-            output_block_ = output_block(x=x, rbf=rbf, i=i, num_nodes=pos.size(0))
-            P += output_block_
+            P += output_block(x=x, rbf=rbf, i=i, num_nodes=pos.size(0))
         return scatter(P, batch, dim=0, reduce="sum")
+
+
+class ImageEncoder(nn.Module):
+    def __init__(self, ckpt_path: str) -> None:
+        super().__init__()
+        self.cfg = [
+            [128, 7, 3, 4],
+            [256, 5, 1, 1],
+            [384, 5, 1, 1],
+            "M",
+            [384, 3, 1, 1],
+            [384, 3, 1, 1],
+            "M",
+            [512, 3, 1, 1],
+            [512, 3, 1, 1],
+            [512, 3, 1, 1],
+            "M",
+        ]
+        self.model = self.make_layers()
+        if ckpt_path is not None:
+            self.model.load_state_dict(torch.load(ckpt_path), strict=True)
+
+    def make_layers(self, batch_norm: bool = False) -> nn.Sequential:
+        """
+        :param batch_norm: boolean of batch normalization should be used in-between conv2d and relu activation.
+                        Defaults to False
+        :return: torch.nn.Sequential module as feature-extractor
+        """
+        layers: List[nn.Module] = []  # noqa: UP006
+
+        in_channels = 1
+        for v in self.cfg:
+            if v == "A":
+                layers += [nn.AvgPool2d(kernel_size=2, stride=2)]
+            else:
+                if v == "M":
+                    layers += [nn.MaxPool2d(kernel_size=2, stride=2)]
+                else:
+                    units, kern_size, stride, padding = v
+                    conv2d = nn.Conv2d(
+                        in_channels,
+                        units,
+                        kernel_size=kern_size,
+                        stride=stride,
+                        padding=padding,
+                    )
+                    if batch_norm:
+                        layers += [conv2d, nn.BatchNorm2d(units), nn.ReLU(inplace=True)]
+                    else:
+                        layers += [conv2d, nn.ReLU(inplace=True)]
+                    in_channels = units
+        return nn.Sequential(*layers)
+
+    def forward(self, x: Tensor) -> Tensor:
+        return self.model(x)
