@@ -51,12 +51,3 @@ def compute_fragprint(smiles: str) -> List[float]:  # noqa: UP006
     X1[0, :] = features
     fingerprint = np.concatenate((X, X1), axis=1)
     return fingerprint.tolist()[0]
-
-
-def fps(ls):
-    if ls[1] is None:
-        print("None")
-        return compute_fragprint(ls[0])
-    else:
-        print(ls[1])
-        return ls[1]
