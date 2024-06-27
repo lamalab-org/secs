@@ -148,6 +148,8 @@ experiments/wandb/*
 experiments/outputs/*
 experiments/molbind/*
 experiments/lightning_logs/*
+experiments/HUBioDataLab/*
+experiments/seyonec/*
 notebooks/*.csv
 notebooks/*.json
 notebooks/*.pkl
