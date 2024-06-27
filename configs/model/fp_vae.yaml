@@ -1,6 +1,6 @@
-input_dims: [2048, 1024, 768]
+input_dims: [2143, 1024, 768]
 
-output_dims: [768, 1024, 2048]
+output_dims: [768, 1024, 2143]
 
 latent_dim: 512
 

@@ -332,9 +332,11 @@ class ImageEncoder(nn.Module):
             [512, 3, 1, 1],
             "M",
         ]
-        self.model = self.make_layers()
+        self.features = self.make_layers()
+        self.pool = nn.AdaptiveAvgPool2d((1, 1))
+        self.flatten = nn.Flatten()
         if ckpt_path is not None:
-            self.model.load_state_dict(torch.load(ckpt_path), strict=True)
+            self.model.load_state_dict(torch.load(ckpt_path), strict=False)
 
     def make_layers(self, batch_norm: bool = False) -> nn.Sequential:
         """
@@ -354,8 +356,8 @@ class ImageEncoder(nn.Module):
                 else:
                     units, kern_size, stride, padding = v
                     conv2d = nn.Conv2d(
-                        in_channels,
-                        units,
+                        in_channels=in_channels,
+                        out_channels=units,
                         kernel_size=kern_size,
                         stride=stride,
                         padding=padding,
@@ -367,5 +369,6 @@ class ImageEncoder(nn.Module):
                     in_channels = units
         return nn.Sequential(*layers)
 
-    def forward(self, x: Tensor) -> Tensor:
-        return self.model(x)
+    def forward(self, x: tuple[Tensor, Tensor]) -> Tensor:
+        x = self.features(x)
+        return self.flatten(self.pool(x))

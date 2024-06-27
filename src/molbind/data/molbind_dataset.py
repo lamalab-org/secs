@@ -146,7 +146,7 @@ class MolBindDataset:
         image_data = self.data[[self.central_modality, modality]].dropna()
         # perform image operations
         return ImageDataset(
-            image_data=image_data["image"].to_list(),
+            image_files=image_data["image"].to_list(),
             central_modality=self.central_modality,
             central_modality_data=self._handle_central_modality_data(image_data),
         )

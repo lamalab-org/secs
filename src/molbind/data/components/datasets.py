@@ -1,23 +1,19 @@
-from typing import List, Literal, Optional, Tuple, Union  # noqa: UP035, I002
+import random  # noqa: I002
+from typing import List, Literal, Optional, Tuple, Union  # noqa: UP035
 
+import numpy as np
 import pandas as pd
+import torch
+from PIL import Image, ImageEnhance, ImageOps
 from torch import Tensor
 from torch.utils.data import Dataset
 from torch_geometric.data import Data
+from torchvision import transforms
 
 from molbind.data.utils.graph_utils import (
     get_item_for_dimenet,
     smiles_to_graph_without_augment,
 )
-import torch
-from torchvision import transforms
-
-from typing import Optional
-import random
-import numpy as np
-from PIL import Image, ImageOps, ImageEnhance
-
-from rdkit import Chem
 
 
 def _fingerprint(fingerprint: List[int]) -> Tensor:  # noqa: UP006
@@ -251,7 +247,7 @@ class FingerprintVAEDataset(Dataset):
 
 
 class ImageDataset(Dataset):
-    def __init__(self, image_files: List[str], **kwargs): # noqa: UP006
+    def __init__(self, image_files: List[str], **kwargs):  # noqa: UP006
         """Dataset for images.
 
         Args:
@@ -260,36 +256,21 @@ class ImageDataset(Dataset):
         """
         from molbind.data.available import (
             NonStringModalities,
-            StringModalities,
         )
 
         self.image_files = image_files
         self.central_modality = kwargs["central_modality"]
-        self.other_modality = "image"
+        self.other_modality = NonStringModalities.IMAGE
         self.central_modality_data = kwargs["central_modality_data"]
-        self.central_modality_data_type = kwargs["central_modality_data_type"]
-        # modality handler functions if a modality is the central modality
-        self.central_modality_handlers = {
-            StringModalities.SMILES: _string,
-            StringModalities.SELFIES: _string,
-            StringModalities.IUPAC_NAME: _string,
-            StringModalities.IR: _string,
-            StringModalities.NMR: _string,
-            StringModalities.MASS: _string,
-            NonStringModalities.FINGERPRINT: _fingerprint,
-        }
 
     def __len__(self):
         return len(self.image_files)
 
     def __getitem__(self, idx: int) -> dict:
-        image_as_tensor = self.read_image_to_tensor(self.image_files[idx], repeats=50)
-        image_as_repeats_median = torch.median(image_as_tensor, dim=0)
+        image_as_tensor = self.read_image_to_tensor(self.image_files[idx], repeats=1)
         return {
-            self.central_modality: self.central_modality_handlers[
-                self.central_modality
-            ](self.central_modality_data[idx]),
-            self.other_modality: image_as_repeats_median,
+            self.central_modality: [i[idx] for i in self.central_modality_data],
+            self.other_modality: image_as_tensor.mean(dim=0),
         }
 
     @classmethod
@@ -321,7 +302,7 @@ class ImageDataset(Dataset):
     def transform_image(cls, image: Image):
         image = cls.fit_image(image)
         img_PIL = transforms.RandomRotation(
-            (-15, 15), resample=3, expand=True, center=None, fill=255
+            (-15, 15), interpolation=3, expand=True, center=None, fill=255
         )(image)
         img_PIL = transforms.ColorJitter(
             brightness=[0.75, 2.0], contrast=0, saturation=0, hue=0
@@ -335,7 +316,7 @@ class ImageDataset(Dataset):
             ]
         )
         img_PIL = transforms.RandomAffine(
-            0, translate=None, scale=None, shear=shear, resample=3, fillcolor=255
+            0, translate=None, scale=None, shear=shear, interpolation=3, fill=255
         )(img_PIL)
         img_PIL = ImageEnhance.Contrast(ImageOps.autocontrast(img_PIL)).enhance(2.0)
         img_PIL = transforms.Resize((224, 224), interpolation=3)(img_PIL)
@@ -347,9 +328,7 @@ class ImageDataset(Dataset):
         if not extension:
             return "Image must be jpg or png format!"
         image = self.read_imagefile(filepath)
-        images = torch.cat(
+        return torch.cat(
             [torch.unsqueeze(self.transform_image(image), 0) for _ in range(repeats)],
             dim=0,
         )
-        images = images.to(self.device)
-        return images
