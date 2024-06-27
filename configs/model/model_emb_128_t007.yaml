@@ -1,0 +1,78 @@
+# model architecture
+encoders:
+  embedding_size: 1024
+  smiles:
+    pretrained: True
+    freeze_encoder: False
+  selfies:
+    pretrained: True
+    freeze_encoder: True
+  graph:
+    ckpt_path: "${paths.pretrained_models_dir}/graph/molclr.ckpt"
+    drop_ratio: 0
+    num_layer: 5
+    feat_dim: 512
+    pool: "mean"
+    emb_dim: 300
+    # freeze_encoder: True
+  fingerprint:
+    ckpt_path: "${paths.pretrained_models_dir}/fingerprint/morgan_frag_vae.ckpt"
+    input_dims: [2143, 1024, 768]
+    output_dims: [768, 1024, 2143]
+    latent_dim: 512
+    # freeze_encoder: True
+  structure:
+    ckpt_path: "${paths.pretrained_models_dir}/structure/dimenet.ckpt"
+    hidden_channels: 128
+    out_channels: 1
+    num_blocks: 6
+    num_bilinear: 8
+    num_spherical: 7
+    num_radial: 6
+    cutoff: 5.0
+    envelope_exponent: 5
+    num_before_skip: 1
+    num_after_skip: 2
+    num_output_layers: 3
+    # freeze_encoder: True
+  image:
+    ckpt_path: "${paths.pretrained_models_dir}/image/img2mol.ckpt"
+    # freeze_encoder: True
+
+projection_heads:
+  smiles:
+    dims: [768, 256]
+    activation: LeakyReLU
+    batch_norm: True
+  selfies: 
+    dims: [768, 256]
+    activation: LeakyReLU
+    batch_norm: True
+  graph:
+    dims: [256, 256]
+    activation: LeakyReLU
+    batch_norm: True
+  fingerprint:
+    dims: [768, 256]
+    activation: LeakyReLU
+    batch_norm: True
+  structure:
+    dims: [128, 256]
+    activation: LeakyReLU
+    batch_norm: True
+  image:
+    dims: [512, 256]
+    activation: LeakyReLU
+    batch_norm: True
+
+
+optimizer:
+  lr: 0.0001
+  weight_decay: 0.0001
+
+loss:
+  temperature: 0.07
+  symmetric: True
+    
+# compile model for faster training with pytorch 2.0
+compile: false

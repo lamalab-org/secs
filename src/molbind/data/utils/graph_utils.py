@@ -140,44 +140,6 @@ def smiles_to_graph(smiles: str) -> Tuple[Data, Data]:  # noqa: UP006
     return data_i, data_j
 
 
-def smiles_to_graph_without_augment(smiles: str) -> Data:
-    mol = Chem.MolFromSmiles(smiles)
-    type_idx = []
-    chirality_idx = []
-    atomic_number = []
-
-    for atom in mol.GetAtoms():
-        type_idx.append(ATOM_LIST.index(atom.GetAtomicNum()))
-        chirality_idx.append(CHIRALITY_LIST.index(atom.GetChiralTag()))
-        atomic_number.append(atom.GetAtomicNum())
-
-    x1 = torch.tensor(type_idx, dtype=torch.long).view(-1, 1)
-    x2 = torch.tensor(chirality_idx, dtype=torch.long).view(-1, 1)
-    x = torch.cat([x1, x2], dim=-1)
-
-    row, col, edge_feat = [], [], []
-    for bond in mol.GetBonds():
-        start, end = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
-        row += [start, end]
-        col += [end, start]
-        edge_feat.append(
-            [
-                BOND_LIST.index(bond.GetBondType()),
-                BONDDIR_LIST.index(bond.GetBondDir()),
-            ]
-        )
-        edge_feat.append(
-            [
-                BOND_LIST.index(bond.GetBondType()),
-                BONDDIR_LIST.index(bond.GetBondDir()),
-            ]
-        )
-
-    edge_index = torch.tensor([row, col], dtype=torch.long)
-    edge_attr = torch.tensor(np.array(edge_feat), dtype=torch.long)
-    return Data(x=x, edge_index=edge_index, edge_attr=edge_attr)
-
-
 class MoleculeDataset(Dataset):
     def __init__(self, data_path: str) -> None:
         super().__init__()

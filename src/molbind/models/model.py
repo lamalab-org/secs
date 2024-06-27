@@ -14,17 +14,17 @@ class MolBind(nn.Module):
         from molbind.data.available import ModalityConstants
 
         modalities = cfg.data.modalities
-        logger.info(f"Modalities: {modalities}")
         central_modality = cfg.data.central_modality
         self.central_modality = central_modality
+        logger.info(f"Non-central modalities: {modalities}")
 
         # Instantiate all encoders and projection heads
-        self.dict_encoders = {
+        dict_encoders = {
             central_modality: ModalityConstants[central_modality].encoder(
                 **cfg.model.encoders[central_modality]
             )
         }
-        self.dict_projection_heads = {
+        dict_projection_heads = {
             central_modality: ProjectionHead(
                 **cfg.model.projection_heads[central_modality]
             )
@@ -33,16 +33,16 @@ class MolBind(nn.Module):
         for modality in modalities:
             if modality not in [*vars(ModalityConstants)]:
                 raise ValueError(f"Modality {modality} not supported yet.")
-            self.dict_encoders[modality] = ModalityConstants[modality].encoder(
+            dict_encoders[modality] = ModalityConstants[modality].encoder(
                 **cfg.model.encoders[modality]
             )
-            self.dict_projection_heads[modality] = ProjectionHead(
+            dict_projection_heads[modality] = ProjectionHead(
                 **cfg.model.projection_heads[modality]
             )
 
         # convert dicts to nn.ModuleDict
-        self.dict_encoders = nn.ModuleDict(self.dict_encoders)
-        self.dict_projection_heads = nn.ModuleDict(self.dict_projection_heads)
+        self.dict_encoders = nn.ModuleDict(dict_encoders)
+        self.dict_projection_heads = nn.ModuleDict(dict_projection_heads)
 
     def forward(
         self,

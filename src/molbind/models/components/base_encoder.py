@@ -1,6 +1,6 @@
 import math  # noqa: I002
 from typing import List, Literal, Optional, Tuple, Union  # noqa: UP035
-
+from omegaconf import DictConfig
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -142,7 +142,7 @@ class GCNConv(MessagePassing):
         self.weight.data.uniform_(-stdv, stdv)
         self.bias.data.fill_(0)
 
-    def forward(self, x, edge_index, edge_attr):
+    def forward(self, x: Tensor, edge_index: Tensor, edge_attr: Tensor) -> Tensor:
         # add self loops in the edge space
         edge_index = add_self_loops(edge_index, num_nodes=x.size(0))[0]
 

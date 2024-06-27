@@ -20,6 +20,7 @@ load_dotenv()
 
 @hydra.main(version_base="1.3", config_path="../configs")
 def main(cfg: DictConfig):
+
     # load the dataset
     with open(cfg.data.dataset_path, "rb") as f:  # noqa: PTH123
         data = pkl.load(f)
@@ -27,6 +28,8 @@ def main(cfg: DictConfig):
     data = data.sample(frac=cfg.data.fraction_data, random_state=42)
     fingerprints = data["fingerprint"].to_list()
     fingerprints = np.vstack(fingerprints).astype(np.float32)
+    # set wandb to offline
+    os.environ["WANDB_MODE"] = "offline"
 
     wandb_logger = L.loggers.WandbLogger(
         project=os.getenv("WANDB_PROJECT"),

@@ -15,6 +15,7 @@ from molbind.data.available import (
 from molbind.data.components.datasets import (
     FingerprintMolBindDataset,
     GraphDataset,
+    ImageDataset,
     StringDataset,
     StructureDataset,
 )
@@ -44,12 +45,37 @@ class MolBindDataset:
             StringModalities.SELFIES: init_str_fn,
             StringModalities.IUPAC_NAME: init_str_fn,
             StringModalities.DESCRIPTION: init_str_fn,
-            StringModalities.IR: init_str_fn,
-            StringModalities.NMR: init_str_fn,
-            StringModalities.MASS: init_str_fn,
             NonStringModalities.STRUCTURE: lambda x: x,
             NonStringModalities.GRAPH: lambda x: x,
             NonStringModalities.FINGERPRINT: lambda x: x,
+            NonStringModalities.IMAGE: lambda x: x,
+        }
+
+        self.dataset_builders = {
+            StringModalities.SMILES: partial(
+                self.build_string_dataset,
+                modality=StringModalities.SMILES,
+                context_length=kwargs.get("context_length", 256),
+            ),
+            StringModalities.SELFIES: partial(
+                self.build_string_dataset,
+                modality=StringModalities.SELFIES,
+                context_length=kwargs.get("context_length", 256),
+            ),
+            StringModalities.IUPAC_NAME: partial(
+                self.build_string_dataset,
+                modality=StringModalities.IUPAC_NAME,
+                context_length=kwargs.get("context_length", 256),
+            ),
+            StringModalities.DESCRIPTION: partial(
+                self.build_string_dataset,
+                modality=StringModalities.DESCRIPTION,
+                context_length=kwargs.get("context_length", 256),
+            ),
+            NonStringModalities.GRAPH: self.build_graph_dataset,
+            NonStringModalities.STRUCTURE: self.build_3D_coordinates_dataset,
+            NonStringModalities.FINGERPRINT: self.build_fp_dataset,
+            NonStringModalities.IMAGE: self.build_image_dataset,
         }
         # central modality data
         self.central_modality_data = self.central_modality_handlers[central_modality](
@@ -115,28 +141,23 @@ class MolBindDataset:
             central_modality_data=self._handle_central_modality_data(fp_data),
         )
 
+    def build_image_dataset(self) -> ImageDataset:
+        modality = "image"
+        image_data = self.data[[self.central_modality, modality]].dropna()
+        # perform image operations
+        return ImageDataset(
+            image_files=image_data["image"].to_list(),
+            central_modality=self.central_modality,
+            central_modality_data=self._handle_central_modality_data(image_data),
+        )
+
     def build_datasets_for_modalities(
         self,
     ) -> Dict[str, Dataset]:  # noqa: UP006
         datasets = {}
         for modality in self.other_modalities:
             if modality in self.data.columns:
-                if modality == NonStringModalities.GRAPH:
-                    dataset = self.build_graph_dataset()
-                elif modality in [
-                    StringModalities.SMILES,
-                    StringModalities.SELFIES,
-                    StringModalities.IUPAC_NAME,
-                    StringModalities.DESCRIPTION,
-                    StringModalities.IR,
-                    StringModalities.NMR,
-                    StringModalities.MASS,
-                ]:
-                    dataset = self.build_string_dataset(modality)
-                elif modality == NonStringModalities.FINGERPRINT:
-                    dataset = self.build_fp_dataset()
-                elif modality == NonStringModalities.STRUCTURE:
-                    dataset = self.build_3D_coordinates_dataset()
+                dataset = self.dataset_builders[modality]()
                 datasets[modality] = dataset
         # CombinedLoader does not work with DDPSampler directly
         # Thus this ^ is added to the dataloaders in the datamodule

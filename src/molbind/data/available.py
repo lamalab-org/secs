@@ -1,10 +1,12 @@
 from enum import Enum, StrEnum  # noqa: I002
 
 from networkx import Graph
+from numpy import ndarray
 
 from molbind.data.components.datasets import (
     FingerprintMolBindDataset,
     GraphDataset,
+    ImageDataset,
     StringDataset,
     StructureDataset,
 )
@@ -18,6 +20,7 @@ from molbind.models.components.custom_encoders import (
     CustomGraphEncoder,
     CustomStructureEncoder,
     DescriptionEncoder,
+    ImageEncoder,
     IREncoder,
     IUPACNameEncoder,
     NMREncoder,
@@ -37,6 +40,7 @@ class StringModalities(StrEnum):
 
 
 class NonStringModalities(StrEnum):
+    IMAGE = "image"
     STRUCTURE = "structure"
     GRAPH = "graph"
     FINGERPRINT = "fingerprint"
@@ -46,6 +50,7 @@ class ModalityConstants(Enum):
     """
     ModalityConstants[modality]: (data_type, dataset, encoder, tokenizer)
     """
+
     description = (str, StringDataset, DescriptionEncoder, DESCRIPTION_TOKENIZER)
     fingerprint = (list, FingerprintMolBindDataset, CustomFingerprintEncoder, None)
     ir = (str, StringDataset, IREncoder, None)
@@ -55,6 +60,7 @@ class ModalityConstants(Enum):
     selfies = (str, StringDataset, SelfiesEncoder, SELFIES_TOKENIZER)
     graph = (Graph, GraphDataset, CustomGraphEncoder, None)
     structure = (Graph, StructureDataset, CustomStructureEncoder, None)
+    image = (ndarray, ImageDataset, ImageEncoder, None)
 
     @property
     def data_type(self):

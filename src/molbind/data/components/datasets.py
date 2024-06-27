@@ -1,9 +1,14 @@
-from typing import List, Literal, Optional, Tuple, Union  # noqa: UP035, I002
+import random  # noqa: I002
+from typing import List, Literal, Optional, Tuple, Union  # noqa: UP035
 
+import numpy as np
 import pandas as pd
+import torch
+from PIL import Image, ImageEnhance, ImageOps
 from torch import Tensor
 from torch.utils.data import Dataset
 from torch_geometric.data import Data
+from torchvision import transforms
 
 from molbind.data.utils.graph_utils import (
     get_item_for_dimenet,
@@ -239,3 +244,91 @@ class FingerprintVAEDataset(Dataset):
 
     def __getitem__(self, idx):
         return self.fingerprints[idx]
+
+
+class ImageDataset(Dataset):
+    def __init__(self, image_files: List[str], **kwargs):  # noqa: UP006
+        """Dataset for images.
+
+        Args:
+            image_files (List[str]): list of image file paths
+            labels (List[int]): list of SMILES labels
+        """
+        from molbind.data.available import (
+            NonStringModalities,
+        )
+
+        self.image_files = image_files
+        self.central_modality = kwargs["central_modality"]
+        self.other_modality = NonStringModalities.IMAGE
+        self.central_modality_data = kwargs["central_modality_data"]
+
+    def __len__(self):
+        return len(self.image_files)
+
+    def __getitem__(self, idx: int) -> dict:
+        image_as_tensor = self.read_image_to_tensor(self.image_files[idx], repeats=1)
+        return {
+            self.central_modality: [i[idx] for i in self.central_modality_data],
+            self.other_modality: image_as_tensor.mean(dim=0),
+        }
+
+    @classmethod
+    def read_imagefile(cls, filepath: str) -> Image.Image:
+        img = Image.open(filepath, "r")
+
+        if img.mode == "RGBA":
+            bg = Image.new("RGB", img.size, (255, 255, 255))
+            # Paste image to background image
+            bg.paste(img, (0, 0), img)
+            return bg.convert("L")
+        else:
+            return img.convert("L")
+
+    @classmethod
+    def fit_image(cls, img: Image):
+        old_size = img.size
+        desired_size = 224
+        ratio = float(desired_size) / max(old_size)
+        new_size = tuple([int(x * ratio) for x in old_size])
+        img = img.resize(new_size, Image.BICUBIC)
+        new_img = Image.new("L", (desired_size, desired_size), "white")
+        new_img.paste(
+            img, ((desired_size - new_size[0]) // 2, (desired_size - new_size[1]) // 2)
+        )
+        return ImageOps.expand(new_img, int(np.random.randint(5, 25, size=1)), "white")  # noqa: NPY002
+
+    @classmethod
+    def transform_image(cls, image: Image):
+        image = cls.fit_image(image)
+        img_PIL = transforms.RandomRotation(
+            (-15, 15), interpolation=3, expand=True, center=None, fill=255
+        )(image)
+        img_PIL = transforms.ColorJitter(
+            brightness=[0.75, 2.0], contrast=0, saturation=0, hue=0
+        )(img_PIL)
+        shear_value = np.random.uniform(0.1, 7.0)  # noqa: NPY002
+        shear = random.choice(
+            [
+                [0, 0, -shear_value, shear_value],
+                [-shear_value, shear_value, 0, 0],
+                [-shear_value, shear_value, -shear_value, shear_value],
+            ]
+        )
+        img_PIL = transforms.RandomAffine(
+            0, translate=None, scale=None, shear=shear, interpolation=3, fill=255
+        )(img_PIL)
+        img_PIL = ImageEnhance.Contrast(ImageOps.autocontrast(img_PIL)).enhance(2.0)
+        img_PIL = transforms.Resize((224, 224), interpolation=3)(img_PIL)
+        img_PIL = ImageOps.autocontrast(img_PIL)
+        return transforms.ToTensor()(img_PIL)
+
+    def read_image_to_tensor(self, filepath: str, repeats: int = 50):
+        extension = filepath.split(".")[-1] in ("jpg", "jpeg", "png")
+        if not extension:
+            return "Image must be jpg or png format!"
+        image = self.read_imagefile(filepath)
+        return torch.cat(
+            [torch.unsqueeze(self.transform_image(image), 0) for _ in range(repeats)],
+            dim=0,
+        )

@@ -27,6 +27,11 @@ TRAIN_DATE = datetime.datetime.now().strftime("%Y%m%d_%H%M")
 
 
 def train_molbind(config: DictConfig):
+    # set wandb mode to offline if no WANDB_API_KEY is set
+    if not os.getenv("WANDB_API_KEY"):
+        os.environ["WANDB_MODE"] = "offline"
+    # set PYTORCH_ALLOC_CONF to avoid memory fragmentation
+    os.environ['PYTORCH_CUDA_ALLOC_CONF']='expandable_segments:True'
     wandb_logger = L.loggers.WandbLogger(
         project=os.getenv("WANDB_PROJECT"),
         entity=os.getenv("WANDB_ENTITY"),
