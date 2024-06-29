@@ -1,6 +1,5 @@
 # model architecture
 encoders:
-  embedding_size: 1024
   smiles:
     pretrained: True
     freeze_encoder: False
@@ -8,7 +7,7 @@ encoders:
     pretrained: True
     freeze_encoder: True
   graph:
-    ckpt_path: "${paths.pretrained_models_dir}/graph/molclr.ckpt"
+    ckpt_path: "${paths.pretrained_models_dir}/graph/model.pth"
     drop_ratio: 0
     num_layer: 5
     feat_dim: 512
@@ -41,27 +40,27 @@ encoders:
 
 projection_heads:
   smiles:
-    dims: [768, 256]
+    dims: [768, "${model.embedding_size}"]
     activation: LeakyReLU
     batch_norm: True
   selfies: 
-    dims: [768, 256]
+    dims: [768, "${model.embedding_size}"]
     activation: LeakyReLU
     batch_norm: True
   graph:
-    dims: [256, 256]
+    dims: [256, "${model.embedding_size}"]
     activation: LeakyReLU
     batch_norm: True
   fingerprint:
-    dims: [768, 256]
+    dims: [768, "${model.embedding_size}"]
     activation: LeakyReLU
     batch_norm: True
   structure:
-    dims: [128, 256]
+    dims: [128, "${model.embedding_size}"]
     activation: LeakyReLU
     batch_norm: True
   image:
-    dims: [512, 256]
+    dims: [512, "${model.embedding_size}"]
     activation: LeakyReLU
     batch_norm: True
 
@@ -76,3 +75,4 @@ loss:
     
 # compile model for faster training with pytorch 2.0
 compile: false
+embedding_size: 64
