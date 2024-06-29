@@ -1,4 +1,5 @@
-from typing import (  # noqa: I002, UP035
+from pathlib import Path  # noqa: I002
+from typing import (  # noqa: UP035
     Callable,
     List,
     Optional,
@@ -113,11 +114,24 @@ class CustomGraphEncoder(GraphEncoder):
             emb_dim=emb_dim,
         )
         # load weights from the pre-trained model
-        self.load_state_dict(
-            rename_keys_with_prefix(
-                torch.load(ckpt_path, map_location=select_device())["state_dict"]
+        # check format of the ckpt file
+        suffix = Path(ckpt_path).suffix
+        if suffix == ".pth":
+            logger.info("Loading model from .pth file")
+            self.load_state_dict(
+                rename_keys_with_prefix(
+                    torch.load(ckpt_path, map_location=select_device())
+                ),
+                strict=True
             )
-        )
+        elif suffix == ".ckpt":
+            logger.info("Loading model from .ckpt file")
+            self.load_state_dict(
+                rename_keys_with_prefix(
+                    torch.load(ckpt_path, map_location=select_device())["state_dict"]
+                ),
+                strict=True
+            )
         self.drop_ratio = drop_ratio
 
     def forward(self, data: Data) -> tuple:
@@ -336,7 +350,7 @@ class ImageEncoder(nn.Module):
         self.pool = nn.AdaptiveAvgPool2d((1, 1))
         self.flatten = nn.Flatten()
         if ckpt_path is not None:
-            self.model.load_state_dict(torch.load(ckpt_path), strict=False)
+            self.load_state_dict(torch.load(ckpt_path)["state_dict"], strict=False)
 
     def make_layers(self, batch_norm: bool = False) -> nn.Sequential:
         """
