@@ -1,6 +1,6 @@
 import math  # noqa: I002
 from typing import List, Literal, Optional, Tuple, Union  # noqa: UP035
-from omegaconf import DictConfig
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F

@@ -3,6 +3,7 @@ from typing import (  # noqa: UP035
     Callable,
     List,
     Optional,
+    Tuple,
     Union,
 )
 
@@ -20,7 +21,7 @@ from torch_geometric.nn.models.dimenet import (
 )
 from torch_geometric.nn.resolver import activation_resolver
 from torch_geometric.utils import scatter
-from transformers import AutoConfig, RobertaForCausalLM
+from transformers import AutoConfig, AutoModel, RobertaForCausalLM
 
 from molbind.models.components.base_encoder import (
     BaseModalityEncoder,
@@ -35,8 +36,24 @@ class SmilesEncoder(BaseModalityEncoder):
         self, freeze_encoder: bool = False, pretrained: bool = True, **kwargs
     ) -> None:
         super().__init__(
-            "seyonec/ChemBERTa-zinc-base-v1", freeze_encoder, pretrained, **kwargs
+            "ibm/MoLFormer-XL-both-10pct", freeze_encoder, pretrained, **kwargs
         )
+
+    def _initialize_encoder(self):
+        self.encoder = AutoModel.from_pretrained(
+            self.model_name, trust_remote_code=True
+        )
+        if self.freeze_encoder:
+            for param in self.encoder.parameters():
+                param.requires_grad = False
+
+    def forward(self, x: Tuple[Tensor, Tensor]) -> Tensor:  # noqa: UP006
+        token_ids, attention_mask = x
+        output = self.encoder(
+            input_ids=token_ids,
+            attention_mask=attention_mask,
+        )
+        return output.pooler_output
 
 
 class SelfiesEncoder(BaseModalityEncoder):
@@ -122,7 +139,7 @@ class CustomGraphEncoder(GraphEncoder):
                 rename_keys_with_prefix(
                     torch.load(ckpt_path, map_location=select_device())
                 ),
-                strict=True
+                strict=True,
             )
         elif suffix == ".ckpt":
             logger.info("Loading model from .ckpt file")
@@ -130,7 +147,7 @@ class CustomGraphEncoder(GraphEncoder):
                 rename_keys_with_prefix(
                     torch.load(ckpt_path, map_location=select_device())["state_dict"]
                 ),
-                strict=True
+                strict=True,
             )
         self.drop_ratio = drop_ratio
 

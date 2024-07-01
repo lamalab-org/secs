@@ -13,28 +13,27 @@ class ProjectionHead(nn.Module):
         self,
         dims: List[int],  # noqa: UP006
         activation: Union[str, List[str]] = "leakyrelu",  # noqa: UP006
-        batch_norm: bool = False,
     ) -> None:
         super().__init__()
         # build projection head
-        self.projection_head = self._build_projection_head(dims, activation, batch_norm)
+        self.projection_head = self._build_projection_head(
+            dims=dims, activation=activation
+        )
 
     def _build_projection_head(
         self,
         dims: List[int],  # noqa: UP006
         activation: Union[str, List[str]],  # noqa: UP006
-        batch_norm: bool = False,
     ) -> nn.Sequential:
         # Build projection head dynamically based on the length of dims
         layers = []
         for i in range(len(dims) - 1):
+            if i == 0:
+                layers.append(nn.LayerNorm(dims[i]))
             layers.append(nn.Linear(dims[i], dims[i + 1]))
-            # Optional: add batch normalization
-            if batch_norm:
-                layers.append(nn.BatchNorm1d(dims[i + 1]))
-            # Apply activation function
-            layers.append(self._get_activation(activation))
-
+            # Apply activation function if not the last layer
+            if i < len(dims) - 2:
+                layers.append(self._get_activation(activation))
         return nn.Sequential(*layers)
 
     def _get_activation(

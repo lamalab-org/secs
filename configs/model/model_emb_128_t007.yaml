@@ -38,32 +38,26 @@ encoders:
     ckpt_path: "${paths.pretrained_models_dir}/image/img2mol.ckpt"
     # freeze_encoder: True
 
+embedding_size: 128
 projection_heads:
   smiles:
     dims: [768, "${model.embedding_size}"]
     activation: LeakyReLU
-    batch_norm: True
   selfies: 
     dims: [768, "${model.embedding_size}"]
     activation: LeakyReLU
-    batch_norm: True
   graph:
     dims: [256, "${model.embedding_size}"]
     activation: LeakyReLU
-    batch_norm: True
   fingerprint:
     dims: [768, "${model.embedding_size}"]
     activation: LeakyReLU
-    batch_norm: True
   structure:
     dims: [128, "${model.embedding_size}"]
     activation: LeakyReLU
-    batch_norm: True
   image:
     dims: [512, "${model.embedding_size}"]
     activation: LeakyReLU
-    batch_norm: True
-
 
 optimizer:
   lr: 0.0001
@@ -75,4 +69,3 @@ loss:
     
 # compile model for faster training with pytorch 2.0
 compile: false
-embedding_size: 64
