@@ -148,6 +148,7 @@ experiments/wandb/*
 experiments/outputs/*
 experiments/molbind/*
 experiments/lightning_logs/*
+experiments/checkpoints/
 experiments/HUBioDataLab/*
 experiments/seyonec/*
 notebooks/*.csv

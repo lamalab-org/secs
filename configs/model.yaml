@@ -9,9 +9,7 @@ defaults:
   - logger: wandb
   - paths: default
   - trainer: gpu
-  # - callbacks: default
-  # - extras: default
-  # - hydra: default
+  - callbacks: default
 
   # experiment configs allow for version control of specific hyperparameters
   # e.g. best hyperparameters for given model and datamodule
@@ -29,7 +27,7 @@ defaults:
 # task name, determines output directory path
 task_name: "train"
 task_seed: 42
-run_id: model_6mods_128_emb_lin
+run_id: modalities_6_hidden_${model.embedding_size}
 
 # tags to help you identify your experiments
 # you can overwrite this in experiment configs

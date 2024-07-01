@@ -11,6 +11,8 @@ from dotenv import load_dotenv
 from loguru import logger
 from omegaconf import DictConfig
 from pytorch_lightning import seed_everything
+from pytorch_lightning.callbacks.early_stopping import EarlyStopping
+from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from pytorch_lightning.plugins.environments import SLURMEnvironment
 from pytorch_lightning.strategies.ddp import DDPStrategy
 
@@ -27,17 +29,18 @@ TRAIN_DATE = datetime.datetime.now().strftime("%Y%m%d_%H%M")
 
 
 def train_molbind(config: DictConfig):
+    run_id = (
+        config.run_id + "_" + TRAIN_DATE if hasattr(config, "run_id") else TRAIN_DATE,
+    )
     # set wandb mode to offline if no WANDB_API_KEY is set
     if not os.getenv("WANDB_API_KEY"):
         os.environ["WANDB_MODE"] = "offline"
     # set PYTORCH_ALLOC_CONF to avoid memory fragmentation
-    os.environ['PYTORCH_CUDA_ALLOC_CONF']='expandable_segments:True'
+    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
     wandb_logger = L.loggers.WandbLogger(
         project=os.getenv("WANDB_PROJECT"),
         entity=os.getenv("WANDB_ENTITY"),
-        id=config.run_id + "_" + TRAIN_DATE
-        if hasattr(config, "run_id")
-        else TRAIN_DATE,
+        id=run_id,
     )
 
     world_size = torch.cuda.device_count()
@@ -90,12 +93,27 @@ def train_molbind(config: DictConfig):
             },
         },
     )
-
+    callbacks = [
+        ModelCheckpoint(
+            monitor=config.callbacks.model_checkpoint.monitor,
+            mode=config.callbacks.model_checkpoint.mode,
+            save_top_k=config.callbacks.model_checkpoint.save_top_k,
+            save_last=config.callbacks.model_checkpoint.save_last,
+            filename=config.callbacks.model_checkpoint.filename,
+            dirpath=Path(config.callbacks.model_checkpoint.dirpath)/Path(run_id)
+        ),
+        EarlyStopping(
+            monitor=config.callbacks.early_stopping.monitor,
+            mode=config.callbacks.early_stopping.mode,
+            patience=config.callbacks.early_stopping.patience,
+        ),
+    ]
     trainer = L.Trainer(
         max_epochs=config.trainer.max_epochs,
         accelerator=config.trainer.accelerator,
         log_every_n_steps=config.trainer.log_every_n_steps,
         logger=wandb_logger,
+        callbacks=callbacks,
         num_nodes=config.trainer.num_nodes,
         devices=world_size if world_size > 1 else "auto",
         strategy=DDPStrategy(find_unused_parameters=True) if world_size > 1 else "auto",
