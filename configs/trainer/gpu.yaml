@@ -2,7 +2,7 @@ defaults:
   - default
 
 accelerator: gpu
-precision: "16-mixed"
+precision: "bf16-mixed"
 max_epochs: 150
 log_every_n_steps: 3
 num_nodes: 2

@@ -1,4 +1,5 @@
-import torch  # noqa: I002
+import pytorch_lightning as L  # noqa: I002
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from omegaconf import DictConfig
@@ -21,10 +22,10 @@ def conv_out_dim(
 
 
 class Net1D(nn.Module):
-    def __init__(self, cfg: DictConfig, length_in: int) -> None:
+    def __init__(self, cfg: DictConfig) -> None:
         super().__init__()
         out_1 = conv_out_dim(
-            length_in,
+            cfg.length_in,
             cfg.conv_kernel_dim_1,
             cfg.conv_stride_1,
             cfg.conv_padding_1,
@@ -92,3 +93,54 @@ class Net1D(nn.Module):
         x = x.view(-1, self.cnn_out)
         x = F.relu(self.norm3(self.fc1(x)))
         return torch.tanh(self.fc2(x))
+
+
+class MassSpecAutoEncoder(nn.Module):
+    def __init__(self, cfg: DictConfig) -> None:
+        super().__init__()
+        self.encoder = Net1D(cfg)
+        self.decoder = nn.Sequential(
+            nn.Linear(cfg.emb_dim, cfg.fc_dim_1),
+            nn.ReLU(),
+            nn.Linear(cfg.fc_dim_1, cfg.channels_out * cfg.pool_kernel_dim_2),
+            nn.ReLU(),
+            nn.Unflatten(1, (cfg.channels_out, cfg.pool_kernel_dim_2)),
+            nn.ConvTranspose1d(
+                cfg.channels_out,
+                cfg.channels_med_1,
+                cfg.conv_kernel_dim_2,
+                stride=cfg.conv_stride_2,
+                padding=cfg.conv_padding_2,
+                dilation=cfg.conv_dilation,
+            ),
+            nn.ReLU(),
+            nn.ConvTranspose1d(
+                cfg.channels_med_1,
+                cfg.channels_in,
+                cfg.conv_kernel_dim_1,
+                stride=cfg.conv_stride_1,
+                padding=cfg.conv_padding_1,
+                dilation=cfg.conv_dilation,
+            ),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.encoder(x)
+        return self.decoder(x)
+
+
+class MassSpecAutoEncoderLightningModule(L.LightningModule):
+    """
+    Denoise Mass Spectra using an AutoEncoder.
+    """
+
+    def __init__(self, cfg: DictConfig) -> None:
+        super().__init__()
+        self.model = MassSpecAutoEncoder(cfg)
+        self.cfg = cfg
+        self.mse_loss = nn.MSELoss()
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x = x + gaussian_noise
+        x_hat = self.model(x)
+        return self.mse_loss(x, x_hat)
