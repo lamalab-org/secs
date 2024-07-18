@@ -134,7 +134,7 @@ class CustomGraphEncoder(GraphEncoder):
         # check format of the ckpt file
         suffix = Path(ckpt_path).suffix
         if suffix == ".pth":
-            logger.info("Loading model from .pth file")
+            logger.info("Loading graph model from a `.pth` file")
             self.load_state_dict(
                 rename_keys_with_prefix(
                     torch.load(ckpt_path, map_location=select_device())
@@ -142,7 +142,7 @@ class CustomGraphEncoder(GraphEncoder):
                 strict=True,
             )
         elif suffix == ".ckpt":
-            logger.info("Loading model from .ckpt file")
+            logger.info("Loading graph model from `.ckpt` file")
             self.load_state_dict(
                 rename_keys_with_prefix(
                     torch.load(ckpt_path, map_location=select_device())["state_dict"]
@@ -403,3 +403,25 @@ class ImageEncoder(nn.Module):
     def forward(self, x: tuple[Tensor, Tensor]) -> Tensor:
         x = self.features(x)
         return self.flatten(self.pool(x))
+
+
+class cNmrEncoder(FingerprintEncoder):
+    def __init__(
+        self,
+        input_dims: List[int],  # noqa: UP006
+        output_dims: List[int],  # noqa: UP006
+        latent_dim: int,
+        ckpt_path: Optional[str] = None,
+    ) -> None:
+        super().__init__(input_dims, output_dims, latent_dim)
+        # load weights from the pre-trained model
+        if ckpt_path is not None:
+            self.load_state_dict(
+                rename_keys_with_prefix(
+                    torch.load(ckpt_path, map_location=select_device())["state_dict"]
+                )
+            )
+            logger.info("Loaded weights from pre-trained model for C-NMR")
+
+    def forward(self, x: Tensor) -> Tensor:
+        return self.encoder(x)

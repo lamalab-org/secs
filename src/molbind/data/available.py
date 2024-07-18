@@ -9,6 +9,7 @@ from molbind.data.components.datasets import (
     ImageDataset,
     StringDataset,
     StructureDataset,
+    cNmrDataset,
 )
 from molbind.data.components.mb_tokenizers import (
     DESCRIPTION_TOKENIZER,
@@ -23,9 +24,9 @@ from molbind.models.components.custom_encoders import (
     ImageEncoder,
     IREncoder,
     IUPACNameEncoder,
-    NMREncoder,
     SelfiesEncoder,
     SmilesEncoder,
+    cNmrEncoder,
 )
 
 
@@ -35,7 +36,6 @@ class StringModalities(StrEnum):
     IUPAC_NAME = "iupac_name"
     DESCRIPTION = "description"
     IR = "ir"
-    NMR = "nmr"
     MASS = "mass"
 
 
@@ -44,6 +44,7 @@ class NonStringModalities(StrEnum):
     STRUCTURE = "structure"
     GRAPH = "graph"
     FINGERPRINT = "fingerprint"
+    C_NMR = "c_nmr"
 
 
 class ModalityConstants(Enum):
@@ -51,11 +52,11 @@ class ModalityConstants(Enum):
     ModalityConstants[modality]: (data_type, dataset, encoder, tokenizer)
     """
 
+    c_nmr = (str, cNmrDataset, cNmrEncoder, None)
     description = (str, StringDataset, DescriptionEncoder, DESCRIPTION_TOKENIZER)
     fingerprint = (list, FingerprintMolBindDataset, CustomFingerprintEncoder, None)
     ir = (str, StringDataset, IREncoder, None)
     iupac_name = (str, StringDataset, IUPACNameEncoder, None)
-    nmr = (str, StringDataset, NMREncoder, None)
     smiles = (str, StringDataset, SmilesEncoder, SMILES_TOKENIZER)
     selfies = (str, StringDataset, SelfiesEncoder, SELFIES_TOKENIZER)
     graph = (Graph, GraphDataset, CustomGraphEncoder, None)

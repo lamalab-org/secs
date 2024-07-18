@@ -30,13 +30,19 @@ TRAIN_DATE = datetime.datetime.now().strftime("%Y%m%d_%H%M")
 
 def train_molbind(config: DictConfig):
     run_id = (
-        config.run_id + "_" + TRAIN_DATE if hasattr(config, "run_id") else TRAIN_DATE,
+        config.run_id + "_" + TRAIN_DATE if hasattr(config, "run_id") else TRAIN_DATE
     )
+
     # set wandb mode to offline if no WANDB_API_KEY is set
     if not os.getenv("WANDB_API_KEY"):
         os.environ["WANDB_MODE"] = "offline"
-    # set PYTORCH_ALLOC_CONF to avoid memory fragmentation
-    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+
+    try:
+        # set PYTORCH_ALLOC_CONF to avoid memory fragmentation
+        os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+    except Exception:
+        logger.warning("Your PyTorch version does not support PYTORCH_CUDA_ALLOC_CONF")
+
     wandb_logger = L.loggers.WandbLogger(
         project=os.getenv("WANDB_PROJECT"),
         entity=os.getenv("WANDB_ENTITY"),
@@ -100,7 +106,7 @@ def train_molbind(config: DictConfig):
             save_top_k=config.callbacks.model_checkpoint.save_top_k,
             save_last=config.callbacks.model_checkpoint.save_last,
             filename=config.callbacks.model_checkpoint.filename,
-            dirpath=Path(config.callbacks.model_checkpoint.dirpath)/Path(run_id)
+            dirpath=Path(config.callbacks.model_checkpoint.dirpath) / Path(run_id),
         ),
         EarlyStopping(
             monitor=config.callbacks.early_stopping.monitor,

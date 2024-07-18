@@ -62,6 +62,7 @@ def train_molbind(config: DictConfig):
     valid_shuffled_data = shuffled_data.tail(
         int(config.data.valid_frac * dataset_length)
     )
+    valid_shuffled_data = valid_shuffled_data.unique(subset=[config.data.central_modality])
 
     valid_datasets = (
         MolBindDataset(

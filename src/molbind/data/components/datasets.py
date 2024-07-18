@@ -332,3 +332,37 @@ class ImageDataset(Dataset):
             [torch.unsqueeze(self.transform_image(image), 0) for _ in range(repeats)],
             dim=0,
         )
+
+
+class cNmrDataset(Dataset):
+    def __init__(
+        self,
+        data: list[list[float]],
+        vec_len: int = 512,
+        min_value: float = 0,
+        max_value: float = 300,
+        **kwargs,
+    ) -> None:
+        self.c_nmr = data
+        self.vec_len = vec_len
+        self.min_value = min_value
+        self.max_value = max_value
+        self.central_modality = kwargs["central_modality"]
+        self.other_modality = "c_nmr"
+        self.central_modality_data = kwargs["central_modality_data"]
+
+    def __len__(self):
+        return len(self.c_nmr)
+
+    def __getitem__(self, index: int) -> dict:
+        return {
+            self.central_modality: [i[index] for i in self.central_modality_data],
+            self.other_modality: self.c_nmr_to_vec(self.c_nmr[index]),
+        }
+
+    def c_nmr_to_vec(self, nmr_shifts: list[float]) -> Tensor:
+        init_vec = torch.zeros(self.vec_len, dtype=torch.float32)
+        for shift in nmr_shifts:
+            index = int(shift / self.max_value * self.vec_len)
+            init_vec[index] = 1
+        return init_vec

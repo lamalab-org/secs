@@ -18,6 +18,7 @@ from molbind.data.components.datasets import (
     ImageDataset,
     StringDataset,
     StructureDataset,
+    cNmrDataset,
 )
 
 
@@ -76,23 +77,15 @@ class MolBindDataset:
             NonStringModalities.STRUCTURE: self.build_3D_coordinates_dataset,
             NonStringModalities.FINGERPRINT: self.build_fp_dataset,
             NonStringModalities.IMAGE: self.build_image_dataset,
+            NonStringModalities.C_NMR: self.build_c_nmr_dataset,
         }
+        self.data = data.to_pandas().reset_index(drop=True)
         # central modality data
         self.central_modality_data = self.central_modality_handlers[central_modality](
             self.data[central_modality].to_list()
         )
-        self.data = data.to_pandas().reset_index()
-        self.other_modalities = other_modalities
 
-    def _handle_central_modality_data(
-        self, data_pair: pd.DataFrame
-    ) -> Tuple[Tensor, Tensor]:  # noqa: UP006
-        if self.central_modality_data_type == str:
-            central_modality_data = (
-                self.central_modality_data[0][data_pair.index.to_list()],
-                self.central_modality_data[1][data_pair.index.to_list()],
-            )
-        return central_modality_data
+        self.other_modalities = other_modalities
 
     def build_graph_dataset(self) -> GraphDataset:
         modality = "graph"
@@ -137,7 +130,7 @@ class MolBindDataset:
         # perform fingerprint operations
         return FingerprintMolBindDataset(
             central_modality=self.central_modality,
-            fingerprint_data=fp_data["fingerprint"].to_list(),
+            fingerprint_data=fp_data[modality].to_list(),
             central_modality_data=self._handle_central_modality_data(fp_data),
         )
 
@@ -146,9 +139,18 @@ class MolBindDataset:
         image_data = self.data[[self.central_modality, modality]].dropna()
         # perform image operations
         return ImageDataset(
-            image_files=image_data["image"].to_list(),
+            image_files=image_data[modality].to_list(),
             central_modality=self.central_modality,
             central_modality_data=self._handle_central_modality_data(image_data),
+        )
+
+    def build_c_nmr_dataset(self) -> cNmrDataset:
+        modality = "c_nmr"
+        c_nmr_data = self.data[[self.central_modality, modality]].dropna()
+        return cNmrDataset(
+            data=c_nmr_data[modality].to_list(),
+            central_modality=self.central_modality,
+            central_modality_data=self._handle_central_modality_data(c_nmr_data),
         )
 
     def build_datasets_for_modalities(
@@ -162,6 +164,16 @@ class MolBindDataset:
         # CombinedLoader does not work with DDPSampler directly
         # Thus this ^ is added to the dataloaders in the datamodule
         return datasets
+
+    def _handle_central_modality_data(
+        self, data_pair: pd.DataFrame
+    ) -> Tuple[Tensor, Tensor]:  # noqa: UP006
+        if self.central_modality_data_type == str:
+            central_modality_data = (
+                self.central_modality_data[0][data_pair.index.to_list()],
+                self.central_modality_data[1][data_pair.index.to_list()],
+            )
+        return central_modality_data
 
     # private class methods
     @staticmethod
