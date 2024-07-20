@@ -7,6 +7,9 @@ from molbind.data.components.datasets import (
     FingerprintMolBindDataset,
     GraphDataset,
     ImageDataset,
+    IrDataset,
+    MassSpecNegativeDataset,
+    MassSpecPositiveDataset,
     StringDataset,
     StructureDataset,
     cNmrDataset,
@@ -22,8 +25,10 @@ from molbind.models.components.custom_encoders import (
     CustomStructureEncoder,
     DescriptionEncoder,
     ImageEncoder,
-    IREncoder,
+    IrEncoder,
     IUPACNameEncoder,
+    MassSpecNegativeEncoder,
+    MassSpecPositiveEncoder,
     SelfiesEncoder,
     SmilesEncoder,
     cNmrEncoder,
@@ -35,16 +40,17 @@ class StringModalities(StrEnum):
     SELFIES = "selfies"
     IUPAC_NAME = "iupac_name"
     DESCRIPTION = "description"
-    IR = "ir"
-    MASS = "mass"
 
 
 class NonStringModalities(StrEnum):
+    C_NMR = "c_nmr"
     IMAGE = "image"
-    STRUCTURE = "structure"
     GRAPH = "graph"
     FINGERPRINT = "fingerprint"
-    C_NMR = "c_nmr"
+    IR = "ir"
+    MASS_SPEC_POSITIVE = "mass_spec_positive"
+    MASS_SPEC_NEGATIVE = "mass_spec_negative"
+    STRUCTURE = "structure"
 
 
 class ModalityConstants(Enum):
@@ -52,11 +58,13 @@ class ModalityConstants(Enum):
     ModalityConstants[modality]: (data_type, dataset, encoder, tokenizer)
     """
 
-    c_nmr = (str, cNmrDataset, cNmrEncoder, None)
+    c_nmr = (list, cNmrDataset, cNmrEncoder, None)
     description = (str, StringDataset, DescriptionEncoder, DESCRIPTION_TOKENIZER)
     fingerprint = (list, FingerprintMolBindDataset, CustomFingerprintEncoder, None)
-    ir = (str, StringDataset, IREncoder, None)
     iupac_name = (str, StringDataset, IUPACNameEncoder, None)
+    ir = (list, IrDataset, IrEncoder, None)
+    mass_spec_negative = (list, MassSpecNegativeDataset, MassSpecNegativeEncoder, None)
+    mass_spec_positive = (list, MassSpecPositiveDataset, MassSpecPositiveEncoder, None)
     smiles = (str, StringDataset, SmilesEncoder, SMILES_TOKENIZER)
     selfies = (str, StringDataset, SelfiesEncoder, SELFIES_TOKENIZER)
     graph = (Graph, GraphDataset, CustomGraphEncoder, None)

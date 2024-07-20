@@ -2,7 +2,7 @@
 encoders:
   smiles:
     pretrained: True
-    freeze_encoder: False
+    freeze_encoder: True
   selfies:
     pretrained: True
     freeze_encoder: True
@@ -39,12 +39,34 @@ encoders:
     # freeze_encoder: True
   c_nmr:
     # ckpt_path: null
-    input_dims: [512, 256, 128]
-    output_dims: [128, 256, 512]
-    latent_dim: 128
+    input_dims: [512, 256, 256]
+    output_dims: [256, 256, 512]
+    latent_dim: 256
+  ir:
+    input_dims: [1800, 1024, 512]
+    output_dims: [512, 1024, 1800]
+    latent_dim: 512
+  mass_spec_negative:
+    input_dims: [1024, 512, 256]
+    output_dims: [256, 512, 1024]
+    latent_dim: 256
+  mass_spec_positive:
+    input_dims: [1024, 512, 256]
+    output_dims: [256, 512, 1024]
+    latent_dim: 256
 
-embedding_size: 128
+embedding_size: 512
 projection_heads:
+  smiles_is_on: True
+  selfies_is_on: True
+  graph_is_on: True
+  fingerprint_is_on: True
+  structure_is_on: True
+  image_is_on: True
+  c_nmr_is_on: True
+  ir_is_on: True
+  mass_spec_negative_is_on: True
+  mass_spec_positive_is_on: True
   smiles:
     dims: [768, "${model.embedding_size}"]
     activation: LeakyReLU
@@ -64,7 +86,16 @@ projection_heads:
     dims: [512, "${model.embedding_size}"]
     activation: LeakyReLU
   c_nmr:
-    dims: [128, "${model.embedding_size}"]
+    dims: [256, "${model.embedding_size}"]
+    activation: LeakyReLU
+  ir:
+    dims: [512, "${model.embedding_size}"]
+    activation: LeakyReLU
+  mass_spec_negative:
+    dims: [256, "${model.embedding_size}"]
+    activation: LeakyReLU
+  mass_spec_positive:
+    dims: [256, "${model.embedding_size}"]
     activation: LeakyReLU
 
 optimizer:

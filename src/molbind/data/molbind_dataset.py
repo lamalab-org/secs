@@ -16,6 +16,9 @@ from molbind.data.components.datasets import (
     FingerprintMolBindDataset,
     GraphDataset,
     ImageDataset,
+    IrDataset,
+    MassSpecNegativeDataset,
+    MassSpecPositiveDataset,
     StringDataset,
     StructureDataset,
     cNmrDataset,
@@ -78,6 +81,9 @@ class MolBindDataset:
             NonStringModalities.FINGERPRINT: self.build_fp_dataset,
             NonStringModalities.IMAGE: self.build_image_dataset,
             NonStringModalities.C_NMR: self.build_c_nmr_dataset,
+            NonStringModalities.IR: self.build_ir_dataset,
+            NonStringModalities.MASS_SPEC_POSITIVE: self.build_mass_spec_positive_dataset,
+            NonStringModalities.MASS_SPEC_NEGATIVE: self.build_mass_spec_negative_dataset,
         }
         self.data = data.to_pandas().reset_index(drop=True)
         # central modality data
@@ -151,6 +157,33 @@ class MolBindDataset:
             data=c_nmr_data[modality].to_list(),
             central_modality=self.central_modality,
             central_modality_data=self._handle_central_modality_data(c_nmr_data),
+        )
+
+    def build_ir_dataset(self) -> IrDataset:
+        modality = "ir"
+        ir_data = self.data[[self.central_modality, modality]].dropna()
+        return IrDataset(
+            data=ir_data[modality].to_list(),
+            central_modality=self.central_modality,
+            central_modality_data=self._handle_central_modality_data(ir_data),
+        )
+
+    def build_mass_spec_positive_dataset(self) -> MassSpecPositiveDataset:
+        modality = "mass_spec_positive"
+        mass_spec_data = self.data[[self.central_modality, modality]].dropna()
+        return MassSpecPositiveDataset(
+            data=mass_spec_data[modality].to_list(),
+            central_modality=self.central_modality,
+            central_modality_data=self._handle_central_modality_data(mass_spec_data),
+        )
+
+    def build_mass_spec_negative_dataset(self) -> MassSpecNegativeDataset:
+        modality = "mass_spec_negative"
+        mass_spec_data = self.data[[self.central_modality, modality]].dropna()
+        return MassSpecNegativeDataset(
+            data=mass_spec_data[modality].to_list(),
+            central_modality=self.central_modality,
+            central_modality_data=self._handle_central_modality_data(mass_spec_data),
         )
 
     def build_datasets_for_modalities(

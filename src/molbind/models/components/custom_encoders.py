@@ -85,14 +85,6 @@ class DescriptionEncoder:
     pass
 
 
-class IREncoder(BaseModalityEncoder):
-    pass
-
-
-class NMREncoder(BaseModalityEncoder):
-    pass
-
-
 class CustomFingerprintEncoder(FingerprintEncoder):
     def __init__(
         self,
@@ -422,6 +414,72 @@ class cNmrEncoder(FingerprintEncoder):
                 )
             )
             logger.info("Loaded weights from pre-trained model for C-NMR")
+
+    def forward(self, x: Tensor) -> Tensor:
+        return self.encoder(x)
+
+
+class IrEncoder(FingerprintEncoder):
+    def __init__(
+        self,
+        input_dims: List[int],  # noqa: UP006
+        output_dims: List[int],  # noqa: UP006
+        latent_dim: int,
+        ckpt_path: Optional[str] = None,
+    ) -> None:
+        super().__init__(input_dims, output_dims, latent_dim)
+        # load weights from the pre-trained model
+        if ckpt_path is not None:
+            self.load_state_dict(
+                rename_keys_with_prefix(
+                    torch.load(ckpt_path, map_location=select_device())["state_dict"]
+                )
+            )
+            logger.info("Loaded weights from pre-trained model for IR")
+
+    def forward(self, x: Tensor) -> Tensor:
+        return self.encoder(x)
+
+
+class MassSpecPositiveEncoder(FingerprintEncoder):
+    def __init__(
+        self,
+        input_dims: List[int],  # noqa: UP006
+        output_dims: List[int],  # noqa: UP006
+        latent_dim: int,
+        ckpt_path: Optional[str] = None,
+    ) -> None:
+        super().__init__(input_dims, output_dims, latent_dim)
+        # load weights from the pre-trained model
+        if ckpt_path is not None:
+            self.load_state_dict(
+                rename_keys_with_prefix(
+                    torch.load(ckpt_path, map_location=select_device())["state_dict"]
+                )
+            )
+            logger.info("Loaded weights from pre-trained model for Mass Spec Positive")
+
+    def forward(self, x: Tensor) -> Tensor:
+        return self.encoder(x)
+
+
+class MassSpecNegativeEncoder(FingerprintEncoder):
+    def __init__(
+        self,
+        input_dims: List[int],  # noqa: UP006
+        output_dims: List[int],  # noqa: UP006
+        latent_dim: int,
+        ckpt_path: Optional[str] = None,
+    ) -> None:
+        super().__init__(input_dims, output_dims, latent_dim)
+        # load weights from the pre-trained model
+        if ckpt_path is not None:
+            self.load_state_dict(
+                rename_keys_with_prefix(
+                    torch.load(ckpt_path, map_location=select_device())["state_dict"]
+                )
+            )
+            logger.info("Loaded weights from pre-trained model for Mass Spec Negative")
 
     def forward(self, x: Tensor) -> Tensor:
         return self.encoder(x)

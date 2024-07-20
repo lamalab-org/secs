@@ -131,10 +131,11 @@ class GraphDataset(Dataset):
             StringModalities.SMILES: _string,
             StringModalities.SELFIES: _string,
             StringModalities.IUPAC_NAME: _string,
-            StringModalities.IR: _string,
-            StringModalities.NMR: _string,
-            StringModalities.MASS: _string,
             NonStringModalities.FINGERPRINT: _fingerprint,
+            NonStringModalities.IR: _fingerprint,
+            NonStringModalities.C_NMR: _fingerprint,
+            NonStringModalities.MASS_SPEC_POSITIVE: _fingerprint,
+            NonStringModalities.MASS_SPEC_NEGATIVE: _fingerprint,
         }
 
     def __len__(self):
@@ -366,3 +367,87 @@ class cNmrDataset(Dataset):
             index = int(shift / self.max_value * self.vec_len)
             init_vec[index] = 1
         return init_vec
+
+
+class IrDataset(Dataset):
+    def __init__(
+        self,
+        data: list[list[float]],
+        vec_len: int = 1800,
+        **kwargs,
+    ) -> None:
+        self.ir = data
+        self.vec_len = vec_len
+        # self.min_value = min_value
+        # self.max_value = max_value
+        self.central_modality = kwargs["central_modality"]
+        self.other_modality = "ir"
+        self.central_modality_data = kwargs["central_modality_data"]
+
+    def __len__(self):
+        return len(self.ir)
+
+    def __getitem__(self, index: int) -> dict:
+        return {
+            self.central_modality: [i[index] for i in self.central_modality_data],
+            self.other_modality: self.ir[index],
+        }
+
+
+class MassSpecDataset(Dataset):
+    def __init__(
+        self,
+        data: list[list[float]],
+        vec_len: int = 1024,
+        max_value: float = 1000,
+        **kwargs,
+    ) -> None:
+        self.mass_spec = data
+        self.vec_len = vec_len
+        self.max_value = max_value
+        self.central_modality = kwargs["central_modality"]
+        self.other_modality = "mass_spec"
+        self.central_modality_data = kwargs["central_modality_data"]
+
+    def __len__(self):
+        return len(self.mass_spec)
+
+    def __getitem__(self, index: int) -> dict:
+        return {
+            self.central_modality: [i[index] for i in self.central_modality_data],
+            self.other_modality: self.mass_to_spec(self.mass_spec[index]),
+        }
+
+    def mass_to_spec(self, mass_spec: list[list[float, float]]) -> Tensor:
+        """
+        list[list[mass, intensity]]
+        """
+        init_vec = torch.zeros(self.vec_len, dtype=torch.float32)
+        for mass, intensity in mass_spec:
+            index = int(mass / self.max_value * self.vec_len)
+            init_vec[index] = intensity
+        return init_vec
+
+
+class MassSpecPositiveDataset(MassSpecDataset):
+    def __init__(
+        self,
+        data: list[list[float]],
+        vec_len: int = 1024,
+        max_value: float = 1000,
+        **kwargs,
+    ) -> None:
+        super().__init__(data, vec_len, max_value, **kwargs)
+        self.other_modality = "mass_spec_positive"
+
+
+class MassSpecNegativeDataset(MassSpecDataset):
+    def __init__(
+        self,
+        data: list[list[float]],
+        vec_len: int = 1024,
+        max_value: float = 1000,
+        **kwargs,
+    ) -> None:
+        super().__init__(data, vec_len, max_value, **kwargs)
+        self.other_modality = "mass_spec_negative"
