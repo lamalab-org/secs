@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 
 import hydra
+import polars as pl
 import pytorch_lightning as L
 import rootutils
 import torch
@@ -36,7 +37,7 @@ def train_molbind(config: DictConfig):
     # set wandb mode to offline if no WANDB_API_KEY is set
     if not os.getenv("WANDB_API_KEY"):
         os.environ["WANDB_MODE"] = "offline"
-
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
     try:
         # set PYTORCH_ALLOC_CONF to avoid memory fragmentation
         os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
@@ -56,16 +57,20 @@ def train_molbind(config: DictConfig):
         ".csv": csv_load_function,
         ".pickle": pickle_load_function,
         ".pkl": pickle_load_function,
+        ".parquet": pl.read_parquet,
     }
 
     try:
         data = handlers[data_format](config.data.dataset_path)
     except KeyError:
         logger.error(f"Format {data_format} not supported")
-
+    # add graph column to data
+    data = data.with_columns(pl.col("smiles").alias("graph"))
+    # data = data[["smiles", "mass_spec_positive"]]
     shuffled_data = data.sample(
         fraction=config.data.fraction_data, shuffle=True, seed=config.data.seed
     )
+
     dataset_length = len(shuffled_data)
     valid_shuffled_data = shuffled_data.tail(
         int(config.data.valid_frac * dataset_length)

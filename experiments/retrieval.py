@@ -10,6 +10,7 @@ import rootutils
 from dotenv import load_dotenv
 from loguru import logger
 from omegaconf import DictConfig
+import polars as pl
 
 from molbind.data.analysis.moleculenet import aggregate_embeddings
 from molbind.data.datamodule import MolBindDataModule
@@ -40,6 +41,7 @@ def train_molbind(config: DictConfig):
         ".csv": csv_load_function,
         ".pickle": pickle_load_function,
         ".pkl": pickle_load_function,
+        ".parquet": pl.read_parquet,
     }
 
     try:
@@ -106,9 +108,10 @@ def train_molbind(config: DictConfig):
         other_modalities=config.data.modalities,
         central_modality=config.data.central_modality,
         embeddings=aggregated_embeddings,
-        top_k=[1, 5],
+        top_k=config.top_k,
     )
     retrieval_metrics = pd.DataFrame(retrieval_metrics)
+    retrieval_metrics.to_csv("retrieval_metrics.csv")
     logger.info(f"Database size: {len(valid_shuffled_data)}")
     logger.info(f"Database level retrieval metrics: \n {pformat(retrieval_metrics)}")
 

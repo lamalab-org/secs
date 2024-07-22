@@ -451,3 +451,40 @@ class MassSpecNegativeDataset(MassSpecDataset):
     ) -> None:
         super().__init__(data, vec_len, max_value, **kwargs)
         self.other_modality = "mass_spec_negative"
+
+
+class hNmrDataset(Dataset):
+    def __init__(
+        self,
+        data: list[list[float]],
+        vec_len: int = 1024,
+        max_value: float = 10,
+        **kwargs,
+    ) -> None:
+        self.mass_spec = data
+        self.vec_len = vec_len
+        self.max_value = max_value
+        self.central_modality = kwargs["central_modality"]
+        self.other_modality = "h_nmr"
+        self.central_modality_data = kwargs["central_modality_data"]
+
+    def __len__(self):
+        return len(self.mass_spec)
+
+    def __getitem__(self, index: int) -> dict:
+        return {
+            self.central_modality: [i[index] for i in self.central_modality_data],
+            self.other_modality: self.hnmr_to_spec(self.mass_spec[index]),
+        }
+
+    def hnmr_to_spec(self, hnmr_spec: list[list[float, float]]) -> Tensor:
+        """
+        list[list[shift, number of protons]]
+        """
+        init_vec = torch.zeros(self.vec_len, dtype=torch.float32)
+        for mass, intensity in hnmr_spec:
+            index = int(mass / self.max_value * self.vec_len)
+            if index < 0:
+                index = 0
+            init_vec[index] = intensity
+        return init_vec

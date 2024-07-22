@@ -34,7 +34,8 @@ class MolBindModule(LightningModule):
         if hasattr(cfg, "ckpt_path") and cfg.ckpt_path is not None:
             with contextlib.suppress(FileNotFoundError):
                 self.model.load_state_dict(
-                    rename_keys_with_prefix(torch.load(cfg.ckpt_path)["state_dict"])
+                    rename_keys_with_prefix(torch.load(cfg.ckpt_path)["state_dict"]),
+                    strict=False,
                 )
                 logger.info(
                     f"Successfully loaded model from checkpoint: {cfg.ckpt_path}"

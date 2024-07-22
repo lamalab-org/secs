@@ -19,30 +19,29 @@ class MolBind(nn.Module):
         logger.info(f"Non-central modalities: {modalities}")
 
         # Instantiate all encoders and projection heads
-        dict_encoders = {
-            central_modality: ModalityConstants[central_modality].encoder(
-                **cfg.model.encoders[central_modality]
-            )
-        }
-        dict_projection_heads = {
-            central_modality: ProjectionHead(
-                **cfg.model.projection_heads[central_modality]
-            )
-        }
+        dict_encoders, dict_projection_heads = {}, {}
         # Add other modalities to `dict_encoders` and `dict_projection_heads`
-        for modality in modalities:
+        for modality in [*modalities, central_modality]:
             if modality not in [*vars(ModalityConstants)]:
                 raise ValueError(f"Modality {modality} not supported yet.")
             dict_encoders[modality] = ModalityConstants[modality].encoder(
                 **cfg.model.encoders[modality]
             )
-            dict_projection_heads[modality] = ProjectionHead(
-                **cfg.model.projection_heads[modality]
-            )
+
+            if cfg.model.projection_heads[f"{modality}_is_on"]:
+                dict_projection_heads[modality] = ProjectionHead(
+                    **cfg.model.projection_heads[modality]
+                )
 
         # convert dicts to nn.ModuleDict
         self.dict_encoders = nn.ModuleDict(dict_encoders)
         self.dict_projection_heads = nn.ModuleDict(dict_projection_heads)
+
+        # add requires grad to projection heads
+        for modality, projection_head in self.dict_projection_heads.items():
+            if cfg.model.projection_heads[f"{modality}_freeze"]:
+                for param in projection_head.parameters():
+                    param.requires_grad = False
 
     def forward(
         self,
@@ -62,13 +61,20 @@ class MolBind(nn.Module):
             input_data[self.central_modality]
         )
         modality_embedding = self.dict_encoders[modality].forward(input_data[modality])
-        central_modality_embedding_projected = self.dict_projection_heads[
-            self.central_modality
-        ](central_modality_embedding)
-        modality_embedding_projected = self.dict_projection_heads[modality](
-            modality_embedding
-        )
-        # Projection heads
-        store_embeddings[self.central_modality] = central_modality_embedding_projected
-        store_embeddings[modality] = modality_embedding_projected
+
+        if self.central_modality in self.dict_projection_heads:
+            central_modality_embedding_projected = self.dict_projection_heads[
+                self.central_modality
+            ](central_modality_embedding)
+            store_embeddings[self.central_modality] = central_modality_embedding_projected
+        else:
+            store_embeddings[self.central_modality] = central_modality_embedding
+        if modality in self.dict_projection_heads:
+            modality_embedding_projected = self.dict_projection_heads[modality](
+                modality_embedding
+            )
+            # Projection heads
+            store_embeddings[modality] = modality_embedding_projected
+        else:
+            store_embeddings[modality] = modality_embedding
         return store_embeddings

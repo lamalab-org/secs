@@ -6,6 +6,7 @@ from numpy import ndarray
 from molbind.data.components.datasets import (
     FingerprintMolBindDataset,
     GraphDataset,
+    hNmrDataset,
     ImageDataset,
     IrDataset,
     MassSpecNegativeDataset,
@@ -24,6 +25,7 @@ from molbind.models.components.custom_encoders import (
     CustomGraphEncoder,
     CustomStructureEncoder,
     DescriptionEncoder,
+    hNmrEncoder,
     ImageEncoder,
     IrEncoder,
     IUPACNameEncoder,
@@ -44,9 +46,10 @@ class StringModalities(StrEnum):
 
 class NonStringModalities(StrEnum):
     C_NMR = "c_nmr"
+    FINGERPRINT = "fingerprint"
     IMAGE = "image"
     GRAPH = "graph"
-    FINGERPRINT = "fingerprint"
+    H_NMR = "h_nmr"
     IR = "ir"
     MASS_SPEC_POSITIVE = "mass_spec_positive"
     MASS_SPEC_NEGATIVE = "mass_spec_negative"
@@ -61,6 +64,7 @@ class ModalityConstants(Enum):
     c_nmr = (list, cNmrDataset, cNmrEncoder, None)
     description = (str, StringDataset, DescriptionEncoder, DESCRIPTION_TOKENIZER)
     fingerprint = (list, FingerprintMolBindDataset, CustomFingerprintEncoder, None)
+    h_nmr = (list, hNmrDataset, hNmrEncoder, None)
     iupac_name = (str, StringDataset, IUPACNameEncoder, None)
     ir = (list, IrDataset, IrEncoder, None)
     mass_spec_negative = (list, MassSpecNegativeDataset, MassSpecNegativeEncoder, None)

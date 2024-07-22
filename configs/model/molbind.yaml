@@ -42,21 +42,32 @@ encoders:
     input_dims: [512, 256, 256]
     output_dims: [256, 256, 512]
     latent_dim: 256
+    freeze_encoder: True
   ir:
     input_dims: [1800, 1024, 512]
     output_dims: [512, 1024, 1800]
     latent_dim: 512
+    freeze_encoder: False
   mass_spec_negative:
     input_dims: [1024, 512, 256]
     output_dims: [256, 512, 1024]
     latent_dim: 256
+    freeze_encoder: True
   mass_spec_positive:
     input_dims: [1024, 512, 256]
     output_dims: [256, 512, 1024]
     latent_dim: 256
+    freeze_encoder: True
+  h_nmr:
+    # ckpt_path: null
+    input_dims: [1024, 512, 256]
+    output_dims: [256, 512, 1024]
+    latent_dim: 256
+    freeze_encoder: True
 
 embedding_size: 512
 projection_heads:
+  # this determines whether the projection head is added to the model
   smiles_is_on: True
   selfies_is_on: True
   graph_is_on: True
@@ -67,6 +78,13 @@ projection_heads:
   ir_is_on: True
   mass_spec_negative_is_on: True
   mass_spec_positive_is_on: True
+  h_nmr_is_on: True
+  # freeze projection heads
+  c_nmr_freeze: True
+  ir_freeze: True
+  smiles_freeze: False
+  mass_spec_positive_freeze: False
+  # default projection heads for each modality
   smiles:
     dims: [768, "${model.embedding_size}"]
     activation: LeakyReLU
@@ -95,6 +113,9 @@ projection_heads:
     dims: [256, "${model.embedding_size}"]
     activation: LeakyReLU
   mass_spec_positive:
+    dims: [256, "${model.embedding_size}"]
+    activation: LeakyReLU
+  h_nmr:
     dims: [256, "${model.embedding_size}"]
     activation: LeakyReLU
 

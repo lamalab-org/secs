@@ -22,6 +22,7 @@ from molbind.data.components.datasets import (
     StringDataset,
     StructureDataset,
     cNmrDataset,
+    hNmrDataset,
 )
 
 
@@ -81,6 +82,7 @@ class MolBindDataset:
             NonStringModalities.FINGERPRINT: self.build_fp_dataset,
             NonStringModalities.IMAGE: self.build_image_dataset,
             NonStringModalities.C_NMR: self.build_c_nmr_dataset,
+            NonStringModalities.H_NMR: self.build_h_nmr_dataset,
             NonStringModalities.IR: self.build_ir_dataset,
             NonStringModalities.MASS_SPEC_POSITIVE: self.build_mass_spec_positive_dataset,
             NonStringModalities.MASS_SPEC_NEGATIVE: self.build_mass_spec_negative_dataset,
@@ -184,6 +186,15 @@ class MolBindDataset:
             data=mass_spec_data[modality].to_list(),
             central_modality=self.central_modality,
             central_modality_data=self._handle_central_modality_data(mass_spec_data),
+        )
+
+    def build_h_nmr_dataset(self) -> hNmrDataset:
+        modality = "h_nmr"
+        h_nmr_data = self.data[[self.central_modality, modality]].dropna()
+        return hNmrDataset(
+            data=h_nmr_data[modality].to_list(),
+            central_modality=self.central_modality,
+            central_modality_data=self._handle_central_modality_data(h_nmr_data),
         )
 
     def build_datasets_for_modalities(
