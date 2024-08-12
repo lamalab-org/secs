@@ -457,34 +457,40 @@ class hNmrDataset(Dataset):
     def __init__(
         self,
         data: list[list[float]],
-        vec_len: int = 1024,
-        max_value: float = 10,
+        vec_len: int = 512,
         **kwargs,
     ) -> None:
-        self.mass_spec = data
+        self.h_nmr = data
         self.vec_len = vec_len
-        self.max_value = max_value
         self.central_modality = kwargs["central_modality"]
         self.other_modality = "h_nmr"
         self.central_modality_data = kwargs["central_modality_data"]
 
     def __len__(self):
-        return len(self.mass_spec)
+        return len(self.h_nmr)
 
     def __getitem__(self, index: int) -> dict:
         return {
             self.central_modality: [i[index] for i in self.central_modality_data],
-            self.other_modality: self.hnmr_to_spec(self.mass_spec[index]),
+            self.other_modality: self.hnmr_to_vec(self.h_nmr[index]),
         }
 
-    def hnmr_to_spec(self, hnmr_spec: list[list[float, float]]) -> Tensor:
-        """
-        list[list[shift, number of protons]]
-        """
+    def hnmr_to_vec(self, nmr_shifts: list[list[float]]) -> Tensor:
         init_vec = torch.zeros(self.vec_len, dtype=torch.float32)
-        for mass, intensity in hnmr_spec:
-            index = int(mass / self.max_value * self.vec_len)
-            if index < 0:
-                index = 0
-            init_vec[index] = intensity
+        if isinstance(nmr_shifts[0], list) or isinstance(nmr_shifts[0], np.ndarray):
+            for shift, nH in nmr_shifts:
+                index = int(shift / 18 * self.vec_len)
+                init_vec[index] = 1
+        else:
+            for shift in nmr_shifts:
+                shift = np.round(shift, 2)
+                index = int(shift / 18 * self.vec_len)
+                if index >= self.vec_len:
+                    index = self.vec_len - 1
+                if index < 0:
+                    index = 0
+                if init_vec[index] != 0:
+                    index = index + 1
+                elif init_vec[index] == 0:
+                    init_vec[index] = 1
         return init_vec
