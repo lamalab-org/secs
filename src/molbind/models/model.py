@@ -1,15 +1,15 @@
-from typing import Dict, Tuple, Union  # noqa: I002, UP035
+from __future__ import annotations
 
 import torch.nn as nn
 from loguru import logger
-from omegaconf import DictConfig
+from omegaconf import dictConfig
 from torch import Tensor
 
 from molbind.models.components.head import ProjectionHead
 
 
 class MolBind(nn.Module):
-    def __init__(self, cfg: DictConfig) -> None:
+    def __init__(self, cfg: dictConfig) -> None:
         super().__init__()
         from molbind.data.available import ModalityConstants
 
@@ -33,9 +33,9 @@ class MolBind(nn.Module):
                     **cfg.model.projection_heads[modality]
                 )
 
-        # convert dicts to nn.ModuleDict
-        self.dict_encoders = nn.ModuleDict(dict_encoders)
-        self.dict_projection_heads = nn.ModuleDict(dict_projection_heads)
+        # convert dicts to nn.Moduledict
+        self.dict_encoders = nn.Moduledict(dict_encoders)
+        self.dict_projection_heads = nn.Moduledict(dict_projection_heads)
 
         # add requires grad to projection heads
         for modality, projection_head in self.dict_projection_heads.items():
@@ -45,7 +45,7 @@ class MolBind(nn.Module):
 
     def forward(
         self,
-        input_data: Dict[str, Union[Tuple[Tensor, Tensor], Tensor]],  # noqa: UP006
+        input_data: dict[str, tuple[Tensor, Tensor] | Tensor],
     ) -> Tensor:
         store_embeddings = {}
         # Input data = [data, batch_index, dataloader_index]
@@ -66,7 +66,9 @@ class MolBind(nn.Module):
             central_modality_embedding_projected = self.dict_projection_heads[
                 self.central_modality
             ](central_modality_embedding)
-            store_embeddings[self.central_modality] = central_modality_embedding_projected
+            store_embeddings[self.central_modality] = (
+                central_modality_embedding_projected
+            )
         else:
             store_embeddings[self.central_modality] = central_modality_embedding
         if modality in self.dict_projection_heads:

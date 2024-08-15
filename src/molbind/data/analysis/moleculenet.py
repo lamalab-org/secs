@@ -1,7 +1,8 @@
-import os  # noqa: I002
+from __future__ import annotations
+
+import os
 from enum import Enum, StrEnum
 from pathlib import Path
-from typing import Dict, Optional  # noqa: UP035
 
 import numpy as np
 import pandas as pd
@@ -185,7 +186,7 @@ def download_moleculenet_task(task: MoleculeNetTask) -> pd.DataFrame:
 
 def compute_roc_auc(
     model: RandomForestClassifier, X_test: np.array, y_test: np.array
-) -> Dict[str, float]:  # noqa: UP006
+) -> dict[str, float]:
     y_pred = model.predict_proba(X_test)[:, 1]
     return roc_auc_score(y_test, y_pred)
 
@@ -200,7 +201,7 @@ def random_forest_hyperopt(
     max_evals: int = 50,
     trial_timeout: int = 300,
     one_model_for_all: bool = False,
-) -> Dict[str, RandomForestClassifier]:  # noqa: UP006
+) -> dict[str, RandomForestClassifier]:
     def loss_fn_wrapper_kappa(y_true: np.array, y_pred: np.array) -> float:
         return 1 - cohen_kappa_score(y_true, y_pred)
 
@@ -331,7 +332,7 @@ def aggregate_embeddings(
     embeddings: list[dict[str, torch.Tensor]],
     modalities: list[str],
     central_modality: str,
-) -> Dict[str, torch.Tensor]:  # noqa: UP006
+) -> dict[str, torch.Tensor]:
     device = select_device()
     constr_dict = {modality: [] for modality in modalities}
     central_mod_embed = {}
@@ -357,7 +358,7 @@ def logistic_regression(
     train: pd.DataFrame,
     valid_embeddings: np.array,
     valid: pd.DataFrame,
-    class_weight: Optional[str] = None,
+    class_weight: str | None = None,
 ) -> None:
     task_metrics = {}
     tasks = list(MoleculeNetTargetList[task_name.upper()].value)

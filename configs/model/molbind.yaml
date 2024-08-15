@@ -42,7 +42,7 @@ encoders:
     input_dims: [512, 256, 256]
     output_dims: [256, 256, 512]
     latent_dim: 256
-    freeze_encoder: True
+    freeze_encoder: False
   ir:
     input_dims: [1800, 1024, 512]
     output_dims: [512, 1024, 1800]
@@ -52,18 +52,18 @@ encoders:
     input_dims: [1024, 512, 256]
     output_dims: [256, 512, 1024]
     latent_dim: 256
-    freeze_encoder: True
+    freeze_encoder: False
   mass_spec_positive:
     input_dims: [1024, 512, 256]
     output_dims: [256, 512, 1024]
     latent_dim: 256
-    freeze_encoder: True
+    freeze_encoder: False
   h_nmr:
     # ckpt_path: null
-    input_dims: [1024, 512, 256]
-    output_dims: [256, 512, 1024]
-    latent_dim: 256
-    freeze_encoder: True
+    input_dims: [512, 256, 256, 256, 128]
+    output_dims: [128, 256, 256, 256, 512]
+    latent_dim: 128
+    freeze_encoder: False
 
 embedding_size: 512
 projection_heads:
@@ -82,13 +82,15 @@ projection_heads:
   # freeze projection heads
   c_nmr_freeze: True
   ir_freeze: True
-  smiles_freeze: False
+  smiles_freeze: True
+  selfies_freeze: True
   mass_spec_positive_freeze: False
+  h_nmr_freeze: False
   # default projection heads for each modality
   smiles:
     dims: [768, "${model.embedding_size}"]
     activation: LeakyReLU
-  selfies: 
+  selfies:
     dims: [768, "${model.embedding_size}"]
     activation: LeakyReLU
   graph:
@@ -116,7 +118,7 @@ projection_heads:
     dims: [256, "${model.embedding_size}"]
     activation: LeakyReLU
   h_nmr:
-    dims: [256, "${model.embedding_size}"]
+    dims: [128, "${model.embedding_size}"]
     activation: LeakyReLU
 
 optimizer:
@@ -127,6 +129,6 @@ loss:
   temperature: 0.07
   symmetric: True
   sparse: False
-    
+
 # compile model for faster training with pytorch 2.0
 compile: false

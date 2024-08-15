@@ -1,10 +1,8 @@
-from pathlib import Path  # noqa: I002
-from typing import (  # noqa: UP035
+from __future__ import annotations
+
+from pathlib import Path
+from typing import (
     Callable,
-    List,
-    Optional,
-    Tuple,
-    Union,
 )
 
 import torch
@@ -47,7 +45,7 @@ class SmilesEncoder(BaseModalityEncoder):
             for param in self.encoder.parameters():
                 param.requires_grad = False
 
-    def forward(self, x: Tuple[Tensor, Tensor]) -> Tensor:  # noqa: UP006
+    def forward(self, x: tuple[Tensor, Tensor]) -> Tensor:
         token_ids, attention_mask = x
         output = self.encoder(
             input_ids=token_ids,
@@ -88,8 +86,8 @@ class DescriptionEncoder:
 class CustomFingerprintEncoder(FingerprintEncoder):
     def __init__(
         self,
-        input_dims: List[int],  # noqa: UP006
-        output_dims: List[int],  # noqa: UP006
+        input_dims: list[int],
+        output_dims: list[int],
         latent_dim: int,
         ckpt_path: str,
     ) -> None:
@@ -187,7 +185,7 @@ class OutputBlockMolBind(OutputBlock):
         x: Tensor,
         rbf: Tensor,
         i: Tensor,
-        num_nodes: Optional[int] = None,
+        num_nodes: int | None = None,
     ) -> Tensor:
         x = self.lin_rbf(rbf) * x
         x = scatter(x, i, dim=0, dim_size=num_nodes, reduce="sum")
@@ -217,7 +215,7 @@ class StructureEncoder(DimeNet):
         num_before_skip: int = 1,
         num_after_skip: int = 2,
         num_output_layers: int = 3,
-        act: Union[str, Callable] = "swish",
+        act: str | Callable = "swish",
         output_initializer: str = "zeros",
     ):
         super().__init__(
@@ -253,9 +251,9 @@ class CustomStructureEncoder(StructureEncoder):
         num_before_skip: int = 1,
         num_after_skip: int = 2,
         num_output_layers: int = 3,
-        act: Union[str, Callable] = "swish",
+        act: str | Callable = "swish",
         output_initializer: str = "zeros",
-        ckpt_path: Optional[str] = None,
+        ckpt_path: str | None = None,
     ):
         super().__init__(
             hidden_channels=hidden_channels,
@@ -367,7 +365,7 @@ class ImageEncoder(nn.Module):
                         Defaults to False
         :return: torch.nn.Sequential module as feature-extractor
         """
-        layers: List[nn.Module] = []  # noqa: UP006
+        layers: list[nn.Module] = []
 
         in_channels = 1
         for v in self.cfg:
@@ -400,10 +398,10 @@ class ImageEncoder(nn.Module):
 class cNmrEncoder(FingerprintEncoder):
     def __init__(
         self,
-        input_dims: List[int],  # noqa: UP006
-        output_dims: List[int],  # noqa: UP006
+        input_dims: list[int],
+        output_dims: list[int],
         latent_dim: int,
-        ckpt_path: Optional[str] = None,
+        ckpt_path: str | None = None,
         freeze_encoder: bool = False,
     ) -> None:
         super().__init__(input_dims, output_dims, latent_dim)
@@ -426,10 +424,10 @@ class cNmrEncoder(FingerprintEncoder):
 class IrEncoder(FingerprintEncoder):
     def __init__(
         self,
-        input_dims: List[int],  # noqa: UP006
-        output_dims: List[int],  # noqa: UP006
+        input_dims: list[int],
+        output_dims: list[int],
         latent_dim: int,
-        ckpt_path: Optional[str] = None,
+        ckpt_path: str | None = None,
         freeze_encoder: bool = False,
     ) -> None:
         super().__init__(input_dims, output_dims, latent_dim)
@@ -452,10 +450,10 @@ class IrEncoder(FingerprintEncoder):
 class MassSpecPositiveEncoder(FingerprintEncoder):
     def __init__(
         self,
-        input_dims: List[int],  # noqa: UP006
-        output_dims: List[int],  # noqa: UP006
+        input_dims: list[int],
+        output_dims: list[int],
         latent_dim: int,
-        ckpt_path: Optional[str] = None,
+        ckpt_path: str | None = None,
         freeze_encoder: bool = False,
     ) -> None:
         super().__init__(input_dims, output_dims, latent_dim)
@@ -478,10 +476,10 @@ class MassSpecPositiveEncoder(FingerprintEncoder):
 class MassSpecNegativeEncoder(FingerprintEncoder):
     def __init__(
         self,
-        input_dims: List[int],  # noqa: UP006
-        output_dims: List[int],  # noqa: UP006
+        input_dims: list[int],
+        output_dims: list[int],
         latent_dim: int,
-        ckpt_path: Optional[str] = None,
+        ckpt_path: str | None = None,
         freeze_encoder: bool = False,
     ) -> None:
         super().__init__(input_dims, output_dims, latent_dim)
@@ -504,10 +502,10 @@ class MassSpecNegativeEncoder(FingerprintEncoder):
 class hNmrEncoder(FingerprintEncoder):
     def __init__(
         self,
-        input_dims: List[int],  # noqa: UP006
-        output_dims: List[int],  # noqa: UP006
+        input_dims: list[int],
+        output_dims: list[int],
         latent_dim: int,
-        ckpt_path: Optional[str] = None,
+        ckpt_path: str | None = None,
         freeze_encoder: bool = False,
     ) -> None:
         super().__init__(input_dims, output_dims, latent_dim)

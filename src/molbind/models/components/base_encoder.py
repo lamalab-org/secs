@@ -1,5 +1,7 @@
-import math  # noqa: I002
-from typing import List, Literal, Optional, Tuple, Union  # noqa: UP035
+from __future__ import annotations
+
+import math
+from typing import Literal
 
 import torch
 import torch.nn as nn
@@ -51,7 +53,7 @@ class BaseModalityEncoder(nn.Module):
             self.encoder = AutoModelForCausalLM.from_pretrained(self.model_name)
             self.encoder = xavier_init(self.encoder)
 
-    def forward(self, x: Tuple[Tensor, Tensor]) -> Tensor:  # noqa: UP006
+    def forward(self, x: tuple[Tensor, Tensor]) -> Tensor:
         token_ids, attention_mask = x
         output = self.encoder(
             input_ids=token_ids,
@@ -74,8 +76,8 @@ class BaseModalityEncoder(nn.Module):
 class FingerprintEncoder(nn.Module):
     def __init__(
         self,
-        input_dims: List[int],  # noqa: UP006
-        output_dims: List[int],  # noqa: UP006
+        input_dims: list[int],
+        output_dims: list[int],
         latent_dim: int,
     ) -> None:
         super().__init__()
@@ -92,7 +94,7 @@ class FingerprintEncoder(nn.Module):
     def decode(self, x: Tensor):
         return self.decoder(x)
 
-    def forward(self, x: Tensor) -> Tuple[Tensor, Tensor, Tensor]:  # noqa: UP006
+    def forward(self, x: Tensor) -> tuple[Tensor, Tensor, Tensor]:
         latent_state = self.encode(x)
         mu = self.fc_mu(latent_state)
         log_var = self.fc_log_var(latent_state)
@@ -101,8 +103,8 @@ class FingerprintEncoder(nn.Module):
 
 
 def gcn_norm(
-    edge_index: Union[Tensor, Tuple[Tensor, Tensor], SparseTensor],  # noqa: UP006
-    num_nodes: Optional[int] = None,
+    edge_index: Tensor | tuple[Tensor, Tensor] | SparseTensor,
+    num_nodes: int | None = None,
 ):
     num_nodes = maybe_num_nodes(edge_index, num_nodes)
 

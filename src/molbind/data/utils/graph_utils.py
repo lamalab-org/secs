@@ -1,13 +1,14 @@
-import csv  # noqa: I002
+from __future__ import annotations
+
+import csv
 import math
 import random
 from copy import deepcopy
-from typing import List, Tuple  # noqa: UP035
+from pathlib import Path
 
 import numpy as np
 import torch
 from rdkit import Chem
-from rdkit.Chem import AllChem
 from rdkit.Chem.rdchem import BondType as BT
 from rdkit.Chem.rdchem import HybridizationType
 from torch import tensor
@@ -33,9 +34,9 @@ BONDDIR_LIST = [
 ]
 
 
-def read_smiles(data_path: str) -> List[str]:  # noqa: UP006
+def read_smiles(data_path: str) -> list[str]:
     smiles_data = []
-    with open(data_path) as csv_file:  # noqa: PTH123
+    with Path(data_path).open("r") as csv_file:
         csv_reader = csv.reader(csv_file, delimiter=",")
         for _, row in enumerate(csv_reader):
             smiles = row[-1]
@@ -96,7 +97,7 @@ def smiles_to_graph_without_augment(smiles: str) -> Data:
     return Data(x=x, edge_index=edge_index, edge_attr=edge_attr)
 
 
-def smiles_to_graph(smiles: str) -> Tuple[Data, Data]:  # noqa: UP006
+def smiles_to_graph(smiles: str) -> tuple[Data, Data]:
     x, edge_index, edge_attr, N, M = construct_graph(smiles)
     # random mask a subgraph of the molecule
     # start augmenting the data
@@ -148,7 +149,7 @@ class MoleculeDataset(Dataset):
     def __len__(self):
         return len(self.smiles_data)
 
-    def __getitem__(self, index: int) -> Tuple:  # noqa: UP006
+    def __getitem__(self, index: int) -> tuple:
         return smiles_to_graph(self.smiles_data[index])
 
 
@@ -157,7 +158,7 @@ def get_train_valid_loaders_from_dataset(
     batch_size: int,
     num_workers: int = 0,
     valid_size: float = 0.2,
-) -> Tuple[GeometricDataLoader, GeometricDataLoader]:  # noqa: UP006
+) -> tuple[GeometricDataLoader, GeometricDataLoader]:
     """Generate a torch DataLoader from a dataset.
 
     Args:
@@ -166,7 +167,7 @@ def get_train_valid_loaders_from_dataset(
         shuffle (bool, optional): shuffle data. Defaults to True.
         num_workers (int, optional): number of workers. Defaults to 0.
     Returns:
-        Tuple[GeometricDataLoader, GeometricDataLoader]: train and validation dataloaders as tuple
+        tuple[GeometricDataLoader, GeometricDataLoader]: train and validation dataloaders as tuple
     """
     dataset = MoleculeDataset(data_path)
     # split dataset into train and test

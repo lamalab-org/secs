@@ -1,7 +1,10 @@
-from typing import Dict, Literal, Union  # noqa: UP035, I002
+from __future__ import annotations
+
+from typing import Literal
 
 import torch
 from lightning.pytorch.utilities.combined_loader import CombinedLoader
+from loguru import logger
 from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader, DistributedSampler
 from torch_geometric.loader import DataLoader as GeometricDataLoader
@@ -12,7 +15,7 @@ from molbind.data.available import NonStringModalities
 class MolBindDataModule(LightningDataModule):
     def __init__(
         self,
-        data: Dict,  # noqa: UP006
+        data: dict,
     ) -> None:
         super().__init__()
         # create attributes for each subset
@@ -29,7 +32,7 @@ class MolBindDataModule(LightningDataModule):
     def build_multimodal_dataloader(
         self,
         mode: Literal["train", "val", "test"],
-        batch_size: Union[int, Dict[str, int]],  # noqa: UP006
+        batch_size: int | dict[str, int],
         drop_last: bool,
         shuffle: bool,
         num_workers: int = 2,
@@ -70,6 +73,7 @@ class MolBindDataModule(LightningDataModule):
                 )
         # CombinedLoader does not work with DDPSampler directly
         # So each dataloader has a DistributedSampler
+        logger.info(f"Nr of dataloaders: {len(dataloaders)}")
         return dataloaders
 
     def train_dataloader(self) -> CombinedLoader:
@@ -111,12 +115,12 @@ class MolBindDataModule(LightningDataModule):
 
     def build_predict_dataloader(
         self,
-        batch_size: Union[int, Dict[str, int]],  # noqa: UP006
+        batch_size: int | dict[str, int],
         drop_last: bool,
         shuffle: bool,
         num_workers: int,
         mode: str,
-    ) -> Dict[str, DataLoader]:  # noqa: UP006
+    ) -> dict[str, DataLoader]:
         """
         Build dataloaders for the predict step.
         This function is similar to `build_multimodal_dataloader` but does not use the DistributedSampler.

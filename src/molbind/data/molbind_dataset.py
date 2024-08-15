@@ -1,5 +1,6 @@
-from functools import partial  # noqa: I002
-from typing import Dict, List, Tuple, Union  # noqa: UP035
+from __future__ import annotations
+
+from functools import partial
 
 import pandas as pd
 import polars as pl
@@ -30,8 +31,8 @@ class MolBindDataset:
     def __init__(
         self,
         data: pl.DataFrame,
-        central_modality: Union[StringModalities, NonStringModalities],
-        other_modalities: List[str],  # noqa: UP006
+        central_modality: StringModalities | NonStringModalities,
+        other_modalities: list[str],
         **kwargs,
     ) -> None:
         """Dataset for multimodal data."""
@@ -199,7 +200,7 @@ class MolBindDataset:
 
     def build_datasets_for_modalities(
         self,
-    ) -> Dict[str, Dataset]:  # noqa: UP006
+    ) -> dict[str, Dataset]:
         datasets = {}
         for modality in self.other_modalities:
             if modality in self.data.columns:
@@ -211,21 +212,20 @@ class MolBindDataset:
 
     def _handle_central_modality_data(
         self, data_pair: pd.DataFrame
-    ) -> Tuple[Tensor, Tensor]:  # noqa: UP006
-        if self.central_modality_data_type == str:
+    ) -> tuple[Tensor, Tensor]:
+        if isinstance(self.central_modality_data_type, str):
             central_modality_data = (
                 self.central_modality_data[0][data_pair.index.to_list()],
                 self.central_modality_data[1][data_pair.index.to_list()],
             )
         return central_modality_data
 
-    # private class methods
     @staticmethod
     def _tokenize_strings(
-        dataset: List[str],  # noqa: UP006
+        dataset: list[str],
         context_length: int,
         modality: str,
-    ) -> Tuple[Tensor, Tensor]:  # noqa: UP006
+    ) -> tuple[Tensor, Tensor]:
         tokenized_data = ModalityConstants[modality].tokenizer(
             dataset,
             padding="max_length",
@@ -236,9 +236,9 @@ class MolBindDataset:
         return tokenized_data["input_ids"], tokenized_data["attention_mask"]
 
     @staticmethod
-    def _build_selfies_from_smiles(smi_list: List[str]) -> List[str]:  # noqa: UP006
+    def _build_selfies_from_smiles(smi_list: list[str]) -> list[str]:
         return [sf.encoder(smi) for smi in smi_list]
 
     @staticmethod
-    def _build_smiles_from_selfies(selfies_list: List[str]) -> List[str]:  # noqa: UP006
+    def _build_smiles_from_selfies(selfies_list: list[str]) -> list[str]:
         return [sf.decoder(selfies) for selfies in selfies_list]

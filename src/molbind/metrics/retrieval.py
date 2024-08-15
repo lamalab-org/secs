@@ -1,5 +1,6 @@
-import contextlib  # noqa: I002
-from typing import Dict, List  # noqa: UP035
+from __future__ import annotations
+
+import contextlib
 
 import chromadb
 import numpy as np
@@ -8,9 +9,9 @@ from loguru import logger
 
 
 def compute_retrieval_metrics_from_query(
-    ids: List[str],  # noqa: UP006
-    retrieved_ids: List[str],  # noqa: UP006
-    top_k: List[int],  # noqa: UP006
+    ids: list[str],
+    retrieved_ids: list[str],
+    top_k: list[int],
 ) -> None:
     retrieval_metrics_entire_db = {k: np.zeros(len(ids)) for k in top_k}
     for k in top_k:
@@ -21,12 +22,12 @@ def compute_retrieval_metrics_from_query(
 
 
 def full_database_retrieval(
-    embeddings: Dict[str, np.ndarray],  # noqa: UP006
+    embeddings: dict[str, np.ndarray],
     indices: pd.DataFrame,
-    other_modalities: List[str],  # noqa: UP006
+    other_modalities: list[str],
     central_modality: str,
-    top_k: List[int],  # noqa: UP006
-) -> Dict[str, Dict[str, float]]:  # noqa: UP006
+    top_k: list[int],
+) -> dict[str, dict[str, float]]:
     all_modalities = [central_modality, *other_modalities]
 
     retrieval_metrics = {}

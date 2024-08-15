@@ -1,5 +1,7 @@
-import random  # noqa: I002
-from typing import List, Literal, Optional, Tuple, Union  # noqa: UP035
+from __future__ import annotations
+
+import random
+from typing import Literal
 
 import numpy as np
 import pandas as pd
@@ -16,27 +18,27 @@ from molbind.data.utils.graph_utils import (
 )
 
 
-def _fingerprint(fingerprint: List[int]) -> Tensor:  # noqa: UP006
+def _fingerprint(fingerprint: list[int]) -> Tensor:
     return Tensor(fingerprint)
 
 
-def _string(input: Tuple[Tensor, Tensor]) -> Tuple[Tensor, Tensor]:  # noqa: UP006
+def _string(input: tuple[Tensor, Tensor]) -> tuple[Tensor, Tensor]:
     return input
 
 
 class StringDataset(Dataset):
     def __init__(
         self,
-        central_modality_data: Tuple[Tensor, Tensor],  # noqa: UP006
-        other_modality_data: Tuple[Tensor, Tensor],  # noqa: UP006
+        central_modality_data: tuple[Tensor, Tensor],
+        other_modality_data: tuple[Tensor, Tensor],
         central_modality: str,
         other_modality: str,
     ) -> None:
         """Dataset for string modalities.
 
         Args:
-            central_modality_data (Tuple[Tensor, Tensor]): pair of (central_modality, tokenized_central_modality)
-            other_modality_data (Tuple[Tensor, Tensor]): pair of (other_modality, tokenized_other_modality)
+            central_modality_data (tuple[Tensor, Tensor]): pair of (central_modality, tokenized_central_modality)
+            other_modality_data (tuple[Tensor, Tensor]): pair of (other_modality, tokenized_other_modality)
             central_modality (str): name of central modality as found in ModalityConstants
             other_modality (str): name of other modality as found in ModalityConstants
         """
@@ -57,10 +59,10 @@ class StringDataset(Dataset):
     def __getitem__(self, idx):
         return {
             self.central_modality: tuple([i[idx] for i in self.central_modality_data])
-            if self.central_modality_data_type == str
+            if isinstance(self.central_modality_data_type, str)
             else Tensor(self.central_modality_data[idx]),
             self.other_modality: tuple([i[idx] for i in self.other_modality_data])
-            if self.other_modality_data_type == str
+            if isinstance(self.other_modality_data_type, str)
             else Tensor(self.other_modality_data)[idx],
         }
 
@@ -68,14 +70,14 @@ class StringDataset(Dataset):
 class FingerprintMolBindDataset(Dataset):
     def __init__(
         self,
-        central_modality_data: Tuple[Tensor, Tensor],  # noqa: UP006
-        fingerprint_data: List[List[int]],  # noqa: UP006
+        central_modality_data: tuple[Tensor, Tensor],
+        fingerprint_data: list[list[int]],
         central_modality: str,
     ) -> None:
         """Dataset for fingerprints.
 
         Args:
-            central_modality_data (Tuple[Tensor, Tensor]): pair of (central_modality, tokenized_central_modality)
+            central_modality_data (tuple[Tensor, Tensor]): pair of (central_modality, tokenized_central_modality)
             fingerprint_data (Tensor): fingerprint data
             central_modality (str): name of central modality as found in ModalityConstants
         Returns:
@@ -101,14 +103,14 @@ class GraphDataset(Dataset):
         self,
         graph_data: pd.DataFrame,
         central_modality: str,
-        central_modality_data: Union[List[int], Tensor, Tuple[Tensor, Tensor]],  # noqa: UP006
+        central_modality_data: list[int] | Tensor | tuple[Tensor, Tensor],
     ) -> None:
         """Dataset for the graph modality (MolCLR).
 
         Args:
             graph_data (pl.DataFrame): graph data as a polars DataFrame
             central_modality (str): name of central modality as found in ModalityConstants
-            central_modality_data (Union[Tensor, Tuple[Tensor, Tensor]]): central modality data
+            central_modality_data (list[int] | Tensor | tuple[Tensor, Tensor]]): central modality data
             that is either a tensor or a tuple of tensors depending on the data type
         Returns:
             None
@@ -148,7 +150,7 @@ class GraphDataset(Dataset):
         """
         data = smiles_to_graph_without_augment(self.smiles_list[index])
         data.central_modality = self.central_modality
-        if self.central_modality_data_type != str:
+        if not isinstance(self.central_modality_data_type, str):
             data.central_modality_data = self.central_modality_handlers[
                 data.central_modality
             ](self.central_modality_data[index])
@@ -171,9 +173,9 @@ class StructureDataset(Dataset):
 
     def __init__(
         self,
-        sdf_file_list: List[str],  # noqa: UP006
+        sdf_file_list: list[str],
         dataset_mode: Literal["molbind", "encoder"],
-        output_list: Optional[List[float]] = None,  # noqa: UP006
+        output_list: list[float] | None = None,
         **kwargs,
     ) -> None:
         from molbind.data.available import (
@@ -214,7 +216,7 @@ class StructureDataset(Dataset):
             return data
         elif self.mode == "molbind":
             data.central_modality = self.central_modality
-            if self.central_modality_data_type != str:
+            if not isinstance(self.central_modality_data, str):
                 data.central_modality_data = self.central_modality_handlers[
                     data.central_modality
                 ](self.central_modality_data[idx])
@@ -248,12 +250,12 @@ class FingerprintVAEDataset(Dataset):
 
 
 class ImageDataset(Dataset):
-    def __init__(self, image_files: List[str], **kwargs):  # noqa: UP006
+    def __init__(self, image_files: list[str], **kwargs):
         """Dataset for images.
 
         Args:
-            image_files (List[str]): list of image file paths
-            labels (List[int]): list of SMILES labels
+            image_files (list[str]): list of image file paths
+            labels (list[int]): list of SMILES labels
         """
         from molbind.data.available import (
             NonStringModalities,
@@ -308,7 +310,7 @@ class ImageDataset(Dataset):
         img_PIL = transforms.ColorJitter(
             brightness=[0.75, 2.0], contrast=0, saturation=0, hue=0
         )(img_PIL)
-        shear_value = np.random.uniform(0.1, 7.0)  # noqa: NPY002
+        shear_value = np.random.default_rng().uniform(0.1, 7.0)
         shear = random.choice(
             [
                 [0, 0, -shear_value, shear_value],
@@ -477,13 +479,13 @@ class hNmrDataset(Dataset):
 
     def hnmr_to_vec(self, nmr_shifts: list[list[float]]) -> Tensor:
         init_vec = torch.zeros(self.vec_len, dtype=torch.float32)
-        if isinstance(nmr_shifts[0], list) or isinstance(nmr_shifts[0], np.ndarray):
-            for shift, nH in nmr_shifts:
+        if isinstance(nmr_shifts[0], (list, np.ndarray)):
+            for shift, _ in nmr_shifts:
                 index = int(shift / 18 * self.vec_len)
                 init_vec[index] = 1
         else:
-            for shift in nmr_shifts:
-                shift = np.round(shift, 2)
+            for _shift in nmr_shifts:
+                shift = np.round(_shift, 2)
                 index = int(shift / 18 * self.vec_len)
                 if index >= self.vec_len:
                     index = self.vec_len - 1

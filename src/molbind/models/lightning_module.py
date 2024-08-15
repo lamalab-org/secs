@@ -1,7 +1,8 @@
-import contextlib  # noqa: I002
+from __future__ import annotations
+
+import contextlib
 import os
 from pathlib import Path
-from typing import Dict, List, Union  # noqa: UP035
 from uuid import uuid1
 
 import torch
@@ -57,7 +58,7 @@ class MolBindModule(LightningModule):
         logger.info(f"Per device batch size: {self.per_device_batch_size}")
         logger.info(f"Loss batch size: {self.batch_size}")
 
-    def forward(self, batch: Union[tuple[Data], Dict]) -> Dict:  # noqa: UP006
+    def forward(self, batch: tuple[Data] | dict) -> dict:
         if isinstance(batch, tuple) and isinstance(batch[0], Data):
             dict_input_data = self._treat_graph_batch(batch[0])
             forward_pass = self.model(dict_input_data)
@@ -77,7 +78,9 @@ class MolBindModule(LightningModule):
         else:
             return self.loss(z1, z2)
 
-    def _multimodal_loss(self, embeddings_dict: Dict, prefix: str) -> float:  # noqa: UP006
+    def _multimodal_loss(
+        self, embeddings_dict: dict[str, Tensor], prefix: str
+    ) -> float:
         modality_pair = [*embeddings_dict]
         central_to_modality_loss = self._info_nce_loss(
             embeddings_dict[modality_pair[0]], embeddings_dict[modality_pair[1]]
@@ -114,18 +117,18 @@ class MolBindModule(LightningModule):
             )
         return loss
 
-    def training_step(self, batch: Dict):  # noqa: UP006
+    def training_step(self, batch: dict) -> Tensor:
         embeddings_dict = self.forward(batch)
         return self._multimodal_loss(embeddings_dict, "train")
 
-    def validation_step(self, batch: Dict) -> Tensor:  # noqa: UP006
+    def validation_step(self, batch: dict) -> Tensor:
         embeddings_dict = self.forward(batch)
         return self._multimodal_loss(embeddings_dict, "valid")
 
-    def predict_step(self, batch: Dict) -> Tensor:  # noqa: UP006
+    def predict_step(self, batch: dict) -> Tensor:
         return self.forward(batch)
 
-    def test_step(self, batch: Dict) -> Tensor:  # noqa: UP006
+    def test_step(self, batch: dict) -> Tensor:
         embeddings_dict = self.forward(batch)
         # self.store_embeddings.append(embeddings_dict)
         # store embeddings to file
@@ -164,7 +167,7 @@ class MolBindModule(LightningModule):
         embeddings_other_mod: Tensor,
         central_modality: str,
         other_modality: str,
-        k_list: List[int],  # noqa: UP006
+        k_list: list[int],
         prefix: str,
     ) -> None:
         """
@@ -252,7 +255,7 @@ class MolBindModule(LightningModule):
                     sync_dist=self.world_size > 1,
                 )
 
-    def _treat_graph_batch(self, batch: Data) -> Dict:  # noqa: UP006
+    def _treat_graph_batch(self, batch: Data) -> dict:
         # pos is only in "structure" modality and otherwise "graph"
         modality = batch.modality[0]
         # this adjusts the shape of the central modality data to be compatible with the model

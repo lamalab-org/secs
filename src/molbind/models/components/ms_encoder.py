@@ -1,4 +1,6 @@
-import pytorch_lightning as L  # noqa: I002
+from __future__ import annotations
+
+import pytorch_lightning as L
 import torch
 import torch.nn as nn
 import torch.nn.functional as F

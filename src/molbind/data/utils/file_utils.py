@@ -1,4 +1,4 @@
-import pickle as pkl  # noqa: I002
+from __future__ import annotations
 
 import pandas as pd
 import polars as pl
@@ -9,7 +9,7 @@ def csv_load_function(path: str) -> pl.DataFrame:
 
 
 def pickle_load_function(path: str) -> pl.DataFrame:
-    data = pkl.load(open(path, "rb"))  # noqa: PTH123, SIM115
+    data = pd.read_pickle(path)
     return pl.from_pandas(data)
 
 

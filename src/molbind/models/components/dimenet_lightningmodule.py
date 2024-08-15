@@ -1,4 +1,6 @@
-import torch  # noqa: I002
+from __future__ import annotations
+
+import torch
 from lightning import LightningModule
 from omegaconf import DictConfig
 from torch import Tensor

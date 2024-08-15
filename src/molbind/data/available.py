@@ -1,4 +1,6 @@
-from enum import Enum, StrEnum  # noqa: I002
+from __future__ import annotations
+
+from enum import Enum, StrEnum
 
 from networkx import Graph
 from numpy import ndarray
@@ -6,7 +8,6 @@ from numpy import ndarray
 from molbind.data.components.datasets import (
     FingerprintMolBindDataset,
     GraphDataset,
-    hNmrDataset,
     ImageDataset,
     IrDataset,
     MassSpecNegativeDataset,
@@ -14,6 +15,7 @@ from molbind.data.components.datasets import (
     StringDataset,
     StructureDataset,
     cNmrDataset,
+    hNmrDataset,
 )
 from molbind.data.components.mb_tokenizers import (
     DESCRIPTION_TOKENIZER,
@@ -25,7 +27,6 @@ from molbind.models.components.custom_encoders import (
     CustomGraphEncoder,
     CustomStructureEncoder,
     DescriptionEncoder,
-    hNmrEncoder,
     ImageEncoder,
     IrEncoder,
     IUPACNameEncoder,
@@ -34,6 +35,7 @@ from molbind.models.components.custom_encoders import (
     SelfiesEncoder,
     SmilesEncoder,
     cNmrEncoder,
+    hNmrEncoder,
 )
 
 

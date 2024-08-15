@@ -1,5 +1,7 @@
-from collections.abc import Iterable  # noqa: I002
-from typing import List  # noqa: UP035
+from __future__ import annotations
+
+from collections.abc import Iterable
+from typing import list
 
 import numpy as np
 from rdkit.Chem import AllChem, Descriptors, MolFromSmiles, MolToSmiles
@@ -7,7 +9,7 @@ from rdkit.Chem import AllChem, Descriptors, MolFromSmiles, MolToSmiles
 
 def get_morgan_fingerprint_from_smiles(
     smiles: str, radius: int = 4, nbits: int = 2048
-) -> List[int]:  # noqa: UP006
+) -> list[int]:
     """
     Get Morgan fingerprint of a molecule:
 
@@ -42,7 +44,7 @@ def compute_morgan_fingerprints(
     return np.asarray(X)
 
 
-def compute_fragprint(smiles: str) -> List[float]:  # noqa: UP006
+def compute_fragprint(smiles: str) -> list[float]:
     X = compute_morgan_fingerprints([smiles])
     fragments = {d[0]: d[1] for d in Descriptors.descList[115:]}
     X1 = np.zeros((1, len(fragments)))

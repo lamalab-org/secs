@@ -1,4 +1,6 @@
-from transformers import AutoTokenizer  # noqa: I002
+from __future__ import annotations
+
+from transformers import AutoTokenizer
 
 SMILES_TOKENIZER = AutoTokenizer.from_pretrained(
     "ibm/MoLFormer-XL-both-10pct", trust_remote_code=True

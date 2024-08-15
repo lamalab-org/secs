@@ -1,7 +1,9 @@
 """
 This module contains the implementation of the FingerprintEncoderModule class, which is a PyTorch Lightning module.
 The FingerprintEncoderModule class is used to train the FingerprintEncoder model using PyTorch Lightning.
-"""  # noqa: I002
+"""
+
+from __future__ import annotations
 
 import torch
 import torch.nn.functional as F

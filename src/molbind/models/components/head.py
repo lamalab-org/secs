@@ -1,4 +1,4 @@
-from typing import List, Union  # noqa: UP035, I002
+from __future__ import annotations
 
 from class_resolver import ClassResolver
 from torch import Tensor, nn
@@ -11,8 +11,8 @@ ACTIVATION_RESOLVER = ClassResolver(
 class ProjectionHead(nn.Module):
     def __init__(
         self,
-        dims: List[int],  # noqa: UP006
-        activation: Union[str, List[str]] = "leakyrelu",  # noqa: UP006
+        dims: list[int],
+        activation: str | list[str] = "leakyrelu",
     ) -> None:
         super().__init__()
         # build projection head
@@ -22,8 +22,8 @@ class ProjectionHead(nn.Module):
 
     def _build_projection_head(
         self,
-        dims: List[int],  # noqa: UP006
-        activation: Union[str, List[str]],  # noqa: UP006
+        dims: list[int],
+        activation: str | list[str],
     ) -> nn.Sequential:
         # Build projection head dynamically based on the length of dims
         layers = []
@@ -38,8 +38,8 @@ class ProjectionHead(nn.Module):
 
     def _get_activation(
         self,
-        activation: Union[str, List[str]],  # noqa: UP006
-    ) -> Union[nn.Module, nn.Sequential]:
+        activation: str | list[str],
+    ) -> nn.Module | nn.Sequential:
         if isinstance(activation, str):
             return ACTIVATION_RESOLVER.make(activation)
         elif isinstance(activation, list):
