@@ -43,8 +43,8 @@ def embed_dataset_and_compute_metrics(config: DictConfig):
     valid_datasets = (
         MolBindDataset(
             central_modality=config.data.central_modality,
-            other_modalities=["smiles"],
-            data=data_to_embed_pl[["selfies", "smiles"]],
+            other_modalities=["graph"],
+            data=data_to_embed_pl[[config.data.central_modality, "graph"]],
             context_length=config.data.context_length,
         ).build_datasets_for_modalities(),
     )
@@ -71,7 +71,7 @@ def embed_dataset_and_compute_metrics(config: DictConfig):
     aggregated_embeddings = aggregate_embeddings(
         embeddings=predictions,
         # smiles=data_to_embed["smiles"].tolist(),
-        modalities=["smiles"],
+        modalities=["graph"],
         central_modality=config.data.central_modality,
     )
 
@@ -80,8 +80,8 @@ def embed_dataset_and_compute_metrics(config: DictConfig):
     )
     # import pickle as pkl
     # # save all embeddings to file
-    # with open(config.store_embeddings_directory + ".pkl", "wb") as f:
-    #     pkl.dump(aggregated_embeddings, f)
+    with open(f"{config.task_name}_{config.task_seed}.pkl", "wb") as f:
+        pkl.dump(aggregated_embeddings, f)
 
     train, test, valid = prep_split(
         data_to_embed,

@@ -213,7 +213,7 @@ class MolBindDataset:
     def _handle_central_modality_data(
         self, data_pair: pd.DataFrame
     ) -> tuple[Tensor, Tensor]:
-        if isinstance(self.central_modality_data_type, str):
+        if self.central_modality_data_type is str:
             central_modality_data = (
                 self.central_modality_data[0][data_pair.index.to_list()],
                 self.central_modality_data[1][data_pair.index.to_list()],

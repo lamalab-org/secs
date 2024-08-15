@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import torch.nn as nn
 from loguru import logger
-from omegaconf import dictConfig
+from omegaconf import DictConfig
 from torch import Tensor
 
 from molbind.models.components.head import ProjectionHead
 
 
 class MolBind(nn.Module):
-    def __init__(self, cfg: dictConfig) -> None:
+    def __init__(self, cfg: DictConfig) -> None:
         super().__init__()
         from molbind.data.available import ModalityConstants
 
@@ -34,8 +34,8 @@ class MolBind(nn.Module):
                 )
 
         # convert dicts to nn.Moduledict
-        self.dict_encoders = nn.Moduledict(dict_encoders)
-        self.dict_projection_heads = nn.Moduledict(dict_projection_heads)
+        self.dict_encoders = nn.ModuleDict(dict_encoders)
+        self.dict_projection_heads = nn.ModuleDict(dict_projection_heads)
 
         # add requires grad to projection heads
         for modality, projection_head in self.dict_projection_heads.items():

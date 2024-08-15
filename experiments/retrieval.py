@@ -5,12 +5,13 @@ from pprint import pformat
 
 import hydra
 import pandas as pd
+import polars as pl
 import pytorch_lightning as L
 import rootutils
+import selfies as sf
 from dotenv import load_dotenv
 from loguru import logger
 from omegaconf import DictConfig
-import polars as pl
 
 from molbind.data.analysis.moleculenet import aggregate_embeddings
 from molbind.data.datamodule import MolBindDataModule
@@ -48,6 +49,10 @@ def train_molbind(config: DictConfig):
         data = handlers[data_format](config.data.dataset_path)
     except KeyError:
         logger.error(f"Format {data_format} not supported")
+    data = data.with_columns(pl.col("smiles").alias("graph"))
+    data = data.to_pandas()
+    data["selfies"] = data["smiles"].apply(sf.encoder)
+    data = pl.DataFrame(data)
     # data = data.with_columns(pl.col("smiles").alias("graph"))
     # data = data.drop_nulls(subset=["structure"])
     # data = data.with_columns(
@@ -64,7 +69,10 @@ def train_molbind(config: DictConfig):
     valid_shuffled_data = shuffled_data.tail(
         int(config.data.valid_frac * dataset_length)
     )
-    valid_shuffled_data = valid_shuffled_data.unique(subset=[config.data.central_modality])
+    valid_shuffled_data = valid_shuffled_data.unique(
+        subset=[config.data.central_modality]
+    )
+
 
     valid_datasets = (
         MolBindDataset(
@@ -90,8 +98,9 @@ def train_molbind(config: DictConfig):
         model=MolBindModule(config),
         datamodule=datamodule,
     )
-    with open(f"predictions_{RETRIEVAL_TIME}.pkl", "wb") as f:  # noqa: PTH123
+    with open(f"{config.embeddings_path}_{RETRIEVAL_TIME}.pkl", "wb") as f:  # noqa: PTH123
         pkl.dump(predictions, f, protocol=pkl.HIGHEST_PROTOCOL)
+
     aggregated_embeddings = aggregate_embeddings(
         embeddings=predictions,
         modalities=config.data.modalities,
@@ -99,7 +108,7 @@ def train_molbind(config: DictConfig):
     )
 
     # concatenate predictions outside of this script and save predictions
-    with open(f"{config.store_embeddings_directory}.pkl", "wb") as f:  # noqa: PTH123
+    with open(f"{config.embeddings_path}.pkl", "wb") as f:  # noqa: PTH123
         pkl.dump(aggregated_embeddings, f, protocol=pkl.HIGHEST_PROTOCOL)
 
     logger.info(f"Saved embeddings to {config.store_embeddings_directory}.pkl")

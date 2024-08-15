@@ -7,6 +7,7 @@ import hydra
 import polars as pl
 import pytorch_lightning as L
 import rootutils
+import selfies as sf
 import torch
 from dotenv import load_dotenv
 from loguru import logger
@@ -30,10 +31,10 @@ TRAIN_DATE = datetime.datetime.now().strftime("%Y%m%d_%H%M")
 
 
 def train_molbind(config: DictConfig):
+    # define the run_id based on the config name and the date
     run_id = (
         config.run_id + "_" + TRAIN_DATE if hasattr(config, "run_id") else TRAIN_DATE
     )
-
     # set wandb mode to offline if no WANDB_API_KEY is set
     if not os.getenv("WANDB_API_KEY"):
         os.environ["WANDB_MODE"] = "offline"
@@ -49,7 +50,7 @@ def train_molbind(config: DictConfig):
         entity=os.getenv("WANDB_ENTITY"),
         id=run_id,
     )
-
+    # define the number of GPUs available for the dataloaders
     world_size = torch.cuda.device_count()
     # extract format of dataset file
     data_format = Path(config.data.dataset_path).suffix
@@ -59,18 +60,28 @@ def train_molbind(config: DictConfig):
         ".pkl": pickle_load_function,
         ".parquet": pl.read_parquet,
     }
-
+    # load and handle the data
     try:
         data = handlers[data_format](config.data.dataset_path)
     except KeyError:
         logger.error(f"Format {data_format} not supported")
     # add graph column to data
-    data = data.with_columns(pl.col("smiles").alias("graph"))
+    # data = data.with_columns(pl.col("smiles").alias("graph"))
+    # data = data.to_pandas()
+    # data["selfies"] = data["smiles"].apply(sf.encoder)
+    # data = pl.DataFrame(data)
+    # # add selfies column to data
+    # def col_to_selfies(col):
+    #     return [sf.encoder(smiles) for smiles in col]
+
+    # data = data.with_columns(
+    #     pl.col("smiles").map_batches(col_to_selfies).alias("selfies")
+    # )
     # data = data[["smiles", "mass_spec_positive"]]
     shuffled_data = data.sample(
         fraction=config.data.fraction_data, shuffle=True, seed=config.data.seed
     )
-
+    # split the data into train and validation
     dataset_length = len(shuffled_data)
     valid_shuffled_data = shuffled_data.tail(
         int(config.data.valid_frac * dataset_length)
@@ -78,7 +89,7 @@ def train_molbind(config: DictConfig):
     train_shuffled_data = shuffled_data.head(
         int(config.data.train_frac * dataset_length)
     )
-
+    # set up the dataloaders
     train_dataloader, valid_dataloader = (
         MolBindDataset(
             central_modality=config.data.central_modality,
@@ -93,7 +104,7 @@ def train_molbind(config: DictConfig):
             context_length=config.data.context_length,
         ).build_datasets_for_modalities(),
     )
-
+    # set up the data module
     datamodule = MolBindDataModule(
         data={
             "train": train_dataloader,
@@ -104,6 +115,7 @@ def train_molbind(config: DictConfig):
             },
         },
     )
+    # set up callbacks for the model
     callbacks = [
         ModelCheckpoint(
             monitor=config.callbacks.model_checkpoint.monitor,
@@ -119,6 +131,7 @@ def train_molbind(config: DictConfig):
             patience=config.callbacks.early_stopping.patience,
         ),
     ]
+    # set up the trainer
     trainer = L.Trainer(
         max_epochs=config.trainer.max_epochs,
         accelerator=config.trainer.accelerator,
@@ -132,11 +145,23 @@ def train_molbind(config: DictConfig):
         precision=config.trainer.precision,
         deterministic=True,
     )
-
+    # train the model
     trainer.fit(
         model=MolBindModule(config),
         datamodule=datamodule,
     )
+    # copy the best model under the name "best_model"
+    best_model_path = (
+        Path(config.callbacks.model_checkpoint.dirpath)
+        / Path(run_id)
+        / "best_model.ckpt"
+    )
+    os.system(
+        f"cp {best_model_path} {Path(config.callbacks.model_checkpoint.dirpath) / Path(run_id) / 'best_model.ckpt'}"
+    )
+    logger.info(f"Best model saved at {best_model_path}")
+    logger.info("Training complete")
+    logger.info("Exiting")
 
 
 def _get_first_node():
@@ -197,7 +222,9 @@ def init_distributed_mode(port=12354):
     logger.info(f"CUDA_VISIBLE_DEVICES={os.getenv('CUDA_VISIBLE_DEVICES')}")
 
 
-@hydra.main(version_base="1.3", config_path="../configs")
+@hydra.main(
+    version_base="1.3", config_path="../configs", config_name="molbind_config.yaml"
+)
 def main(config: DictConfig):
     init_distributed_mode(12354)
     train_molbind(config)

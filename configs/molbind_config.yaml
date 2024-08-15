@@ -1,21 +1,17 @@
-# @package _global_
-
 # specify here default configuration
 # order of defaults determines the order in which configs override each other
+
 defaults:
   - _self_
-  - data: smi_nmr_ir
+  - data: molbind
   - model: molbind
   - logger: wandb
   - paths: default
   - trainer: gpu
   - callbacks: default
-
   # experiment configs allow for version control of specific hyperparameters
   # e.g. best hyperparameters for given model and datamodule
   - experiment: null
-  # config for hyperparameter optimization
-  - hparams_search: null
 
   # optional local config for machine/user specific settings
   # it's optional since it doesn't need to exist and is excluded from version control
