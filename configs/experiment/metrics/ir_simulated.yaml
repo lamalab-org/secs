@@ -1,0 +1,26 @@
+# @package _global_
+defaults:
+  - override /data: molbind
+  - override /model: molbind
+  - override /trainer: gpu
+
+model:
+  embedding_size: 512
+
+data:
+  modalities:
+    - ir
+  modalities_to_read:
+    - ir
+  valid_frac: 0.2
+  batch_size: 128
+  dataset_path: "${paths.data_dir}/clean_data.parquet"
+
+ckpt_path: "checkpoints/ir_simulated/best_model.ckpt"
+
+trainer:
+  num_nodes: 1
+  gpus_per_node: 4
+
+run_id: "metrics_ir_simulated"
+embeddings_path: ir_simulated_embeddings
