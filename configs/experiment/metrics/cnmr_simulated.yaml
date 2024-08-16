@@ -6,23 +6,21 @@ defaults:
 
 model:
   embedding_size: 512
-  encoders:
-    smiles:
-      freeze_encoder: False
-  projection_heads:
-    c_nmr_freeze: False
-    smiles_freeze: False
 
 data:
   modalities:
     - c_nmr
   modalities_to_read:
     - c_nmr
+  valid_frac: 0.2
   batch_size: 128
   dataset_path: "${paths.data_dir}/clean_data.parquet"
 
+ckpt_path: "checkpoints/cnmr_simulated/best_model.ckpt"
+
 trainer:
   num_nodes: 1
-  gpus_per_node: 4
+  gpus_per_node: 1
 
-run_id: "cnmr_simulated"
+run_id: "metrics_cnmr_simulated"
+embeddings_path: cnmr_simulated_embeddings

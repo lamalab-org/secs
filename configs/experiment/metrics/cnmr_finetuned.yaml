@@ -6,25 +6,21 @@ defaults:
 
 model:
   embedding_size: 512
-  encoders:
-    smiles:
-      freeze_encoder: False
-  projection_heads:
-    c_nmr_freeze: False
-    smiles_freeze: False
 
 data:
   modalities:
     - c_nmr
   modalities_to_read:
     - c_nmr
+  valid_frac: 1.0
   batch_size: 128
-  dataset_path: "${paths.data_dir}/cnmr_experimental.pkl"
+  dataset_path: "${paths.data_dir}/nmr/13C_1H_IR_exp.pkl"
+
+ckpt_path: "checkpoints/cnmr_finetuned/best_model.ckpt"
 
 trainer:
   num_nodes: 1
-  gpus_per_node: 4
+  gpus_per_node: 1
 
-ckpt_path: "checkpoints/cnmr_simulated/best_model.ckpt"
-
-run_id: "cnmr_finetuned"
+run_id: "metrics_cnmr_finetuned"
+embeddings_path: cnmr_experimental_embeddings
