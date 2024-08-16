@@ -18,7 +18,7 @@ srun --gres=gpu:4 --nodes=1 --ntasks-per-node=4 --cpu-bind=none bash -c "
     bash -c '
         source /p/project/hai_molbind/miniconda3/bin/activate
         conda activate molbind
-        python train.py 'experiment=cnmr_simulated'
+        python train.py 'experiment=$1'
     '
 "
 #########################################################################################
