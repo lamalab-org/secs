@@ -8,9 +8,16 @@ channels:
   - defaults
 
 dependencies:
-  - python>=3.11
+  - python>=3.9
   - pip
   - chromadb
   - pip:
-    - torch>=2.0.0
-    - --editable "."
+      -  --find-links https://download.pytorch.org/whl/torch_stable.html
+      - torch==2.2.0+cu121
+      - torchvision==0.17.0+cu121
+      - -f https://data.pyg.org/whl/torch-2.2.0+cu121.html
+      - torch_geometric
+      - torch_cluster==1.6.3+pt22cu121
+      - torch_scatter==2.1.2+pt22cu121
+      - torch_sparse==0.6.18+pt22cu121
+      - --editable "."
