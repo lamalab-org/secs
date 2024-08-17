@@ -1,7 +1,3 @@
-from __future__ import annotations
-
-from collections.abc import Iterable
-from typing import list
 
 import numpy as np
 from rdkit.Chem import AllChem, Descriptors, MolFromSmiles, MolToSmiles

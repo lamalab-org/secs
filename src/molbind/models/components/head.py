@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from class_resolver import ClassResolver
 from torch import Tensor, nn
 

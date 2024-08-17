@@ -3,8 +3,6 @@ This module contains the implementation of the FingerprintEncoderModule class, w
 The FingerprintEncoderModule class is used to train the FingerprintEncoder model using PyTorch Lightning.
 """
 
-from __future__ import annotations
-
 import torch
 import torch.nn.functional as F
 from lightning import LightningModule

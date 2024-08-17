@@ -142,7 +142,6 @@ lint.unfixable = [
 ]
 lint.flake8-unused-arguments.ignore-variadic-names = true
 lint.pydocstyle.convention = "numpy"
-lint.isort.required-imports = ["from __future__ import annotations"]
 lint.isort.known-first-party = ["template"]
 src = ["src"]
 exclude = []
