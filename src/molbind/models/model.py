@@ -80,3 +80,12 @@ class MolBind(nn.Module):
         else:
             store_embeddings[modality] = modality_embedding
         return store_embeddings
+
+    def encode_modality(
+        self, input_data: Tensor | tuple[Tensor, Tensor], modality: str
+    ) -> Tensor:
+        # forward pass through modality encoder
+        embedding = self.dict_encoders[modality].forward(input_data)
+        if f"{modality}_is_on" in self.dict_projection_heads:
+            embedding = self.dict_projection_heads[modality](embedding)
+        return embedding
