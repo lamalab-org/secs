@@ -1,5 +1,4 @@
 from collections.abc import Iterable
-from typing import list
 
 import numpy as np
 from rdkit.Chem import AllChem, Descriptors, MolFromSmiles, MolToSmiles

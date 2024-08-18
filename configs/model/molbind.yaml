@@ -44,8 +44,8 @@ encoders:
     latent_dim: 256
     freeze_encoder: False
   ir:
-    input_dims: [1800, 1024, 512]
-    output_dims: [512, 1024, 1800]
+    input_dims: [1600, 1024, 512]
+    output_dims: [512, 1024, 1600]
     latent_dim: 512
     freeze_encoder: False
   mass_spec_negative:

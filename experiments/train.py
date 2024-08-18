@@ -1,4 +1,4 @@
-import datetime  # noqa: I002
+import datetime
 import os
 import re
 from pathlib import Path
@@ -7,7 +7,6 @@ import hydra
 import polars as pl
 import pytorch_lightning as L
 import rootutils
-import selfies as sf
 import torch
 from dotenv import load_dotenv
 from loguru import logger
@@ -131,6 +130,7 @@ def train_molbind(config: DictConfig):
             patience=config.callbacks.early_stopping.patience,
         ),
     ]
+
     # set up the trainer
     trainer = L.Trainer(
         max_epochs=config.trainer.max_epochs,

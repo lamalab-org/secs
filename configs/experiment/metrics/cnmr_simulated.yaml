@@ -16,11 +16,17 @@ data:
   batch_size: 128
   dataset_path: "${paths.data_dir}/clean_data.parquet"
 
-ckpt_path: "checkpoints/cnmr_simulated/best_model.ckpt"
+ckpt_path: "checkpoints/cnmr_simulated_20240817_1912/best_model.ckpt"
 
 trainer:
   num_nodes: 1
   gpus_per_node: 1
+
+top_k: 
+  - 1
+  - 2
+  - 5
+  - 20
 
 run_id: "metrics_cnmr_simulated"
 embeddings_path: cnmr_simulated_embeddings

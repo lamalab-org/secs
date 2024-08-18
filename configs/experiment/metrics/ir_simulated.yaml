@@ -16,11 +16,17 @@ data:
   batch_size: 128
   dataset_path: "${paths.data_dir}/clean_data.parquet"
 
-ckpt_path: "checkpoints/ir_simulated/best_model.ckpt"
+ckpt_path: "checkpoints/ir_simulated_20240817_2032/best_model.ckpt"
 
 trainer:
   num_nodes: 1
   gpus_per_node: 4
+
+top_k:
+  - 1
+  - 2
+  - 5
+  - 20
 
 run_id: "metrics_ir_simulated"
 embeddings_path: ir_simulated_embeddings

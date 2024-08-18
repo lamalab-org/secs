@@ -373,11 +373,9 @@ class IrDataset(Dataset):
     def __init__(
         self,
         data: list[list[float]],
-        vec_len: int = 1800,
         **kwargs,
     ) -> None:
         self.ir = data
-        self.vec_len = vec_len
         # self.min_value = min_value
         # self.max_value = max_value
         self.central_modality = kwargs["central_modality"]
@@ -390,7 +388,7 @@ class IrDataset(Dataset):
     def __getitem__(self, index: int) -> dict:
         return {
             self.central_modality: [i[index] for i in self.central_modality_data],
-            self.other_modality: self.ir[index],
+            self.other_modality: self.ir[index][100:1700],
         }
 
 

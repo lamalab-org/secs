@@ -22,6 +22,12 @@ trainer:
   num_nodes: 1
   gpus_per_node: 4
 
+top_k: 
+  - 1
+  - 2
+  - 5
+  - 20
+
 run_id: "metrics_ir_finetuned"
 embeddings_path: ir_experimental_embeddings
 

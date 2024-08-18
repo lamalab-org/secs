@@ -1,4 +1,4 @@
-import datetime  # noqa: I002
+import datetime
 import pickle as pkl
 from pathlib import Path
 from pprint import pformat
@@ -73,7 +73,6 @@ def train_molbind(config: DictConfig):
         subset=[config.data.central_modality]
     )
 
-
     valid_datasets = (
         MolBindDataset(
             central_modality=config.data.central_modality,
@@ -111,7 +110,7 @@ def train_molbind(config: DictConfig):
     with open(f"{config.embeddings_path}.pkl", "wb") as f:  # noqa: PTH123
         pkl.dump(aggregated_embeddings, f, protocol=pkl.HIGHEST_PROTOCOL)
 
-    logger.info(f"Saved embeddings to {config.store_embeddings_directory}.pkl")
+    logger.info(f"Saved embeddings to {config.embeddings_path}.pkl")
     retrieval_metrics = full_database_retrieval(
         indices=valid_shuffled_data.to_pandas(),
         other_modalities=config.data.modalities,
@@ -120,12 +119,14 @@ def train_molbind(config: DictConfig):
         top_k=config.top_k,
     )
     retrieval_metrics = pd.DataFrame(retrieval_metrics)
-    retrieval_metrics.to_csv("retrieval_metrics.csv")
+    retrieval_metrics.to_csv(f"{config.run_id}_retrieval_metrics.csv")
     logger.info(f"Database size: {len(valid_shuffled_data)}")
     logger.info(f"Database level retrieval metrics: \n {pformat(retrieval_metrics)}")
 
 
-@hydra.main(version_base="1.3", config_path="../configs")
+@hydra.main(
+    version_base="1.3", config_path="../configs", config_name="molbind_config.yaml"
+)
 def main(config: DictConfig):
     train_molbind(config)
 
