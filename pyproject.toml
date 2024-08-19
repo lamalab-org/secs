@@ -60,6 +60,14 @@ docs = [
     "pillow>=10.0.0",
     "cairosvg>=2.7.1"
 ]
+inference=[
+  "torch==2.2.0",
+  "torchvision==0.17.0",
+  "torch_scatter==2.1.2",
+  "torch_sparse==0.6.18",
+  "torch_cluster==1.6.3",
+  "torch_geometric",
+]
 
 [tool.setuptools.package-data]
 template = ["py.typed"]
@@ -157,3 +165,5 @@ namespace_packages = true
 explicit_package_bases = true
 no_implicit_optional = false
 disable_error_code = "annotation-unchecked"
+
+[project.scripts]
