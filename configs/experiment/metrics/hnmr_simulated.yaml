@@ -14,7 +14,7 @@ data:
     - h_nmr
   valid_frac: 0.2
   batch_size: 128
-  dataset_path: "${paths.data_dir}/clean_data.parquet"
+  dataset_path: "${paths.data_dir}/spectra_129k.parquet"
 
 ckpt_path: "checkpoints/hnmr_simulated/best_model.ckpt"
 

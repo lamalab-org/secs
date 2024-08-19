@@ -12,6 +12,8 @@ model:
   projection_heads:
     h_nmr_freeze: False
     smiles_freeze: False
+  optimizer:
+    lr: 1e-5
 
 data:
   modalities:

@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 from loguru import logger
 from omegaconf import DictConfig
 
-from molbind.data.analysis.moleculenet import aggregate_embeddings
+from molbind.data.analysis import aggregate_embeddings
 from molbind.data.datamodule import MolBindDataModule
 from molbind.data.molbind_dataset import MolBindDataset
 from molbind.data.utils.file_utils import csv_load_function, pickle_load_function
@@ -26,7 +26,7 @@ rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 RETRIEVAL_TIME = datetime.datetime.now().strftime("%Y%m%d_%H%M")
 
 
-def train_molbind(config: DictConfig):
+def embed(config: DictConfig):
     trainer = L.Trainer(
         max_epochs=config.trainer.max_epochs,
         accelerator=config.trainer.accelerator,
@@ -128,7 +128,7 @@ def train_molbind(config: DictConfig):
     version_base="1.3", config_path="../configs", config_name="molbind_config.yaml"
 )
 def main(config: DictConfig):
-    train_molbind(config)
+    embed(config)
 
 
 if __name__ == "__main__":

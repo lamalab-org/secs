@@ -19,7 +19,7 @@ data:
   modalities_to_read:
     - c_nmr
   batch_size: 128
-  dataset_path: "${paths.data_dir}/clean_data.parquet"
+  dataset_path: "${paths.data_dir}/spectra_129k.parquet"
 
 trainer:
   num_nodes: 1
