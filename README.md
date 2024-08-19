@@ -1,6 +1,6 @@
 <div align="center">
 
-# :electron: MolBind
+# :atom: MolBind
 
 </div>
 
@@ -14,7 +14,6 @@ pip install -e .[inference]
 ```
 
 If you want to (re)train the models, your system needs to have `CUDA` dependencies, please use the `environment.yaml` file for the installation.
-Experimental IR spectra have been mined from the `NIST` database. The code for mining is available at [chemistry-spectra-datasets](https://github.com/lamalab-org/chemistry-spectra-dataset/tree/main).
 
 ```conda
 conda env create -f environment.yaml
@@ -23,7 +22,9 @@ conda activate molbind
 
 ## :file_folder: Data availability
 
-The simulated spectra data have been compiled from [IBM's Multimodal Spectroscopic Dataset](https://zenodo.org/records/11611178).
+The simulated spectra data have been compiled from [IBM's Multimodal Spectroscopic Dataset](https://zenodo.org/records/11611178). Experimental $\mathrm{IR}$ spectra have been mined from the `NIST` database. The code for mining is available at [chemistry-spectra-datasets](https://github.com/lamalab-org/chemistry-spectra-dataset/tree/main). The experimental $\mathrm{^1H\:NMR}$  and $\mathrm{^{13}C\:NMR}$ were taken from [Kuhn et al.](https://github.com/seokhokang/nmr_mpnn/blob/master/datasets.zip).
+
+(WIP :building_construction:) Run `molbind-get-datasets` from the command line to download the data.
 
 
 ## :clipboard: Environment file
