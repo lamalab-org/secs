@@ -10,7 +10,7 @@
 java -jar MAYGEN-1.8.jar -f  C4H5ClN4  -v -t -o -smi
 ```
 
-### :waning_gibbous_moon: Step 2
+### :last_quarter_moon: Step 2
 
 ```sh
 python maygen_out_to_canonical.py C4H5ClN4.smi C4H5ClN4.csv
