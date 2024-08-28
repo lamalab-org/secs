@@ -110,7 +110,7 @@ exclude_also = [
 
 [tool.ruff]
 # line-length = 88
-line-length = 120
+line-length = 130
 lint.select = [
   "E", "F", "W", # flake8
   "B",           # flake8-bugbear

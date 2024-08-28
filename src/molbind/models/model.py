@@ -84,6 +84,6 @@ class MolBind(nn.Module):
     ) -> Tensor:
         # forward pass through modality encoder
         embedding = self.dict_encoders[modality].forward(input_data)
-        if f"{modality}_is_on" in self.dict_projection_heads:
+        if modality in self.dict_projection_heads:
             embedding = self.dict_projection_heads[modality](embedding)
         return embedding

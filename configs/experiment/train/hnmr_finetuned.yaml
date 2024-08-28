@@ -23,7 +23,7 @@ data:
   batch_size: 128
   dataset_path: "${paths.data_dir}/hnmr_experimental.pkl"
 
-ckpt_path: "checkpoints/hnmr_simulated/best_model.ckpt"
+ckpt_path: "${paths.checkpoints_dir}/hnmr_simulated/best_model.ckpt"
 
 trainer:
   num_nodes: 1

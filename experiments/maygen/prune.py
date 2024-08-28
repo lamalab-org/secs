@@ -1,5 +1,5 @@
 import contextlib
-from functools import cache
+from functools import cache, partial
 from pathlib import Path
 
 import fire
@@ -8,7 +8,7 @@ import pandas as pd
 import rootutils
 import torch
 from loguru import logger
-from rdkit import Chem
+from rdkit import Chem, DataStructs
 from rdkit.Contrib.SA_Score import sascorer
 from torch import Tensor
 from tqdm import tqdm
@@ -18,6 +18,7 @@ from molbind.data.available import ModalityConstants
 from molbind.models import MolBind
 from molbind.utils import rename_keys_with_prefix
 
+torch.manual_seed(42)
 tqdm.pandas()
 
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
@@ -74,7 +75,6 @@ def gpu_encode_smiles(individual, ir_model, cnmr_model, hnmr_model):
         ir_embeddings.append(ir_embedding)
         cnmr_embeddings.append(cnmr_embedding)
         hnmr_embeddings.append(hnmr_embedding)
-    #  import pdb; pdb.set_trace()
     ir_embeddings = torch.cat(ir_embeddings, dim=0)
     cnmr_embeddings = torch.cat(cnmr_embeddings, dim=0)
     hnmr_embeddings = torch.cat(hnmr_embeddings, dim=0)
@@ -105,6 +105,19 @@ def load_models(configs_path: str):
     cnmr_model.to("cuda")
     hnmr_model.to("cuda")
     return ir_model, cnmr_model, hnmr_model
+
+
+@cache
+def compute_fingerprint(smiles):
+    mol = Chem.MolFromSmiles(smiles)
+    return Chem.RDKFingerprint(mol, maxPath=4, fpSize=2048)
+
+
+@cache
+def tanimoto_similarity(smiles1, smiles2):
+    fp1 = compute_fingerprint(smiles1)
+    fp2 = compute_fingerprint(smiles2)
+    return DataStructs.FingerprintSimilarity(fp1, fp2, metric=DataStructs.TanimotoSimilarity)
 
 
 @cache
@@ -274,8 +287,8 @@ def main(
     isomer_df = pd.read_csv(file_with_isomers)
     # drop duplicates
     isomer_df = isomer_df.drop_duplicates(subset=["canonical_smiles"])
-    org_smiles_hydrogens = get_number_of_topologically_distinct_atoms(original_smiles, atomic_number=1)
-    org_smiles_carbons = get_number_of_topologically_distinct_atoms(original_smiles, atomic_number=6)
+    # org_smiles_hydrogens = get_number_of_topologically_distinct_atoms(original_smiles, atomic_number=1)
+    # org_smiles_carbons = get_number_of_topologically_distinct_atoms(original_smiles, atomic_number=6)
     isomer_df["sascore"] = isomer_df["canonical_smiles"].progress_apply(sascore)
     if synthetic_access_quantile:
         logger.info("You requested to filter based on synthetic accessibility")
@@ -292,9 +305,9 @@ def main(
         get_number_of_topologically_distinct_atoms, atomic_number=6
     )
     # filter out isomers that don't have the same number of unique hydrogens and carbons as the original
-    isomer_df = isomer_df[
-        (isomer_df["unique_hydrogens"] == org_smiles_hydrogens) & (isomer_df["unique_carbons"] == org_smiles_carbons)
-    ]
+    # isomer_df = isomer_df[
+    #     (isomer_df["unique_hydrogens"] == org_smiles_hydrogens) & (isomer_df["unique_carbons"] == org_smiles_carbons)
+    # ]
     logger.debug(f"Length of isomer_df: {len(isomer_df)}")
     (
         cosine_similarities,
@@ -343,13 +356,19 @@ def main(
     logger.info(
         f"Top 10 isomers based on HNMR similarity: \n {isomer_df.sort_values('hnmr_similarity', ascending=False).head(10)}"
     )
+    logger.info(
+        f"Top 10 isomers based on sum of IR, CNMR, and HNMR similarities: \n {isomer_df.sort_values('sum_of_similarities', ascending=False).head(10)}"
+    )
     # sort by similarity
-    isomer_df = isomer_df.sort_values("similarity", ascending=False)
+    isomer_df = isomer_df.sort_values("sum_of_similarities", ascending=False)
+    # tanimoto similarity with the original smiles
+    tanimoto = partial(tanimoto_similarity, original_smiles)
+    isomer_df["tanimoto"] = isomer_df["canonical_smiles"].progress_apply(lambda x: tanimoto(x))
     # save backup
-    isomer_df.to_csv(pruned_file, index=False)
-    csv_path = Path(str(Path(pruned_file).with_suffix("")) + "_" + original_smiles + str(index_of_smiles_to_test)).with_suffix(
+    csv_path = Path(str(Path(pruned_file).with_suffix("")) + "_" + original_smiles + "_" + str(index_of_smiles_to_test)).with_suffix(
         ".csv"
     )
+
     isomer_df.to_csv(csv_path, index=False)
 
 
