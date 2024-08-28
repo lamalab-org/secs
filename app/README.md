@@ -28,6 +28,6 @@ Here you can choose the range of how many unique hydrogens/carbons are in your m
 
 ### Visualize candidates
 
-You can adjust by what metric to adjust the list of candidates.
+You can adjust by what metric to list of candidates. For example, here are the best metrics for the sum of similarities across different methods.
 
 ![alt text](image-2.png)
