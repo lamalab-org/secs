@@ -1,4 +1,6 @@
+import contextlib
 from functools import cache
+from pathlib import Path
 
 import fire
 import numpy as np
@@ -7,16 +9,14 @@ import rootutils
 import torch
 from loguru import logger
 from rdkit import Chem
+from rdkit.Contrib.SA_Score import sascorer
 from torch import Tensor
 from tqdm import tqdm
-import contextlib
 
 from molbind.data.analysis.utils import aggregate_embeddings
 from molbind.data.available import ModalityConstants
 from molbind.models import MolBind
 from molbind.utils import rename_keys_with_prefix
-from pathlib import Path
-from rdkit.Contrib.SA_Score import sascorer
 
 tqdm.pandas()
 
@@ -68,7 +68,9 @@ def gpu_encode_smiles(individual, ir_model, cnmr_model, hnmr_model):
     hnmr_embeddings = []
     chunk_range = [*list(range(0, len(individual), 256)), len(individual)]
     for i, j in enumerate(tqdm(chunk_range[:-1])):
-        ir_embedding, cnmr_embedding, hnmr_embedding = encode_smiles(individual[j : chunk_range[i + 1]], ir_model, cnmr_model, hnmr_model)
+        ir_embedding, cnmr_embedding, hnmr_embedding = encode_smiles(
+            individual[j : chunk_range[i + 1]], ir_model, cnmr_model, hnmr_model
+        )
         ir_embeddings.append(ir_embedding)
         cnmr_embeddings.append(cnmr_embedding)
         hnmr_embeddings.append(hnmr_embedding)
@@ -151,7 +153,16 @@ def get_number_of_topologically_distinct_atoms(smiles: str, atomic_number: int =
 
 
 def embedding_pruning(
-    smiles: str, spectra_embedding_sum: Tensor, ir_model, cnmr_model, hnmr_model, ir_ratio: float, cnmr_ratio: float, hnmr_ratio: float
+    smiles: str,
+    spectra_ir_embedding: Tensor,
+    spectra_cnmr_embedding: Tensor,
+    spectra_hnmr_embedding: Tensor,
+    ir_model,
+    cnmr_model,
+    hnmr_model,
+    ir_ratio: float,
+    cnmr_ratio: float,
+    hnmr_ratio: float,
 ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
     cosine_similarity = torch.nn.CosineSimilarity(dim=1)
     ir_embedding, cnmr_embedding, hnmr_embedding = gpu_encode_smiles(
@@ -168,7 +179,10 @@ def embedding_pruning(
     ir_similarities = []
     cnmr_similarities = []
     hnmr_similarities = []
-
+    cnmr_ir_similarities = []
+    cnmr_hnmr_similarities = []
+    ir_hnmr_similarities = []
+    spectra_embedding_sum = spectra_ir_embedding + spectra_cnmr_embedding + spectra_hnmr_embedding
     for i, j in enumerate(chunk_range[:-1]):
         cosine_similarities.append(
             cosine_similarity(
@@ -178,20 +192,38 @@ def embedding_pruning(
         )
         ir_similarities.append(
             cosine_similarity(
-                spectra_embedding_sum,
+                spectra_ir_embedding,
                 ir_embedding[j : chunk_range[i + 1]],
             )
         )
         cnmr_similarities.append(
             cosine_similarity(
-                spectra_embedding_sum,
+                spectra_cnmr_embedding,
                 cnmr_embedding[j : chunk_range[i + 1]],
             )
         )
         hnmr_similarities.append(
             cosine_similarity(
-                spectra_embedding_sum,
+                spectra_hnmr_embedding,
                 hnmr_embedding[j : chunk_range[i + 1]],
+            )
+        )
+        ir_hnmr_similarities.append(
+            cosine_similarity(
+                spectra_ir_embedding + spectra_hnmr_embedding,
+                ir_embedding[j : chunk_range[i + 1]] + hnmr_embedding[j : chunk_range[i + 1]],
+            )
+        )
+        cnmr_ir_similarities.append(
+            cosine_similarity(
+                spectra_cnmr_embedding + spectra_ir_embedding,
+                cnmr_embedding[j : chunk_range[i + 1]] + ir_embedding[j : chunk_range[i + 1]],
+            )
+        )
+        cnmr_hnmr_similarities.append(
+            cosine_similarity(
+                spectra_cnmr_embedding + spectra_hnmr_embedding,
+                cnmr_embedding[j : chunk_range[i + 1]] + hnmr_embedding[j : chunk_range[i + 1]],
             )
         )
     return (
@@ -199,11 +231,20 @@ def embedding_pruning(
         torch.cat(ir_similarities, dim=0),
         torch.cat(cnmr_similarities, dim=0),
         torch.cat(hnmr_similarities, dim=0),
+        torch.cat(cnmr_ir_similarities, dim=0),
+        torch.cat(ir_hnmr_similarities, dim=0),
+        torch.cat(cnmr_hnmr_similarities, dim=0),
     )
 
 
 def main(
-    file_with_isomers: str, pruned_file: str, index_of_smiles_to_test: int, ir_ratio: float = 1.0, cnmr_ratio: float = 1.0, hnmr_ratio: float = 1.0
+    file_with_isomers: str,
+    pruned_file: str,
+    index_of_smiles_to_test: int,
+    ir_ratio: float = 1.0,
+    cnmr_ratio: float = 1.0,
+    hnmr_ratio: float = 1.0,
+    synthetic_access_quantile: float | None = None,
 ) -> None:
     index_of_smiles_to_test = int(index_of_smiles_to_test)
     ir_model, cnmr_model, hnmr_model = load_models("../../configs")
@@ -229,24 +270,44 @@ def main(
     spectra_ir_embedding = ir_embeddings["ir"][index_of_smiles_to_test].to("cuda")
     spectra_cnmr_embedding = c_nmr_embeddings["c_nmr"][index_of_smiles_to_test].to("cuda")
     spectra_hnmr_embedding = h_nmr_embeddings["h_nmr"][index_of_smiles_to_test].to("cuda")
-    spectra_embedding_sum = ir_ratio * spectra_ir_embedding + cnmr_ratio * spectra_cnmr_embedding + hnmr_ratio * spectra_hnmr_embedding
+
     isomer_df = pd.read_csv(file_with_isomers)
     # drop duplicates
     isomer_df = isomer_df.drop_duplicates(subset=["canonical_smiles"])
     org_smiles_hydrogens = get_number_of_topologically_distinct_atoms(original_smiles, atomic_number=1)
     org_smiles_carbons = get_number_of_topologically_distinct_atoms(original_smiles, atomic_number=6)
     isomer_df["sascore"] = isomer_df["canonical_smiles"].progress_apply(sascore)
+    if synthetic_access_quantile:
+        logger.info("You requested to filter based on synthetic accessibility")
+        isomer_df = isomer_df[isomer_df["synthetic_access"] < isomer_df["synthetic_access"].quantile(synthetic_access_quantile)]
+        logger.debug(f"Length of isomer_df after synthetic access filtering: {len(isomer_df)}")
     # isomer_df = isomer_df[isomer_df["sascore"] < 3]
     # logger.debug(f"Length of isomer_df after sascore filtering: {len(isomer_df)}")
     logger.info("Pruning based on number of unique hydrogens")
-    isomer_df["unique_hydrogens"] = isomer_df["canonical_smiles"].progress_apply(get_number_of_topologically_distinct_atoms, atomic_number=1)
+    isomer_df["unique_hydrogens"] = isomer_df["canonical_smiles"].progress_apply(
+        get_number_of_topologically_distinct_atoms, atomic_number=1
+    )
     # log length of isomer_df after filtering
-    isomer_df["unique_carbons"] = isomer_df["canonical_smiles"].progress_apply(get_number_of_topologically_distinct_atoms, atomic_number=6)
+    isomer_df["unique_carbons"] = isomer_df["canonical_smiles"].progress_apply(
+        get_number_of_topologically_distinct_atoms, atomic_number=6
+    )
     # filter out isomers that don't have the same number of unique hydrogens and carbons as the original
-    isomer_df = isomer_df[(isomer_df["unique_hydrogens"] == org_smiles_hydrogens) & (isomer_df["unique_carbons"] == org_smiles_carbons)]
+    isomer_df = isomer_df[
+        (isomer_df["unique_hydrogens"] == org_smiles_hydrogens) & (isomer_df["unique_carbons"] == org_smiles_carbons)
+    ]
     logger.debug(f"Length of isomer_df: {len(isomer_df)}")
-    cosine_similarities, ir_similarities, cnmr_similarities, hnmr_similarities = embedding_pruning(
-        spectra_embedding_sum=spectra_embedding_sum,
+    (
+        cosine_similarities,
+        ir_similarities,
+        cnmr_similarities,
+        hnmr_similarities,
+        cnmr_ir_similarities,
+        ir_hnmr_similarities,
+        cnmr_hnmr_similarities,
+    ) = embedding_pruning(
+        spectra_ir_embedding=spectra_ir_embedding,
+        spectra_cnmr_embedding=spectra_cnmr_embedding,
+        spectra_hnmr_embedding=spectra_hnmr_embedding,
         ir_model=ir_model,
         cnmr_model=cnmr_model,
         hnmr_model=hnmr_model,
@@ -259,24 +320,36 @@ def main(
     ir_similarities = ir_similarities.tolist()
     cnmr_similarities = cnmr_similarities.tolist()
     hnmr_similarities = hnmr_similarities.tolist()
+    cnmr_ir_similarities = cnmr_ir_similarities.tolist()
+    ir_hnmr_similarities = ir_hnmr_similarities.tolist()
+    cnmr_hnmr_similarities = cnmr_hnmr_similarities.tolist()
     isomer_df["ir_similarity"] = ir_similarities
     isomer_df["cnmr_similarity"] = cnmr_similarities
     isomer_df["hnmr_similarity"] = hnmr_similarities
     isomer_df["similarity"] = cosine_similarities
-
+    isomer_df["sum_of_similarities"] = isomer_df["ir_similarity"] + isomer_df["cnmr_similarity"] + isomer_df["hnmr_similarity"]
+    isomer_df["cnmr_ir_similarity"] = cnmr_ir_similarities
+    isomer_df["ir_hnmr_similarity"] = ir_hnmr_similarities
+    isomer_df["cnmr_hnmr_similarity"] = cnmr_hnmr_similarities
     # log the top 10 based on similarity
     logger.info(f"Top 10 isomers based on cosine similarity: \n {isomer_df.sort_values('similarity', ascending=False).head(10)}")
     # log the top 10 based on IR similarity
     logger.info(f"Top 10 isomers based on IR similarity: \n {isomer_df.sort_values('ir_similarity', ascending=False).head(10)}")
     # log the top 10 based on CNMR similarity
-    logger.info(f"Top 10 isomers based on CNMR similarity: \n {isomer_df.sort_values('cnmr_similarity', ascending=False).head(10)}")
+    logger.info(
+        f"Top 10 isomers based on CNMR similarity: \n {isomer_df.sort_values('cnmr_similarity', ascending=False).head(10)}"
+    )
     # log the top 10 based on HNMR similarity
-    logger.info(f"Top 10 isomers based on HNMR similarity: \n {isomer_df.sort_values('hnmr_similarity', ascending=False).head(10)}")
+    logger.info(
+        f"Top 10 isomers based on HNMR similarity: \n {isomer_df.sort_values('hnmr_similarity', ascending=False).head(10)}"
+    )
     # sort by similarity
     isomer_df = isomer_df.sort_values("similarity", ascending=False)
     # save backup
     isomer_df.to_csv(pruned_file, index=False)
-    csv_path = Path(str(Path(pruned_file).with_suffix("")) + "_" + original_smiles + str(index_of_smiles_to_test)).with_suffix(".csv")
+    csv_path = Path(str(Path(pruned_file).with_suffix("")) + "_" + original_smiles + str(index_of_smiles_to_test)).with_suffix(
+        ".csv"
+    )
     isomer_df.to_csv(csv_path, index=False)
 
 

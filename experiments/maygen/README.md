@@ -21,5 +21,5 @@ python maygen_out_to_canonical.py C4H5ClN4.smi C4H5ClN4.csv
 The default value for the contributions of different spectra embeddings is 1.
 
 ```sh
-python prune.py C4H5ClN4.csv pruned_embeddings.csv 51 --ir-ratio=1 --cnmr_ratio=1 --hnmr_ratio=1
+python prune.py C4H5ClN4.csv pruned_embeddings.csv 51 --ir-ratio=1 --cnmr_ratio=1 --hnmr_ratio=1 --synthetic_access_quantile=0.01
 ```
