@@ -12,11 +12,11 @@ data:
     - ir
   modalities_to_read:
     - ir
-  valid_frac: 0.2
+  valid_frac: 0.3
   batch_size: 128
-  dataset_path: "${paths.data_dir}/spectra_129k.parquet"
+  dataset_path: "${paths.data_dir}/simulated_spectra_test_set.parquet"
 
-ckpt_path: "${paths.checkpoints_dir}/ir_simulated_20240817_2032/best_model.ckpt"
+ckpt_path: "${paths.checkpoints_dir}/ir_simulated_20240819_1331/best_model.ckpt"
 
 trainer:
   num_nodes: 1
