@@ -100,7 +100,7 @@ if uploaded_file is not None:
         # Filter top 5 candidates based on a chosen similarity metric
         similarity_metric = st.selectbox(
             "Select similarity metric to filter by:",
-            ("IR Similarity", "C-NMR Similarity", "H-NMR Similarity", "Similarity", "Sum of Similarities"),
+            ("IR Similarity", "C-NMR Similarity", "H-NMR Similarity", "Similarity", "Sum of Similarities", "C-NMR IR Similarity", "H-NMR IR Similarity", "C-NMR H-NMR Similarity", "Tanimoto Similarity"),
         )
 
         top_n = st.number_input("Select number of top candidates:", min_value=1, max_value=len(df_filtered), value=5)
