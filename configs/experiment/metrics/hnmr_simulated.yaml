@@ -16,7 +16,7 @@ data:
   batch_size: 128
   dataset_path: "${paths.data_dir}/spectra_129k.parquet"
 
-ckpt_path: "checkpoints/hnmr_simulated/best_model.ckpt"
+ckpt_path: "${paths.checkpoints_dir}/hnmr_simulated/best_model.ckpt"
 
 trainer:
   num_nodes: 1

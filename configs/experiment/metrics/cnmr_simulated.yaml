@@ -12,11 +12,11 @@ data:
     - c_nmr
   modalities_to_read:
     - c_nmr
-  valid_frac: 0.2
+  valid_frac: 0.3
   batch_size: 128
-  dataset_path: "${paths.data_dir}/clean_data.parquet"
+  dataset_path: "${paths.data_dir}/simulated_spectra_test_set.parquet"
 
-ckpt_path: "checkpoints/cnmr_simulated_20240817_1912/best_model.ckpt"
+ckpt_path: "${paths.checkpoints_dir}/cnmr_simulated_20240819_1328/best_model.ckpt"
 
 trainer:
   num_nodes: 1

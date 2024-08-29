@@ -16,7 +16,7 @@ data:
   batch_size: 128
   dataset_path: "${paths.data_dir}/nmr/13C_1H_IR_exp.pkl"
 
-ckpt_path: "checkpoints/cnmr_finetuned/best_model.ckpt"
+ckpt_path: "${paths.checkpoints_dir}/cnmr_finetuned_20240819_1454/best_model.ckpt"
 
 trainer:
   num_nodes: 1

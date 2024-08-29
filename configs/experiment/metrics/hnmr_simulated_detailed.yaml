@@ -1,0 +1,42 @@
+# @package _global_
+defaults:
+  - override /data: molbind
+  - override /model: molbind
+  - override /trainer: gpu
+
+model:
+  embedding_size: 512
+  encoders:
+    h_nmr:
+      input_dims: [10000, 1024, 512, 256]
+      output_dims: [256, 512, 1024, 10000]
+      latent_dim: 256
+    
+  projection_heads:
+    h_nmr:
+      dims: [256, "${model.embedding_size}"]
+      activation: LeakyReLU
+
+data:
+  modalities:
+    - h_nmr
+  modalities_to_read:
+    - h_nmr
+  valid_frac: 0.3
+  batch_size: 256
+  dataset_path: "${paths.data_dir}/simulated_spectra_test_set.parquet"
+
+ckpt_path: "${paths.checkpoints_dir}/hnmr_simulated_detailed_20240828_1855/best_model.ckpt"
+
+trainer:
+  num_nodes: 1
+  gpus_per_node: 1
+
+top_k: 
+  - 1
+  - 2
+  - 5
+  - 20
+
+run_id: "metrics_hnmr_simulated_detailed"
+embeddings_path: hnmr_simulated_embeddings_detailed
