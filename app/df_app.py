@@ -45,7 +45,7 @@ if uploaded_file is not None:
     }
     # rename columns
     data = data.rename(columns=similarity_metric_names)
-    data = data.drop(columns=["smiles"])
+    # data = data.drop(columns=["smiles"])
     st.write(data)
     # User inputs for filtering by unique hydrogens and carbons
     min_hydrogens = st.slider(
@@ -159,7 +159,7 @@ if uploaded_file is not None:
             save_molecule_image(row["SMILES"], image_path)
             st.image(
                 image_path,
-                caption=f"SMILES:\n{row['SMILES']}\n{similarity_metric}: {row[similarity_metric]:.2f}\nTanimoto Similarity: {row['Tanimoto Similarity']:.2f}",
+                caption=f"SMILES:\n{row['SMILES']}\n{similarity_metric}: {row[similarity_metric]:.2f}\nTanimoto Similarity: {row['Tanimoto Similarity']:.2f}\nSynthetic Accessibility Score: {row['Synthetic Accessibility Score']:.2f}",
                 use_column_width=True,
             )
 
