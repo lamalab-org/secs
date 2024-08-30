@@ -57,8 +57,6 @@ def collect_statistics_from_files(data, to_collect_columns, n, return_average=Fa
 
 def app():
     st.title("Results Visualization")
-    st.write("This is the `Results Visualization`")
-
     # Add more to the UI
     # 1. Read all result files
     result_files = glob("results/*.csv")
@@ -84,6 +82,7 @@ def app():
     )
 
     read_all_dataframe = [pd.read_csv(file) for file in result_files]
+    st.write(f"All files: {len(read_all_dataframe)}")
     # filter if Tanimoto 1 not in column
     read_all_dataframe = [df for df in read_all_dataframe if len(df[df["tanimoto"] == 1]) == 1]
     read_all_dataframe = [df for df in read_all_dataframe if len(df) > 10*top_n]
@@ -112,18 +111,16 @@ def app():
         for dataframe in read_all_dataframe:
             tanimoto_1 = dataframe[dataframe["tanimoto"] == 1]
             smiles_list.append(tanimoto_1["canonical_smiles"].to_list()[0])
+    st.write(f"Files satisfying the conditions: {len(read_all_dataframe)}")
     # collect metrics for all files
     metrics_list = [collect_statistics_from_files(df, to_collect_columns, top_n, average_or_not) for df in read_all_dataframe]
     # plot len(molecules) vs performance for each metric
-
-    plt.style.use("lamalab.mplstyle")
-    font_dirs = glob("*IBM*.ttf")
-    font_files = font_manager.findSystemFonts(fontpaths=font_dirs)
-
-    for font_file in font_files:
-        font_manager.fontManager.addfont(font_file)
-    plt.rcParams["font.family"] = "IBMPlexSans-Regular.ttf"
-
+    import seaborn as sns
+    # white background
+    sns.set_style("whitegrid")
+    # no grid
+    sns.set_style("whitegrid", {'axes.grid': False})
+    # keep only x and y axis
     # fig, ax = plt.subplots(nrows=4, ncols=2, figsize=(10, 20))
     # for i, column in enumerate(to_collect_columns):
     #     column_values = [metrics[column] for metrics in metrics_list]
@@ -155,33 +152,35 @@ def app():
 
     len_df = [len(df) for df in read_all_dataframe]
     if plot_molecule_size_vs_performance:
-        fig, ax = plt.subplots(nrows=4, ncols=2, figsize=(10, 20))
+        fig, ax = plt.subplots(nrows=4, ncols=2, figsize=(8, 15), dpi=200)
         for i, column in enumerate(to_collect_columns):
             column_values = [metrics[column] for metrics in metrics_list]
-            ax[i // 2, i % 2].scatter(smiles_list_lengths, column_values, s=40)
-            ax[i // 2, i % 2].set_title(column)
+            sns.scatterplot(x=smiles_list_lengths, y=column_values, s=40, ax=ax[i // 2, i % 2], c="g")
+            # ax[i // 2, i % 2].set_title(column)
             # ax[i // 2, i % 2].set_xticks(smiles_list_lengths)
-            ax[i // 2, i % 2].set_xlabel("Molecule Size")
-            ax[i // 2, i % 2].set_ylabel("Tanimoto Similarity" if average_or_not else f"Is in {top_n}")
+            ax[i // 2, i % 2].set_ylabel("Tanimoto Similarity" if average_or_not else f"Is in {top_n} ({column})")
+        # set one x label for all subplots
+        fig.text(0.5, 0.07, "Molecule Size", ha="center")
+
         st.pyplot(fig)
     if plot_metrics_vs_number_of_isomers:
         # plot metrics vs how many molecules are in each csv file
         # add comment
         st.subheader("Plotting metrics vs number of isomers for each file")
-        fig, ax = plt.subplots(nrows=4, ncols=2, figsize=(10, 20))
+        fig, ax = plt.subplots(nrows=4, ncols=2, figsize=(5, 15), dpi=200)
         for i, column in enumerate(to_collect_columns):
             column_values = [metrics[column] for metrics in metrics_list]
             # log scale for x-axis
+            sns.scatterplot(x=len_df, y=column_values,ax=ax[i // 2, i % 2], c="r", s=40)
             ax[i // 2, i % 2].set_xscale("log")
-            ax[i // 2, i % 2].scatter(len_df, column_values, c="r", s=40)
-            ax[i // 2, i % 2].set_title(column)
             ax[i // 2, i % 2].set_xlabel("Number of Isomers")
-            ax[i // 2, i % 2].set_ylabel("Tanimoto Similarity" if average_or_not else f"Is in Top-{top_n}")
+            ax[i // 2, i % 2].set_ylabel("Tanimoto Similarity" if average_or_not else f"Is in Top-{top_n} ({column})")
+        fig.text(0.5, 0.04, "Number of Isomers", ha="center")
         st.pyplot(fig)
 
     # plot molecule size vs number of isomers
-    fig, ax = plt.subplots(figsize=(10, 10))
-    ax.scatter(smiles_list_lengths, len_df, s=40)
+    fig, ax = plt.subplots(figsize=(5, 5), dpi=100)
+    sns.scatterplot(x=smiles_list_lengths, y=len_df, s=40, c="b", ax=ax)
     ax.set_xlabel("Molecule Size")
     ax.set_ylabel("Number of Isomers")
     ax.set_yscale("log")
