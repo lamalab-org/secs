@@ -386,11 +386,12 @@ class IrDataset(Dataset):
         return len(self.ir)
 
     def __getitem__(self, index: int) -> dict:
+        # convert to tensor
+        ir = torch.tensor(self.ir[index], dtype=torch.float32)[100:1700]
         return {
             self.central_modality: [i[index] for i in self.central_modality_data],
-            self.other_modality: self.ir[index][100:1700],
+            self.other_modality: ir,
         }
-
 
 class MassSpecDataset(Dataset):
     def __init__(
@@ -474,6 +475,8 @@ class hNmrDataset(Dataset):
         }
 
     def hnmr_to_vec(self, nmr_shifts: list[list[float]]) -> Tensor:
+        if len(nmr_shifts) == 10000:
+            return torch.tensor(nmr_shifts, dtype=torch.float32)
         init_vec = torch.zeros(self.vec_len, dtype=torch.float32)
         if isinstance(nmr_shifts[0], (list, np.ndarray)):
             for shift, _ in nmr_shifts:

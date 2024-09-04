@@ -14,7 +14,7 @@ model:
       output_dims: [256, 512, 1024, 10000]
       latent_dim: 256
       freeze_encoder: False
-    
+
   projection_heads:
     h_nmr:
       dims: [256, "${model.embedding_size}"]

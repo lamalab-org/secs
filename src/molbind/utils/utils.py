@@ -1,14 +1,14 @@
-from typing import Any, List, Tuple  # noqa: I002, UP035
+from typing import Any
 
 import torch
 
 
-def rename_keys_with_prefix(d: dict) -> dict:
+def rename_keys_with_prefix(d: dict, prefix: str = "model.") -> dict:
     new_dict = {}
     for key, value in d.items():
-        if key.startswith("model."):
+        if key.startswith(prefix):
             # remove the prefix
-            new_key = key[len("model.") :]
+            new_key = key[len(prefix) :]
             new_dict[new_key] = value
         else:
             new_dict[key] = value
@@ -26,6 +26,6 @@ def select_device() -> str:
     return device
 
 
-def find_all_pairs_in_list(lst: List[Any]) -> List[Tuple[Any, Any]]:  # noqa: UP006
+def find_all_pairs_in_list(lst: list[Any]) -> list[tuple[Any, Any]]:
     """Finds all pairs in a list."""
     return [(lst[i], lst[j]) for i in range(len(lst)) for j in range(i + 1, len(lst))]

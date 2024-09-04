@@ -20,7 +20,7 @@ ckpt_path: "${paths.checkpoints_dir}/ir_simulated_20240819_1331/best_model.ckpt"
 
 trainer:
   num_nodes: 1
-  gpus_per_node: 4
+  gpus_per_node: 1
 
 top_k:
   - 1
