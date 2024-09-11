@@ -1,7 +1,5 @@
-from glob import glob
 from pathlib import Path
 
-import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
 
@@ -10,17 +8,30 @@ def find_original_smiles_from_file_name(file_name):
     return file_name.split("_")[-1]
 
 
-def determine_if_the_molecule_with_sim_1_in_top_n(sorted_df, n, return_average=False):
+def determine_if_the_molecule_with_sim_1_in_top_n(
+    sorted_df: pd.DataFrame, n: int, return_average: bool = False, exclude_original_molecule: bool = True
+):
     tanimoto_top_n = sorted_df.head(n)["Tanimoto Similarity"]
-    return average_tanimoto_of_top_n(sorted_df, n) if return_average else int(1 in tanimoto_top_n.to_list())
+    return (
+        average_tanimoto_of_top_n(sorted_df, n, exclude_original_molecule=exclude_original_molecule)
+        if return_average
+        else int(1 in tanimoto_top_n.to_list())
+    )
 
 
-def average_tanimoto_of_top_n(sorted_df, n):
+def average_tanimoto_of_top_n(sorted_df, n, exclude_original_molecule: bool = True):
+    # return tanimoto_top_n.mean()
+    # remove the 1 tanimoto similarity
+    if exclude_original_molecule:
+        sorted_df = sorted_df[sorted_df["Tanimoto Similarity"] != 1]
+        tanimoto_top_n = sorted_df.head(n)["Tanimoto Similarity"]
+        max_possible = sorted_df[sorted_df["Tanimoto Similarity"] != 1]["Tanimoto Similarity"].max()
+        return tanimoto_top_n.max()
     tanimoto_top_n = sorted_df.head(n)["Tanimoto Similarity"]
     return tanimoto_top_n.max()
 
 
-def collect_statistics_from_files(data, to_collect_columns, n, return_average=False):
+def collect_statistics_from_files(data, to_collect_columns, n, return_average=False, exclude_original_molecule=True):
     # data = pd.read_csv(file)
     # nice similarity metric names
     similarity_metric_names = {
@@ -28,7 +39,7 @@ def collect_statistics_from_files(data, to_collect_columns, n, return_average=Fa
         "ir_similarity": "IR Similarity",
         "cnmr_similarity": "C-NMR Similarity",
         "hnmr_similarity": "H-NMR Similarity",
-        "similarity": "Similarity",
+        "similarity": "Similarity of sums",
         "sum_of_similarities": "Sum of Similarities",
         "cnmr_ir_similarity": "C-NMR IR Similarity",
         "ir_hnmr_similarity": "H-NMR IR Similarity",
@@ -37,6 +48,7 @@ def collect_statistics_from_files(data, to_collect_columns, n, return_average=Fa
         "unique_hydrogens": "Unique Hydrogens",
         "unique_carbons": "Unique Carbons",
         "sascore": "Synthetic Accessibility Score",
+        "multi_spec_similarity": "MultiSpec Similarity",
         # "molbind_similarity": "MolBind Similarity",
     }
 
@@ -48,7 +60,7 @@ def collect_statistics_from_files(data, to_collect_columns, n, return_average=Fa
 
     for column in to_collect_columns:
         metrics[column] = determine_if_the_molecule_with_sim_1_in_top_n(
-            data.sort_values(by=column, ascending=False), n, return_average
+            data.sort_values(by=column, ascending=False), n, return_average, exclude_original_molecule
         )
     return metrics
 
@@ -60,14 +72,14 @@ def app():
     st.title("Results Visualization")
     # Add more to the UI
     # 1. Read all result files
-    result_files = glob("results_img/*.csv")
-    result_files = [Path(file) for file in result_files]
+    result_files = Path("results_with_multispec").glob("*.csv")
     # smiles_from_file = [find_original_smiles_from_file_name(file) for file in result_files]
 
     to_collect_columns = [
         # "MolBind Similarity",
         "Sum of Similarities",
-        "Similarity",
+        "Similarity of sums",
+        "MultiSpec Similarity",
         "IR Similarity",
         "C-NMR Similarity",
         "H-NMR Similarity",
@@ -90,6 +102,8 @@ def app():
     read_all_dataframe = [df for df in read_all_dataframe if len(df) > 10 * top_n]
     # select box for metric to calculate
     average_or_not = st.checkbox(f"Maximum Tanimoto similarity from Top-{top_n}", value=False)
+    exclude_button = st.checkbox("Exclude original molecule from the top candidates", value=False)
+
     # select box for adding nmr peaks or not
     add_nmr_peaks = st.checkbox("Add NMR Peaks", value=False)
     # plot molecule size vs performance for each metric
@@ -114,15 +128,12 @@ def app():
             smiles_list.append(tanimoto_1["canonical_smiles"].to_list()[0])
     st.write(f"Files satisfying the conditions: {len(read_all_dataframe)}")
     # collect metrics for all files
-    metrics_list = [collect_statistics_from_files(df, to_collect_columns, top_n, average_or_not) for df in read_all_dataframe]
+    metrics_list = [
+        collect_statistics_from_files(df, to_collect_columns, top_n, average_or_not, exclude_button) for df in read_all_dataframe
+    ]
+    # print maximum possible score
+    # second best score in all dataframes
     # plot len(molecules) vs performance for each metric
-    import seaborn as sns
-
-    # white background
-    sns.set_style("whitegrid")
-    # no grid
-    sns.set_style("whitegrid", {"axes.grid": False})
-
     smiles_list_lengths = [len(smiles) for smiles in smiles_list]
 
     metrics_df = pd.DataFrame(metrics_list)
@@ -134,8 +145,7 @@ def app():
     mean = mean.rename(columns={0: f"Top {top_n}"})
     # sort by mean
     mean = mean.sort_values(by=f"Top {top_n}", ascending=False)
-    # highlight the best method
-
+    # st.write(f"Max possible score: {max_possible}")
     if not average_or_not:
         st.subheader(f"Is in Top-{top_n}")
         st.write(mean.T.sort_values(by=f"Top {top_n}", axis=1, ascending=False).style.highlight_max(axis=1))
@@ -145,32 +155,126 @@ def app():
         st.write(mean.T.sort_values(by=f"Top {top_n}", axis=1, ascending=False).style.highlight_max(axis=1))
 
     len_df = [len(df) for df in read_all_dataframe]
+    import plotly.express as px
 
     if plot_metrics_vs_number_of_isomers:
         # plot metrics vs how many molecules are in each csv file
         # add comment
-        import plotly.express as px
 
         st.subheader("Plotting metrics vs number of isomers for each file")
+        # set a plotly theme
+        px.defaults.template = "plotly_white"
+        # add boxplot on the side
         fig = px.scatter(
             metrics_df,
             x=len_df,
             y=to_collect_columns,
             size=smiles_list_lengths,
             # labels={"variable": "Metric", "value": "Max Tanimoto Similarity in Top-5" if average_or_not else f"Is in Top-{top_n}"},
-            title="Metrics vs Number of Isomers",
             facet_col="variable",
-            facet_col_wrap=2,
+            facet_col_wrap=3,
             facet_col_spacing=0.05,
             facet_row_spacing=0.05,
-            height=1200,
-            width=1300,
+            hover_name=smiles_list,
+            height=600,
+            width=900,
         )
+        # add average performance to each subplot from the mean dataframe
+        # scale font size
+        fig.update_layout(font={"size": 10})
+        # add one x-axis title for all subplots
+        fig.update_xaxes(title_text="Number of isomers")
+        # add performance on the plot
+        # add annotation with average performance as interrupted line
+        # tight layout
+        fig.update_layout(margin={"l": 0, "r": 0, "t": 0, "b": 0})
+        # align legend properly
+        # all plots same axis limits
+        fig.update_yaxes(range=[0, 1])
+        # add legend with size meaning
+        fig.update_layout(legend_title_text="Similarity metric")
+        # remove subplots titles
+        fig.for_each_annotation(lambda a: a.update(text=""))
+        # align the legend entries in 3 columns
+        fig.update_layout(legend={"itemsizing": "constant"})
         # Remove individual x-axis and y-axis titles
         fig.update_xaxes(showticklabels=True, title_text=None)
         fig.update_yaxes(showticklabels=True, title_text=None)
+        # save the plot to pdf
+        fig.write_image("metrics_vs_isomers.pdf", scale=3)
         # one x-axis title for all subplots
         st.plotly_chart(fig)
+
+    plot_histograms = st.checkbox("Plot histograms of metrics", value=False)
+    if plot_histograms:
+        # historgrams in subplots with kde
+        st.subheader("Histograms of metrics")
+        fig = px.histogram(
+            metrics_df.melt(),
+            x="value",
+            facet_col="variable",
+            facet_col_wrap=3,
+            facet_col_spacing=0.05,
+            facet_row_spacing=0.1,
+            height=600,
+            width=800,
+            nbins=20,
+            # same colors as in scatter plot
+            color_discrete_sequence=px.colors.qualitative.Plotly,
+            histnorm="percent",
+            barmode="overlay",
+            # kde=True,
+        )
+        # horizontal histograms
+        st.plotly_chart(fig)
+
+    # allow specific smiles to be selected
+
+    smiles_dataframe_dict = dict(zip(smiles_list, read_all_dataframe))
+
+    selected_smiles = st.selectbox("Select SMILES", smiles_list)
+    selected_df = smiles_dataframe_dict[selected_smiles]
+    # collect metrics for the selected smiles
+    # plot tanimoto similarity vs other metrics for the selected smiles
+    if selected_df is not None:
+        st.write(selected_df)
+        # divide sum of similarities by the maximum possible
+        selected_df["sum_of_similarities"] = selected_df["sum_of_similarities"] / 3
+        # plot tanimoto similarity vs other metrics
+        fig = px.scatter(
+            selected_df,
+            y="tanimoto",
+            x=[
+                "ir_similarity",
+                "cnmr_similarity",
+                "hnmr_similarity",
+                "multi_spec_similarity",
+                "similarity",
+                "sum_of_similarities",
+            ],
+            hover_name="canonical_smiles",
+            height=600,
+            width=800,
+            labels={"variable": "Metric", "value": "Similarity"},
+        )
+        # R2 score for each metric
+        # print R2 score for each metric
+        from loguru import logger
+
+        logger.debug(f"R2 score for each metric: {selected_df[[
+                "ir_similarity",
+                "cnmr_similarity",
+                "hnmr_similarity",
+                "multi_spec_similarity",
+                "similarity",
+                "sum_of_similarities",
+                "tanimoto",
+            ]].corr()['tanimoto']**2}")
+        st.plotly_chart(fig)
+
+    if st.button("Download metrics"):
+        metrics_df.to_csv("metrics.csv")
+        st.write("Metrics downloaded successfully")
 
 
 if __name__ == "__main__":
