@@ -1,0 +1,53 @@
+# @package _global_
+defaults:
+  - override /data: molbind
+  - override /model: molbind
+  - override /trainer: gpu
+
+model:
+  embedding_size: 512
+  encoders:
+    smiles:
+      freeze_encoder: False
+    h_nmr:
+      input_dims: [10000, 1024, 512, 256]
+      output_dims: [256, 512, 1024, 10000]
+      latent_dim: 256
+      freeze_encoder: False
+
+  projection_heads:
+    h_nmr:
+      dims: [256, "${model.embedding_size}"]
+      activation: LeakyReLU
+    h_nmr_freeze: False
+    smiles_freeze: False
+    cnmr_freeze: False
+    ir_freeze: False
+
+data:
+  modalities:
+    - h_nmr
+    - c_nmr
+    - ir
+  modalities_to_read:
+    - h_nmr
+    - c_nmr
+    - ir
+  valid_frac: 0.3
+  batch_size: 256
+  dataset_path: "${paths.data_dir}/simulated_spectra_test_set.parquet"
+
+trainer:
+  num_nodes: 1
+  gpus_per_node: 1
+
+
+top_k: 
+  - 1
+  - 2
+  - 5
+  - 20
+
+run_id: "metrics_ir_cnmr_hnmr_detailed_simulated"
+embeddings_path: molbind_cnmr_ir_hnmr_detailed_simulated
+ckpt_path: "${paths.checkpoints_dir}/ir_cnmr_hnmr_detailed_simulated_20240830_1920/best_model.ckpt"

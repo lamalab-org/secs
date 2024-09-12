@@ -39,40 +39,31 @@ def embed(config: DictConfig):
     data_format = Path(config.data.dataset_path).suffix
 
     handlers = {
-        ".csv": csv_load_function,
-        ".pickle": pickle_load_function,
-        ".pkl": pickle_load_function,
-        ".parquet": pl.read_parquet,
+        ".csv": pd.read_csv,
+        ".pickle": pd.read_pickle,
+        ".pkl": pd.read_pickle,
+        ".parquet": pd.read_parquet,
     }
 
     try:
         data = handlers[data_format](config.data.dataset_path)
     except KeyError:
         logger.error(f"Format {data_format} not supported")
-    data = data.with_columns(pl.col("smiles").alias("graph"))
-    data = data.to_pandas()
-    data["selfies"] = data["smiles"].apply(sf.encoder)
-    data = pl.DataFrame(data)
-    # data = data.with_columns(pl.col("smiles").alias("graph"))
-    # data = data.drop_nulls(subset=["structure"])
-    # data = data.with_columns(
-    #     pl.col("smiles")
-    #     .map_elements(compute_fragprint, return_dtype=pl.List[float])
-    #     .alias("fingerprint")
-    # )
-    # # drop duplicates in central modality column
-    # data = data.unique(subset=[config.data.central_modality])
+
+    # Shuffling the data with a specified fraction and seed
     shuffled_data = data.sample(
-        fraction=config.data.fraction_data, shuffle=True, seed=config.data.seed
+        frac=config.data.fraction_data, random_state=config.data.seed
     )
+
+    # Get the total length of the dataset
     dataset_length = len(shuffled_data)
+
+    # Split the data into validation and training datasets
     valid_shuffled_data = shuffled_data.tail(
         int(config.data.valid_frac * dataset_length)
     )
-    valid_shuffled_data = valid_shuffled_data.unique(
-        subset=[config.data.central_modality]
-    )
 
+    # set up the dataloaders
     valid_datasets = (
         MolBindDataset(
             central_modality=config.data.central_modality,
@@ -82,7 +73,7 @@ def embed(config: DictConfig):
         ).build_datasets_for_modalities(),
     )
 
-    valid_shuffled_data.to_pandas().to_pickle(f"valid_dataset_{RETRIEVAL_TIME}.pkl")
+    valid_shuffled_data.to_pickle(f"valid_dataset_{RETRIEVAL_TIME}.pkl")
     datamodule = MolBindDataModule(
         data={
             "predict": valid_datasets,
@@ -112,7 +103,7 @@ def embed(config: DictConfig):
 
     logger.info(f"Saved embeddings to {config.embeddings_path}.pkl")
     retrieval_metrics = full_database_retrieval(
-        indices=valid_shuffled_data.to_pandas(),
+        indices=valid_shuffled_data,
         other_modalities=config.data.modalities,
         central_modality=config.data.central_modality,
         embeddings=aggregated_embeddings,

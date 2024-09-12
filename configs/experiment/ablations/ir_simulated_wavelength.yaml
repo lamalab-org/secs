@@ -12,9 +12,9 @@ data:
     - ir
   modalities_to_read:
     - ir
-  valid_frac: 0.2
+  valid_frac: 0.3
   batch_size: 128
-  dataset_path: "${paths.data_dir}/spectra_129k.parquet"
+  dataset_path: "${paths.data_dir}/simulated_spectra_test_set_wavelength.parquet"
 
 ckpt_path: "${paths.checkpoints_dir}/ir_simulated_20240819_1331/best_model.ckpt"
 
@@ -28,5 +28,5 @@ top_k:
   - 5
   - 20
 
-run_id: "metrics_ir_simulated"
-embeddings_path: ir_simulated_embeddings
+run_id: "metrics_ir_simulated_wavelength"
+embeddings_path: ir_simulated_wavelength_embeddings

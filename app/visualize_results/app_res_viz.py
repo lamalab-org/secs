@@ -3,6 +3,8 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+import plotly.express as px
+
 
 def find_original_smiles_from_file_name(file_name):
     return file_name.split("_")[-1]
@@ -72,7 +74,7 @@ def app():
     st.title("Results Visualization")
     # Add more to the UI
     # 1. Read all result files
-    result_files = Path("results_with_multispec").glob("*.csv")
+    result_files = Path("../../experiments/maygen/results").rglob("*.csv")
     # smiles_from_file = [find_original_smiles_from_file_name(file) for file in result_files]
 
     to_collect_columns = [
@@ -144,18 +146,34 @@ def app():
     mean = pd.DataFrame(metrics_df.mean(axis=0))
     mean = mean.rename(columns={0: f"Top {top_n}"})
     # sort by mean
-    mean = mean.sort_values(by=f"Top {top_n}", ascending=False)
+    # mean = mean.sort_values(by=f"Top {top_n}", ascending=False)
     # st.write(f"Max possible score: {max_possible}")
+    col1, col2 = st.columns(2)
     if not average_or_not:
-        st.subheader(f"Is in Top-{top_n}")
-        st.write(mean.T.sort_values(by=f"Top {top_n}", axis=1, ascending=False).style.highlight_max(axis=1))
-
+        fig = px.bar(
+            mean,
+            x=mean.index,
+            y=f"Top {top_n}",
+            color=mean.index,
+            labels={"index": "Metric", f"Top {top_n}": f"Is in Top-{top_n}"},
+            height=600,
+            width=800,
+        )
+        st.plotly_chart(fig)
     if average_or_not:
-        st.subheader(f"Average Max Tanimoto Similarity of Top-{top_n}")
-        st.write(mean.T.sort_values(by=f"Top {top_n}", axis=1, ascending=False).style.highlight_max(axis=1))
+        # use plotly to plot the bar chart
+        fig = px.bar(
+            mean,
+            x=mean.index,
+            y=f"Top {top_n}",
+            color=mean.index,
+            labels={"index": "Metric", f"Top {top_n}": "Average Max Tanimoto Similarity of Top-5"},
+            height=600,
+            width=800,
+        )
+        st.plotly_chart(fig)
 
     len_df = [len(df) for df in read_all_dataframe]
-    import plotly.express as px
 
     if plot_metrics_vs_number_of_isomers:
         # plot metrics vs how many molecules are in each csv file
@@ -179,6 +197,8 @@ def app():
             height=600,
             width=900,
         )
+
+        # add a line with average performance for each metric
         # add average performance to each subplot from the mean dataframe
         # scale font size
         fig.update_layout(font={"size": 10})

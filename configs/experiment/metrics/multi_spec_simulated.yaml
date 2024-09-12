@@ -1,0 +1,37 @@
+# @package _global_
+defaults:
+  - override /data: molbind
+  - override /model: molbind
+  - override /trainer: gpu
+
+model:
+  embedding_size: 512
+  encoders:
+    smiles:
+      freeze_encoder: False
+  projection_heads:
+    ir_freeze: False
+    smiles_freeze: False
+
+data:
+  modalities:
+    - multi_spec
+  modalities_to_read:
+    - multi_spec
+  valid_frac: 0.2
+  batch_size: 128
+  dataset_path: "${paths.data_dir}/test.pkl"
+
+trainer:
+  num_nodes: 1
+  gpus_per_node: 4
+
+top_k: 
+  - 1
+  - 2
+  - 5
+  - 20
+
+run_id: "multi_spec_simulated_metrics"
+embeddings_path: multi_spec_simulated_embeddings
+ckpt_path: "${paths.checkpoints_dir}/multi_spec_simulated_20240904_2012/best_model.ckpt"

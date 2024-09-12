@@ -136,6 +136,8 @@ class GraphDataset(Dataset):
             NonStringModalities.C_NMR: _fingerprint,
             NonStringModalities.MASS_SPEC_POSITIVE: _fingerprint,
             NonStringModalities.MASS_SPEC_NEGATIVE: _fingerprint,
+            NonStringModalities.H_NMR: _fingerprint,
+            NonStringModalities.MULTI_SPEC: _fingerprint,
         }
 
     def __len__(self):
@@ -149,16 +151,10 @@ class GraphDataset(Dataset):
         data = smiles_to_graph_without_augment(self.smiles_list[index])
         data.central_modality = self.central_modality
         if not isinstance(self.central_modality_data_type, str):
-            data.central_modality_data = self.central_modality_handlers[
-                data.central_modality
-            ](self.central_modality_data[index])
+            data.central_modality_data = self.central_modality_handlers[data.central_modality](self.central_modality_data[index])
         else:
-            data.input_ids = self.central_modality_handlers[data.central_modality](
-                self.central_modality_data[0][index]
-            )
-            data.attention_mask = self.central_modality_handlers[data.central_modality](
-                self.central_modality_data[1][index]
-            )
+            data.input_ids = self.central_modality_handlers[data.central_modality](self.central_modality_data[0][index])
+            data.attention_mask = self.central_modality_handlers[data.central_modality](self.central_modality_data[1][index])
         data.modality = self.modality
         return data
 
@@ -191,9 +187,7 @@ class StructureDataset(Dataset):
             self.central_modality = kwargs["central_modality"]
             self.other_modality = "structure"
             self.central_modality_data = kwargs["central_modality_data"]
-            self.central_modality_data_type = ModalityConstants[
-                self.central_modality
-            ].data_type
+            self.central_modality_data_type = ModalityConstants[self.central_modality].data_type
         # modality handler functions if a modality is the central modality
         self.central_modality_handlers = {
             StringModalities.SMILES: _string,
@@ -215,21 +209,15 @@ class StructureDataset(Dataset):
         elif self.mode == "molbind":
             data.central_modality = self.central_modality
             if not isinstance(self.central_modality_data, str):
-                data.central_modality_data = self.central_modality_handlers[
-                    data.central_modality
-                ](self.central_modality_data[idx])
-            else:
-                data.input_ids = self.central_modality_handlers[data.central_modality](
-                    self.central_modality_data[0][idx]
+                data.central_modality_data = self.central_modality_handlers[data.central_modality](
+                    self.central_modality_data[idx]
                 )
-                data.attention_mask = self.central_modality_handlers[
-                    data.central_modality
-                ](self.central_modality_data[1][idx])
+            else:
+                data.input_ids = self.central_modality_handlers[data.central_modality](self.central_modality_data[0][idx])
+                data.attention_mask = self.central_modality_handlers[data.central_modality](self.central_modality_data[1][idx])
             data.modality = self.other_modality
             return data
-        raise ValueError(
-            f"'{self.mode}' is an invalid mode. Accepted values are 'encoder' and 'molbind'"
-        )
+        raise ValueError(f"'{self.mode}' is an invalid mode. Accepted values are 'encoder' and 'molbind'")
 
 
 class FingerprintVAEDataset(Dataset):
@@ -294,20 +282,14 @@ class ImageDataset(Dataset):
         new_size = tuple([int(x * ratio) for x in old_size])
         img = img.resize(new_size, Image.BICUBIC)
         new_img = Image.new("L", (desired_size, desired_size), "white")
-        new_img.paste(
-            img, ((desired_size - new_size[0]) // 2, (desired_size - new_size[1]) // 2)
-        )
+        new_img.paste(img, ((desired_size - new_size[0]) // 2, (desired_size - new_size[1]) // 2))
         return ImageOps.expand(new_img, int(np.random.randint(5, 25, size=1)), "white")  # noqa: NPY002
 
     @classmethod
     def transform_image(cls, image: Image):
         image = cls.fit_image(image)
-        img_PIL = transforms.RandomRotation(
-            (-15, 15), interpolation=3, expand=True, center=None, fill=255
-        )(image)
-        img_PIL = transforms.ColorJitter(
-            brightness=[0.75, 2.0], contrast=0, saturation=0, hue=0
-        )(img_PIL)
+        img_PIL = transforms.RandomRotation((-15, 15), interpolation=3, expand=True, center=None, fill=255)(image)
+        img_PIL = transforms.ColorJitter(brightness=[0.75, 2.0], contrast=0, saturation=0, hue=0)(img_PIL)
         shear_value = np.random.default_rng().uniform(0.1, 7.0)
         shear = random.choice(
             [
@@ -316,9 +298,7 @@ class ImageDataset(Dataset):
                 [-shear_value, shear_value, -shear_value, shear_value],
             ]
         )
-        img_PIL = transforms.RandomAffine(
-            0, translate=None, scale=None, shear=shear, interpolation=3, fill=255
-        )(img_PIL)
+        img_PIL = transforms.RandomAffine(0, translate=None, scale=None, shear=shear, interpolation=3, fill=255)(img_PIL)
         img_PIL = ImageEnhance.Contrast(ImageOps.autocontrast(img_PIL)).enhance(2.0)
         img_PIL = transforms.Resize((224, 224), interpolation=3)(img_PIL)
         img_PIL = ImageOps.autocontrast(img_PIL)
@@ -392,6 +372,7 @@ class IrDataset(Dataset):
             self.central_modality: [i[index] for i in self.central_modality_data],
             self.other_modality: ir,
         }
+
 
 class MassSpecDataset(Dataset):
     def __init__(
@@ -473,6 +454,67 @@ class hNmrDataset(Dataset):
             self.central_modality: [i[index] for i in self.central_modality_data],
             self.other_modality: self.hnmr_to_vec(self.h_nmr[index]),
         }
+
+    def hnmr_to_vec(self, nmr_shifts: list[list[float]]) -> Tensor:
+        if len(nmr_shifts) == 10000:
+            return torch.tensor(nmr_shifts, dtype=torch.float32)
+        init_vec = torch.zeros(self.vec_len, dtype=torch.float32)
+        if isinstance(nmr_shifts[0], (list, np.ndarray)):
+            for shift, _ in nmr_shifts:
+                index = int(shift / 18 * self.vec_len)
+                init_vec[index] = 1
+        else:
+            for _shift in nmr_shifts:
+                shift = np.round(_shift, 2)
+                index = int(shift / 18 * self.vec_len)
+                if index >= self.vec_len:
+                    index = self.vec_len - 1
+                if index < 0:
+                    index = 0
+                if init_vec[index] != 0:
+                    index = index + 1
+                elif init_vec[index] == 0:
+                    init_vec[index] = 1
+        return init_vec
+
+
+class MultiSpecDataset(Dataset):
+    def __init__(
+        self,
+        data: list[list[float]],
+        **kwargs,
+    ) -> None:
+        self.vec_len = 512
+        self.multi_spec = data
+        self.c_nmr_data, self.h_nmr_data, self.ir_data = [], [], []
+
+        for i in range(len(data)):
+            self.c_nmr_data.append(data[i][0])
+            self.h_nmr_data.append(data[i][1])
+            self.ir_data.append(data[i][2])
+        self.central_modality = kwargs["central_modality"]
+        self.other_modality = "multi_spec"
+        self.central_modality_data = kwargs["central_modality_data"]
+
+    def __len__(self):
+        return len(self.multi_spec)
+
+    def __getitem__(self, index: int) -> dict:
+        ir_spec_cleaned = torch.tensor(self.ir_data[index], dtype=torch.float32)[100:1700]
+        h_nmrs = self.hnmr_to_vec(self.h_nmr_data[index])
+        c_nmrs = self.cnmr_to_vec(self.c_nmr_data[index])
+        concatenated = torch.cat([ir_spec_cleaned, h_nmrs, c_nmrs], dim=0)
+        return {
+            self.central_modality: [i[index] for i in self.central_modality_data],
+            self.other_modality: concatenated,
+        }
+
+    def cnmr_to_vec(self, nmr_shifts: list[float]) -> Tensor:
+        init_vec = torch.zeros(self.vec_len, dtype=torch.float32)
+        for shift in nmr_shifts:
+            index = int(shift / 300 * 512)
+            init_vec[index] = 1
+        return init_vec
 
     def hnmr_to_vec(self, nmr_shifts: list[list[float]]) -> Tensor:
         if len(nmr_shifts) == 10000:

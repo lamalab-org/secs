@@ -22,6 +22,7 @@ from molbind.data.components.datasets import (
     StructureDataset,
     cNmrDataset,
     hNmrDataset,
+    MultiSpecDataset,
 )
 
 
@@ -85,12 +86,11 @@ class MolBindDataset:
             NonStringModalities.IR: self.build_ir_dataset,
             NonStringModalities.MASS_SPEC_POSITIVE: self.build_mass_spec_positive_dataset,
             NonStringModalities.MASS_SPEC_NEGATIVE: self.build_mass_spec_negative_dataset,
+            NonStringModalities.MULTI_SPEC: self.build_multi_spec_dataset,
         }
-        self.data = data.to_pandas().reset_index(drop=True)
+        self.data = data.reset_index(drop=True)
         # central modality data
-        self.central_modality_data = self.central_modality_handlers[central_modality](
-            self.data[central_modality].to_list()
-        )
+        self.central_modality_data = self.central_modality_handlers[central_modality](self.data[central_modality].to_list())
 
         self.other_modalities = other_modalities
 
@@ -115,9 +115,7 @@ class MolBindDataset:
             central_modality_data=self._handle_central_modality_data(struc_data),
         )
 
-    def build_string_dataset(
-        self, modality: str, context_length: int = 256
-    ) -> StringDataset:
+    def build_string_dataset(self, modality: str, context_length: int = 256) -> StringDataset:
         string_data = self.data[[self.central_modality, modality]].dropna()
         other_modality_data = self._tokenize_strings(
             string_data[modality].to_list(),
@@ -196,6 +194,15 @@ class MolBindDataset:
             central_modality_data=self._handle_central_modality_data(h_nmr_data),
         )
 
+    def build_multi_spec_dataset(self) -> MultiSpecDataset:
+        modality = "multi_spec"
+        multi_spec_data = self.data[[self.central_modality, modality]].dropna()
+        return MultiSpecDataset(
+            data=multi_spec_data[modality].to_list(),
+            central_modality=self.central_modality,
+            central_modality_data=self._handle_central_modality_data(multi_spec_data),
+        )
+
     def build_datasets_for_modalities(
         self,
     ) -> dict[str, Dataset]:
@@ -208,9 +215,7 @@ class MolBindDataset:
         # Thus this ^ is added to the dataloaders in the datamodule
         return datasets
 
-    def _handle_central_modality_data(
-        self, data_pair: pd.DataFrame
-    ) -> tuple[Tensor, Tensor]:
+    def _handle_central_modality_data(self, data_pair: pd.DataFrame) -> tuple[Tensor, Tensor]:
         if self.central_modality_data_type is str:
             central_modality_data = (
                 self.central_modality_data[0][data_pair.index.to_list()],

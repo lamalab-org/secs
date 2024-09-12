@@ -10,6 +10,7 @@ from molbind.data.components.datasets import (
     IrDataset,
     MassSpecNegativeDataset,
     MassSpecPositiveDataset,
+    MultiSpecDataset,
     StringDataset,
     StructureDataset,
     cNmrDataset,
@@ -54,6 +55,7 @@ class NonStringModalities(StrEnum):
     MASS_SPEC_POSITIVE = "mass_spec_positive"
     MASS_SPEC_NEGATIVE = "mass_spec_negative"
     STRUCTURE = "structure"
+    MULTI_SPEC = "multi_spec"
 
 
 class ModalityConstants(Enum):
@@ -74,6 +76,7 @@ class ModalityConstants(Enum):
     graph = (Graph, GraphDataset, CustomGraphEncoder, None)
     structure = (Graph, StructureDataset, CustomStructureEncoder, None)
     image = (ndarray, ImageDataset, ImageEncoder, None)
+    multi_spec = (list, MultiSpecDataset, IrEncoder, None)
 
     @property
     def data_type(self):

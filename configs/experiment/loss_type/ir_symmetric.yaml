@@ -6,27 +6,23 @@ defaults:
 
 model:
   embedding_size: 512
+  encoders:
+    smiles:
+      freeze_encoder: False
+  projection_heads:
+    ir_freeze: False
+    smiles_freeze: False
 
 data:
   modalities:
-    - c_nmr
+    - ir
   modalities_to_read:
-    - c_nmr
-  valid_frac: 0.2
+    - ir
   batch_size: 128
   dataset_path: "${paths.data_dir}/spectra_129k.parquet"
 
-ckpt_path: "${paths.checkpoints_dir}/cnmr_simulated_20240819_1328/best_model.ckpt"
-
 trainer:
   num_nodes: 1
-  gpus_per_node: 1
+  gpus_per_node: 4
 
-top_k: 
-  - 1
-  - 2
-  - 5
-  - 20
-
-run_id: "metrics_cnmr_simulated"
-embeddings_path: cnmr_simulated_embeddings
+run_id: "ir_simulated_test_symmetry"

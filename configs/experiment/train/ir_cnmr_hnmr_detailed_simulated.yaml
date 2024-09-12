@@ -1,0 +1,43 @@
+# @package _global_
+defaults:
+  - override /data: molbind
+  - override /model: molbind
+  - override /trainer: gpu
+
+model:
+  embedding_size: 512
+  encoders:
+    smiles:
+      freeze_encoder: False
+    h_nmr:
+      input_dims: [10000, 1024, 512, 256]
+      output_dims: [256, 512, 1024, 10000]
+      latent_dim: 256
+      freeze_encoder: False
+
+  projection_heads:
+    h_nmr:
+      dims: [256, "${model.embedding_size}"]
+      activation: LeakyReLU
+    h_nmr_freeze: False
+    smiles_freeze: False
+    cnmr_freeze: False
+    ir_freeze: False
+
+data:
+  modalities:
+    - h_nmr
+    - c_nmr
+    - ir
+  modalities_to_read:
+    - h_nmr
+    - c_nmr
+    - ir
+  batch_size: 128
+  dataset_path: "${paths.data_dir}/spectra_129k_hnmr_detailed.parquet"
+
+trainer:
+  num_nodes: 1
+  gpus_per_node: 4
+
+run_id: "ir_cnmr_hnmr_detailed_simulated"

@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 
 import hydra
-import polars as pl
+import pandas as pd
 import pytorch_lightning as L
 import rootutils
 import torch
@@ -19,7 +19,6 @@ from pytorch_lightning.strategies.ddp import DDPStrategy
 
 from molbind.data.datamodule import MolBindDataModule
 from molbind.data.molbind_dataset import MolBindDataset
-from molbind.data.utils.file_utils import csv_load_function, pickle_load_function
 from molbind.models.lightning_module import MolBindModule
 
 load_dotenv()
@@ -31,9 +30,7 @@ TRAIN_DATE = datetime.datetime.now().strftime("%Y%m%d_%H%M")
 
 def train_molbind(config: DictConfig):
     # define the run_id based on the config name and the date
-    run_id = (
-        config.run_id + "_" + TRAIN_DATE if hasattr(config, "run_id") else TRAIN_DATE
-    )
+    run_id = config.run_id + "_" + TRAIN_DATE if hasattr(config, "run_id") else TRAIN_DATE
     # set wandb mode to offline if no WANDB_API_KEY is set
     if not os.getenv("WANDB_API_KEY"):
         os.environ["WANDB_MODE"] = "offline"
@@ -54,40 +51,25 @@ def train_molbind(config: DictConfig):
     # extract format of dataset file
     data_format = Path(config.data.dataset_path).suffix
     handlers = {
-        ".csv": csv_load_function,
-        ".pickle": pickle_load_function,
-        ".pkl": pickle_load_function,
-        ".parquet": pl.read_parquet,
+        ".csv": pd.read_csv,
+        ".pickle": pd.read_pickle,
+        ".pkl": pd.read_pickle,
+        ".parquet": pd.read_parquet,
     }
     # load and handle the data
     try:
         data = handlers[data_format](config.data.dataset_path)
     except KeyError:
         logger.error(f"Format {data_format} not supported")
-    # add graph column to data
-    # data = data.with_columns(pl.col("smiles").alias("graph"))
-    # data = data.to_pandas()
-    # data["selfies"] = data["smiles"].apply(sf.encoder)
-    # data = pl.DataFrame(data)
-    # # add selfies column to data
-    # def col_to_selfies(col):
-    #     return [sf.encoder(smiles) for smiles in col]
+    # Shuffling the data with a specified fraction and seed
+    shuffled_data = data.sample(frac=config.data.fraction_data, random_state=config.data.seed)
 
-    # data = data.with_columns(
-    #     pl.col("smiles").map_batches(col_to_selfies).alias("selfies")
-    # )
-    # data = data[["smiles", "mass_spec_positive"]]
-    shuffled_data = data.sample(
-        fraction=config.data.fraction_data, shuffle=True, seed=config.data.seed
-    )
-    # split the data into train and validation
+    # Get the total length of the dataset
     dataset_length = len(shuffled_data)
-    valid_shuffled_data = shuffled_data.tail(
-        int(config.data.valid_frac * dataset_length)
-    )
-    train_shuffled_data = shuffled_data.head(
-        int(config.data.train_frac * dataset_length)
-    )
+
+    # Split the data into validation and training datasets
+    valid_shuffled_data = shuffled_data.tail(int(config.data.valid_frac * dataset_length))
+    train_shuffled_data = shuffled_data.head(int(config.data.train_frac * dataset_length))
     # set up the dataloaders
     train_dataloader, valid_dataloader = (
         MolBindDataset(
@@ -151,14 +133,8 @@ def train_molbind(config: DictConfig):
         datamodule=datamodule,
     )
     # copy the best model under the name "best_model"
-    best_model_path = (
-        Path(config.callbacks.model_checkpoint.dirpath)
-        / Path(run_id)
-        / "best_model.ckpt"
-    )
-    os.system(
-        f"cp {best_model_path} {Path(config.callbacks.model_checkpoint.dirpath) / Path(run_id) / 'best_model.ckpt'}"
-    )
+    best_model_path = Path(config.callbacks.model_checkpoint.dirpath) / Path(run_id) / "best_model.ckpt"
+    os.system(f"cp {best_model_path} {Path(config.callbacks.model_checkpoint.dirpath) / Path(run_id) / 'best_model.ckpt'}")
     logger.info(f"Best model saved at {best_model_path}")
     logger.info("Training complete")
     logger.info("Exiting")
@@ -222,9 +198,7 @@ def init_distributed_mode(port=12354):
     logger.info(f"CUDA_VISIBLE_DEVICES={os.getenv('CUDA_VISIBLE_DEVICES')}")
 
 
-@hydra.main(
-    version_base="1.3", config_path="../configs", config_name="molbind_config.yaml"
-)
+@hydra.main(version_base="1.3", config_path="../configs", config_name="molbind_config.yaml")
 def main(config: DictConfig):
     init_distributed_mode(12354)
     train_molbind(config)

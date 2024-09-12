@@ -33,7 +33,7 @@ if uploaded_file is not None:
         "ir_similarity": "IR Similarity",
         "cnmr_similarity": "C-NMR Similarity",
         "hnmr_similarity": "H-NMR Similarity",
-        "similarity": "Similarity",
+        "similarity": "Similarity of sums",
         "sum_of_similarities": "Sum of Similarities",
         "cnmr_ir_similarity": "C-NMR IR Similarity",
         "ir_hnmr_similarity": "H-NMR IR Similarity",
@@ -42,6 +42,7 @@ if uploaded_file is not None:
         "unique_hydrogens": "Unique Hydrogens",
         "unique_carbons": "Unique Carbons",
         "sascore": "Synthetic Accessibility Score",
+        "multi_spec_similarity": "MultiSpec Similarity",
     }
     # rename columns
     data = data.rename(columns=similarity_metric_names)

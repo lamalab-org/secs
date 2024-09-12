@@ -7,8 +7,7 @@ def csv_load_function(path: str) -> pl.DataFrame:
 
 
 def pickle_load_function(path: str) -> pl.DataFrame:
-    data = pd.read_pickle(path)
-    return pl.from_pandas(data)
+    return pd.read_pickle(path)
 
 
 def parquet_load_function(path: str) -> pl.DataFrame:
