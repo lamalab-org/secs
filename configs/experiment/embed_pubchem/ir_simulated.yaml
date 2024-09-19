@@ -1,0 +1,26 @@
+# @package _global_
+defaults:
+  - override /data: molbind
+  - override /model: molbind
+  - override /trainer: gpu
+
+model:
+  embedding_size: 512
+
+data:
+  pubchem_chunk_id: 0
+  modalities:
+    - ir
+  modalities_to_read:
+    - ir
+  batch_size: 8192
+  dataset_path: "${paths.data_dir}/pubchem_canonical_tokenized/CID-SMILES-tokenized-batch-${data.pubchem_chunk_id}.parquet"
+
+ckpt_path: "${paths.checkpoints_dir}/ir_simulated_20240819_1331/best_model.ckpt"
+
+trainer:
+  num_nodes: 1
+  gpus_per_node: 1
+
+run_id: "embed_pubchem_ir_chunk_${data.pubchem_chunk_id}"
+embeddings_path: "pubchem_embeddings_ir_simulated_chunk_${data.pubchem_chunk_id}"
