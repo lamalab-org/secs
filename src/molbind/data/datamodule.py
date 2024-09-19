@@ -8,6 +8,7 @@ from torch.utils.data import DataLoader, DistributedSampler
 from torch_geometric.loader import DataLoader as GeometricDataLoader
 
 from molbind.data.available import NonStringModalities
+from molbind.data.components.datasets import StringDatasetEmbedding
 
 
 class MolBindDataModule(LightningDataModule):
@@ -46,10 +47,7 @@ class MolBindDataModule(LightningDataModule):
                 shuffle = None
             else:
                 distributed_sampler = None
-            if (
-                modality == NonStringModalities.GRAPH
-                or modality == NonStringModalities.STRUCTURE
-            ):
+            if modality == NonStringModalities.GRAPH or modality == NonStringModalities.STRUCTURE:
                 dataloaders[modality] = GeometricDataLoader(
                     self.datasets[mode][modality],
                     batch_size=batch_size,
@@ -128,10 +126,7 @@ class MolBindDataModule(LightningDataModule):
         """
         dataloaders = {}
         for modality in self.datasets[mode][0]:
-            if (
-                modality == NonStringModalities.GRAPH
-                or modality == NonStringModalities.STRUCTURE
-            ):
+            if modality == NonStringModalities.GRAPH or modality == NonStringModalities.STRUCTURE:
                 dataloaders[modality] = GeometricDataLoader(
                     self.datasets[mode][0][modality],
                     batch_size=batch_size,
@@ -152,3 +147,14 @@ class MolBindDataModule(LightningDataModule):
         # CombinedLoader does not work with DDPSampler directly
         # So each dataloader has a DistributedSampler
         return dataloaders
+
+    def embed_dataloader(self, tokenized_data: list[list[int]]) -> StringDatasetEmbedding:
+        dataset = StringDatasetEmbedding(tokenized_data)
+        return DataLoader(
+            dataset,
+            batch_size=self.dataloader_arguments["batch_size"],
+            num_workers=self.dataloader_arguments["num_workers"],
+            drop_last=False,
+            shuffle=False,
+            prefetch_factor=self.dataloader_arguments["num_workers"],
+        )

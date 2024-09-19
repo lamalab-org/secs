@@ -25,27 +25,19 @@ class MolBindModule(LightningModule):
     def __init__(self, cfg: DictConfig) -> None:
         super().__init__()
         self.model = MolBind(cfg=cfg)
-        self.world_size = int(
-            os.environ.get(
-                "WORLD_SIZE", cfg.trainer.gpus_per_node * cfg.trainer.num_nodes
-            )
-        )
+        self.world_size = int(os.environ.get("WORLD_SIZE", cfg.trainer.gpus_per_node * cfg.trainer.num_nodes))
         if hasattr(cfg, "ckpt_path") and cfg.ckpt_path is not None:
             with contextlib.suppress(FileNotFoundError):
                 self.model.load_state_dict(
                     rename_keys_with_prefix(torch.load(cfg.ckpt_path)["state_dict"]),
                     strict=False,
                 )
-                logger.info(
-                    f"Successfully loaded model from checkpoint: {cfg.ckpt_path}"
-                )
+                logger.info(f"Successfully loaded model from checkpoint: {cfg.ckpt_path}")
         else:
             logger.info("No checkpoint path found. Training from scratch.")
 
         self.config = cfg
-        self.loss = InfoNCE(
-            temperature=cfg.model.loss.temperature, negative_mode="unpaired"
-        )
+        self.loss = InfoNCE(temperature=cfg.model.loss.temperature, negative_mode="unpaired")
         if cfg.model.loss.sparse:
             self.l1_loss = torch.nn.L1Loss()
         self.per_device_batch_size = cfg.data.batch_size
@@ -76,17 +68,11 @@ class MolBindModule(LightningModule):
         else:
             return self.loss(z1, z2)
 
-    def _multimodal_loss(
-        self, embeddings_dict: dict[str, Tensor], prefix: str
-    ) -> float:
+    def _multimodal_loss(self, embeddings_dict: dict[str, Tensor], prefix: str) -> float:
         modality_pair = [*embeddings_dict]
-        central_to_modality_loss = self._info_nce_loss(
-            embeddings_dict[modality_pair[0]], embeddings_dict[modality_pair[1]]
-        )
+        central_to_modality_loss = self._info_nce_loss(embeddings_dict[modality_pair[0]], embeddings_dict[modality_pair[1]])
         if self.config.model.loss.symmetric:
-            modality_to_central_loss = self._info_nce_loss(
-                embeddings_dict[modality_pair[1]], embeddings_dict[modality_pair[0]]
-            )
+            modality_to_central_loss = self._info_nce_loss(embeddings_dict[modality_pair[1]], embeddings_dict[modality_pair[0]])
             loss = (central_to_modality_loss + modality_to_central_loss) / 2
         else:
             loss = central_to_modality_loss.detach().clone()
@@ -123,8 +109,10 @@ class MolBindModule(LightningModule):
         embeddings_dict = self.forward(batch)
         return self._multimodal_loss(embeddings_dict, "valid")
 
-    def predict_step(self, batch: dict) -> Tensor:
-        return self.forward(batch)
+    def predict_step(self, batch: dict | tuple[Tensor, Tensor]) -> Tensor:
+        if isinstance(batch, dict):
+            return self.forward(batch)
+        return self.model.encode_modality(batch, self.central_modality)
 
     def test_step(self, batch: dict) -> Tensor:
         embeddings_dict = self.forward(batch)
@@ -205,12 +193,8 @@ class MolBindModule(LightningModule):
         metric_names = [metric.__name__ for metric in metrics]
         if self.world_size > 1:
             # both all gather calls return tensors of shape (World_Size, Batch_Size, Embedding_Size)
-            all_embeddings_central_mod = self.all_gather(
-                embeddings_central_mod, sync_grads=True
-            )
-            all_embeddings_other_mod = self.all_gather(
-                embeddings_other_mod, sync_grads=True
-            )
+            all_embeddings_central_mod = self.all_gather(embeddings_central_mod, sync_grads=True)
+            all_embeddings_other_mod = self.all_gather(embeddings_other_mod, sync_grads=True)
             all_embeddings_central_mod = all_embeddings_central_mod.flatten(0, 1)
             all_embeddings_other_mod = all_embeddings_other_mod.flatten(0, 1)
         else:
@@ -231,16 +215,10 @@ class MolBindModule(LightningModule):
         # the metric calculations are grouped by indexes and then averaged
         # repeat interleave creates tensors of the form [0, 0, 1, 1, 2, 2]
         indexes = (
-            torch.arange(all_embeddings_central_mod.shape[0])
-            .repeat_interleave(all_embeddings_other_mod.shape[0])
-            .to(device)
+            torch.arange(all_embeddings_central_mod.shape[0]).repeat_interleave(all_embeddings_other_mod.shape[0]).to(device)
         )
         # Diagonal elements are the true querries, the rest are false querries
-        target = (
-            torch.eye(all_embeddings_central_mod.shape[0], dtype=torch.long)
-            .flatten()
-            .to(device)
-        )
+        target = torch.eye(all_embeddings_central_mod.shape[0], dtype=torch.long).flatten().to(device)
         assert target.sum() == all_embeddings_central_mod.shape[0]
         for k_val in k_list:
             for metric, metric_name in zip(metrics, metric_names):

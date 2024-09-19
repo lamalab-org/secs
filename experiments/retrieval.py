@@ -5,10 +5,8 @@ from pprint import pformat
 
 import hydra
 import pandas as pd
-import polars as pl
 import pytorch_lightning as L
 import rootutils
-import selfies as sf
 from dotenv import load_dotenv
 from loguru import logger
 from omegaconf import DictConfig
@@ -16,7 +14,6 @@ from omegaconf import DictConfig
 from molbind.data.analysis import aggregate_embeddings
 from molbind.data.datamodule import MolBindDataModule
 from molbind.data.molbind_dataset import MolBindDataset
-from molbind.data.utils.file_utils import csv_load_function, pickle_load_function
 from molbind.metrics.retrieval import full_database_retrieval
 from molbind.models.lightning_module import MolBindModule
 
@@ -51,17 +48,13 @@ def embed(config: DictConfig):
         logger.error(f"Format {data_format} not supported")
 
     # Shuffling the data with a specified fraction and seed
-    shuffled_data = data.sample(
-        frac=config.data.fraction_data, random_state=config.data.seed
-    )
+    shuffled_data = data.sample(frac=config.data.fraction_data, random_state=config.data.seed)
 
     # Get the total length of the dataset
     dataset_length = len(shuffled_data)
 
     # Split the data into validation and training datasets
-    valid_shuffled_data = shuffled_data.tail(
-        int(config.data.valid_frac * dataset_length)
-    )
+    valid_shuffled_data = shuffled_data.tail(int(config.data.valid_frac * dataset_length))
 
     # set up the dataloaders
     valid_datasets = (
@@ -115,9 +108,7 @@ def embed(config: DictConfig):
     logger.info(f"Database level retrieval metrics: \n {pformat(retrieval_metrics)}")
 
 
-@hydra.main(
-    version_base="1.3", config_path="../configs", config_name="molbind_config.yaml"
-)
+@hydra.main(version_base="1.3", config_path="../configs", config_name="molbind_config.yaml")
 def main(config: DictConfig):
     embed(config)
 

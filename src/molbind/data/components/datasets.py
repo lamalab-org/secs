@@ -537,3 +537,19 @@ class MultiSpecDataset(Dataset):
                 elif init_vec[index] == 0:
                     init_vec[index] = 1
         return init_vec
+
+class StringDatasetEmbedding(Dataset):
+    def __init__(
+        self,
+        data: list[list[str]],
+    ) -> None:
+        self.data = data
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        return (
+            torch.tensor(self.data[idx][0]),
+            torch.tensor(self.data[idx][1]),
+        )

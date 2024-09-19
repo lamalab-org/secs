@@ -3,15 +3,8 @@ import os
 
 import polars as pl
 from loguru import logger
-from rdkit import RDLogger
-from transformers import AutoTokenizer
 
-SMILES_TOKENIZER = AutoTokenizer.from_pretrained(
-    "ibm/MoLFormer-XL-both-10pct", trust_remote_code=True
-)
-
-
-RDLogger.DisableLog("rdApp.*")
+from molbind.data.components.mb_tokenizers import SMILES_TOKENIZER
 
 # Set Polars to use maximum number of threads automatically
 os.environ["POLARS_MAX_THREADS"] = str(multiprocessing.cpu_count())
@@ -49,9 +42,7 @@ def read_cached_CID_smiles_in_batches(batch_size=1_999_968):
         batch_ = batch.with_columns([pl.Series(tokenized).alias("tokens")])
 
         # Save batch as a parquet file
-        batch_.write_parquet(
-            f"pubchem_canonical_tokenized/CID-SMILES-tokenized-batch-{batch_index}.parquet"
-        )
+        batch_.write_parquet(f"pubchem_canonical_tokenized/CID-SMILES-tokenized-batch-{batch_index}.parquet")
         logger.info(f"Batch {batch_index} processed and saved.")
 
     logger.info("Processing completed and data saved.")

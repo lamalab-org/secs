@@ -18,11 +18,11 @@ from molbind.data.components.datasets import (
     IrDataset,
     MassSpecNegativeDataset,
     MassSpecPositiveDataset,
+    MultiSpecDataset,
     StringDataset,
     StructureDataset,
     cNmrDataset,
     hNmrDataset,
-    MultiSpecDataset,
 )
 
 

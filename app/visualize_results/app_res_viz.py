@@ -1,9 +1,9 @@
 from pathlib import Path
 
 import pandas as pd
-import streamlit as st
-
 import plotly.express as px
+import streamlit as st
+from loguru import logger
 
 
 def find_original_smiles_from_file_name(file_name):
@@ -27,7 +27,7 @@ def average_tanimoto_of_top_n(sorted_df, n, exclude_original_molecule: bool = Tr
     if exclude_original_molecule:
         sorted_df = sorted_df[sorted_df["Tanimoto Similarity"] != 1]
         tanimoto_top_n = sorted_df.head(n)["Tanimoto Similarity"]
-        max_possible = sorted_df[sorted_df["Tanimoto Similarity"] != 1]["Tanimoto Similarity"].max()
+        # max_possible = sorted_df[sorted_df["Tanimoto Similarity"] != 1]["Tanimoto Similarity"].max()
         return tanimoto_top_n.max()
     tanimoto_top_n = sorted_df.head(n)["Tanimoto Similarity"]
     return tanimoto_top_n.max()
@@ -94,7 +94,7 @@ def app():
         "Select number of top candidates:",
         min_value=1,
         max_value=20,
-        value=5,
+        value=1,
     )
 
     read_all_dataframe = [pd.read_csv(file) for file in result_files]
@@ -167,7 +167,7 @@ def app():
             x=mean.index,
             y=f"Top {top_n}",
             color=mean.index,
-            labels={"index": "Metric", f"Top {top_n}": "Average Max Tanimoto Similarity of Top-5"},
+            labels={"index": "Metric", f"Top {top_n}": f"Average Max Tanimoto Similarity of Top-{top_n}"},
             height=600,
             width=800,
         )
@@ -279,8 +279,6 @@ def app():
         )
         # R2 score for each metric
         # print R2 score for each metric
-        from loguru import logger
-
         logger.debug(f"R2 score for each metric: {selected_df[[
                 "ir_similarity",
                 "cnmr_similarity",
