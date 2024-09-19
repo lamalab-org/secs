@@ -538,6 +538,7 @@ class MultiSpecDataset(Dataset):
                     init_vec[index] = 1
         return init_vec
 
+
 class StringDatasetEmbedding(Dataset):
     def __init__(
         self,

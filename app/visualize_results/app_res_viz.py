@@ -67,14 +67,11 @@ def collect_statistics_from_files(data, to_collect_columns, n, return_average=Fa
     return metrics
 
 
-# def filter_data
-
-
 def app():
     st.title("Results Visualization")
     # Add more to the UI
     # 1. Read all result files
-    result_files = Path("../../experiments/maygen/results").rglob("*.csv")
+    result_files = Path("../../experiments/structure_elucidation/results").rglob("*.csv")
     # smiles_from_file = [find_original_smiles_from_file_name(file) for file in result_files]
 
     to_collect_columns = [
