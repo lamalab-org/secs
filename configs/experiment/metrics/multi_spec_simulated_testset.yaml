@@ -24,7 +24,7 @@ data:
 
 trainer:
   num_nodes: 1
-  gpus_per_node: 4
+  gpus_per_node: 1
 
 top_k: 
   - 1

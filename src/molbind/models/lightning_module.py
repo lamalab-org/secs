@@ -1,7 +1,5 @@
 import contextlib
 import os
-from pathlib import Path
-from uuid import uuid1
 
 import torch
 from info_nce import InfoNCE
@@ -110,35 +108,9 @@ class MolBindModule(LightningModule):
         return self._multimodal_loss(embeddings_dict, "valid")
 
     def predict_step(self, batch: dict | tuple[Tensor, Tensor]) -> Tensor:
-        if isinstance(batch, dict):
+        if isinstance(batch, tuple):
             return self.forward(batch)
         return self.model.encode_modality(batch, self.central_modality)
-
-    def test_step(self, batch: dict) -> Tensor:
-        embeddings_dict = self.forward(batch)
-        # self.store_embeddings.append(embeddings_dict)
-        # store embeddings to file
-
-        file_template = "{}/{}_embeddings_{}.pth"
-        directory_for_embeddings = self.config.store_embeddings_directory
-        # create a directory for embeddings if it does not exist
-        if self.tracker == 0:
-            if not Path(directory_for_embeddings).exists():
-                Path.mkdir(directory_for_embeddings)
-            else:
-                logger.info(f"Directory {directory_for_embeddings} already exists.")
-                logger.info("Creating new directory for embeddings..")
-                directory_for_embeddings = directory_for_embeddings + "_" + str(uuid1())
-                Path(directory_for_embeddings).mkdir()
-                logger.info(f"New directory created at {directory_for_embeddings}")
-        # convert to numpy array and then store to .pth file
-        for modality, embeddings in embeddings_dict.items():
-            torch.save(
-                embeddings,
-                file_template.format(directory_for_embeddings, modality, self.tracker),
-            )
-        self.tracker += 1
-        return self._multimodal_loss(embeddings_dict, "test")
 
     def configure_optimizers(self) -> Optimizer:
         return torch.optim.AdamW(

@@ -10,14 +10,14 @@ model:
     smiles:
       freeze_encoder: False
     h_nmr:
-      input_dims: [10000, 1024, 512, 256]
-      output_dims: [256, 512, 1024, 10000]
-      latent_dim: 256
+      input_dims: [10000, 2048, 1024, 512]
+      output_dims: [512, 2048, 1024, 10000]
+      latent_dim: 512
       freeze_encoder: False
 
   projection_heads:
     h_nmr:
-      dims: [256, "${model.embedding_size}"]
+      dims: [512, "${model.embedding_size}"]
       activation: LeakyReLU
     h_nmr_freeze: False
     smiles_freeze: False

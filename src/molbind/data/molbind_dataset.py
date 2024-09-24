@@ -87,6 +87,7 @@ class MolBindDataset:
             NonStringModalities.MASS_SPEC_POSITIVE: self.build_mass_spec_positive_dataset,
             NonStringModalities.MASS_SPEC_NEGATIVE: self.build_mass_spec_negative_dataset,
             NonStringModalities.MULTI_SPEC: self.build_multi_spec_dataset,
+            NonStringModalities.H_NMR_CNN: self.build_hnmr_cnn_dataset,
         }
         self.data = data.reset_index(drop=True)
         # central modality data
@@ -201,6 +202,16 @@ class MolBindDataset:
             data=multi_spec_data[modality].to_list(),
             central_modality=self.central_modality,
             central_modality_data=self._handle_central_modality_data(multi_spec_data),
+        )
+
+    def build_hnmr_cnn_dataset(self) -> hNmrDataset:
+        modality = "h_nmr_cnn"
+        h_nmr_cnn_data = self.data[[self.central_modality, modality]].dropna()
+        return hNmrDataset(
+            data=h_nmr_cnn_data[modality].to_list(),
+            central_modality=self.central_modality,
+            central_modality_data=self._handle_central_modality_data(h_nmr_cnn_data),
+            architecture="cnn",
         )
 
     def build_datasets_for_modalities(

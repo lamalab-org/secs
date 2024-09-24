@@ -37,7 +37,10 @@ def full_database_retrieval(
             if modality_2 != modality_1 and embeddings[modality_1].size() >= embeddings[modality_2].size():
                 with contextlib.suppress(ValueError):
                     client.delete_collection(f"{modality_1}_embeds")
-                collection = client.create_collection(name=f"{modality_1}_embeds", metadata={"hnsw:space": "cosine"})
+                collection = client.create_collection(
+                    name=f"{modality_1}_embeds",
+                    metadata={"hnsw:space": "cosine", "hnsw:construction_ef": 512, "hnsw:search_ef": 1000},
+                )
 
                 embed_mod1 = indices[[modality_1, modality_2]].dropna(subset=modality_1).reset_index().dropna(subset=modality_2)
                 embed_mod2 = indices[[modality_1, modality_2]].dropna(subset=modality_2).reset_index().dropna(subset=modality_1)

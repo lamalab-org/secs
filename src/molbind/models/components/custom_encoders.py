@@ -1,4 +1,5 @@
 from pathlib import Path
+from omegaconf import DictConfig
 from typing import (
     Callable,
 )
@@ -28,17 +29,11 @@ from molbind.utils import rename_keys_with_prefix, select_device
 
 
 class SmilesEncoder(BaseModalityEncoder):
-    def __init__(
-        self, freeze_encoder: bool = False, pretrained: bool = True, **kwargs
-    ) -> None:
-        super().__init__(
-            "ibm/MoLFormer-XL-both-10pct", freeze_encoder, pretrained, **kwargs
-        )
+    def __init__(self, freeze_encoder: bool = False, pretrained: bool = True, **kwargs) -> None:
+        super().__init__("ibm/MoLFormer-XL-both-10pct", freeze_encoder, pretrained, **kwargs)
 
     def _initialize_encoder(self):
-        self.encoder = AutoModel.from_pretrained(
-            self.model_name, trust_remote_code=True
-        )
+        self.encoder = AutoModel.from_pretrained(self.model_name, trust_remote_code=True)
         if self.freeze_encoder:
             for param in self.encoder.parameters():
                 param.requires_grad = False
@@ -53,25 +48,17 @@ class SmilesEncoder(BaseModalityEncoder):
 
 
 class SelfiesEncoder(BaseModalityEncoder):
-    def __init__(
-        self, freeze_encoder: bool = False, pretrained: bool = True, **kwargs
-    ) -> None:
+    def __init__(self, freeze_encoder: bool = False, pretrained: bool = True, **kwargs) -> None:
         super().__init__("HUBioDataLab/SELFormer", freeze_encoder, pretrained, **kwargs)
 
 
 class IUPACNameEncoder(BaseModalityEncoder):
-    def __init__(
-        self, freeze_encoder: bool = False, pretrained: bool = True, **kwargs
-    ) -> None:
-        super().__init__(
-            "FacebookAI/roberta-base", freeze_encoder, pretrained, **kwargs
-        )
+    def __init__(self, freeze_encoder: bool = False, pretrained: bool = True, **kwargs) -> None:
+        super().__init__("FacebookAI/roberta-base", freeze_encoder, pretrained, **kwargs)
 
     def _initialize_encoder(self) -> None:
         config = AutoConfig.from_pretrained(self.model_name)
-        self.encoder = RobertaForCausalLM.from_pretrained(
-            self.model_name, config=config
-        )
+        self.encoder = RobertaForCausalLM.from_pretrained(self.model_name, config=config)
         if self.freeze_encoder:
             for param in self.encoder.parameters():
                 param.requires_grad = False
@@ -91,11 +78,7 @@ class CustomFingerprintEncoder(FingerprintEncoder):
     ) -> None:
         super().__init__(input_dims, output_dims, latent_dim)
         # load weights from the pre-trained model
-        self.load_state_dict(
-            rename_keys_with_prefix(
-                torch.load(ckpt_path, map_location=select_device())["state_dict"]
-            )
-        )
+        self.load_state_dict(rename_keys_with_prefix(torch.load(ckpt_path, map_location=select_device())["state_dict"]))
 
     def forward(self, x: Tensor) -> Tensor:
         return self.encoder(x)
@@ -124,17 +107,13 @@ class CustomGraphEncoder(GraphEncoder):
         if suffix == ".pth":
             logger.info("Loading graph model from a `.pth` file")
             self.load_state_dict(
-                rename_keys_with_prefix(
-                    torch.load(ckpt_path, map_location=select_device())
-                ),
+                rename_keys_with_prefix(torch.load(ckpt_path, map_location=select_device())),
                 strict=True,
             )
         elif suffix == ".ckpt":
             logger.info("Loading graph model from `.ckpt` file")
             self.load_state_dict(
-                rename_keys_with_prefix(
-                    torch.load(ckpt_path, map_location=select_device())["state_dict"]
-                ),
+                rename_keys_with_prefix(torch.load(ckpt_path, map_location=select_device())["state_dict"]),
                 strict=True,
             )
         self.drop_ratio = drop_ratio
@@ -283,11 +262,7 @@ class CustomStructureEncoder(StructureEncoder):
                 for _ in range(num_blocks + 1)
             ]
         )
-        self.load_state_dict(
-            rename_keys_with_prefix(
-                torch.load(ckpt_path, map_location=select_device())["state_dict"]
-            )
-        )
+        self.load_state_dict(rename_keys_with_prefix(torch.load(ckpt_path, map_location=select_device())["state_dict"]))
 
     def forward(
         self,
@@ -300,13 +275,9 @@ class CustomStructureEncoder(StructureEncoder):
         """
 
         z, pos, batch = batch.z, batch.pos, batch.batch
-        edge_index = radius_graph(
-            pos, r=self.cutoff, batch=batch, max_num_neighbors=self.max_num_neighbors
-        )
+        edge_index = radius_graph(pos, r=self.cutoff, batch=batch, max_num_neighbors=self.max_num_neighbors)
 
-        i, j, idx_i, idx_j, idx_k, idx_kj, idx_ji = triplets(
-            edge_index, num_nodes=z.size(0)
-        )
+        i, j, idx_i, idx_j, idx_k, idx_kj, idx_ji = triplets(edge_index, num_nodes=z.size(0))
         # Calculate distances.
         dist = (pos[i] - pos[j]).pow(2).sum(dim=-1).sqrt()
         pos_ji, pos_ki = pos[idx_j] - pos[idx_i], pos[idx_k] - pos[idx_i]
@@ -321,9 +292,7 @@ class CustomStructureEncoder(StructureEncoder):
         x = self.emb(z, rbf, i, j)
         P = self.output_blocks[0](x, rbf, i, num_nodes=pos.size(0))
         # Interaction blocks.
-        for interaction_block, output_block in zip(
-            self.interaction_blocks, self.output_blocks[1:]
-        ):
+        for interaction_block, output_block in zip(self.interaction_blocks, self.output_blocks[1:]):
             x = interaction_block(
                 x=x,
                 rbf=rbf,
@@ -405,11 +374,7 @@ class cNmrEncoder(FingerprintEncoder):
         super().__init__(input_dims, output_dims, latent_dim)
         # load weights from the pre-trained model
         if ckpt_path is not None:
-            self.load_state_dict(
-                rename_keys_with_prefix(
-                    torch.load(ckpt_path, map_location=select_device())["state_dict"]
-                )
-            )
+            self.load_state_dict(rename_keys_with_prefix(torch.load(ckpt_path, map_location=select_device())["state_dict"]))
             logger.info("Loaded weights from pre-trained model for C-NMR")
         if freeze_encoder:
             for param in self.encoder.parameters():
@@ -431,11 +396,7 @@ class IrEncoder(FingerprintEncoder):
         super().__init__(input_dims, output_dims, latent_dim)
         # load weights from the pre-trained model
         if ckpt_path is not None:
-            self.load_state_dict(
-                rename_keys_with_prefix(
-                    torch.load(ckpt_path, map_location=select_device())["state_dict"]
-                )
-            )
+            self.load_state_dict(rename_keys_with_prefix(torch.load(ckpt_path, map_location=select_device())["state_dict"]))
             logger.info("Loaded weights from pre-trained model for IR")
         if freeze_encoder:
             for param in self.encoder.parameters():
@@ -457,11 +418,7 @@ class MassSpecPositiveEncoder(FingerprintEncoder):
         super().__init__(input_dims, output_dims, latent_dim)
         # load weights from the pre-trained model
         if ckpt_path is not None:
-            self.load_state_dict(
-                rename_keys_with_prefix(
-                    torch.load(ckpt_path, map_location=select_device())["state_dict"]
-                )
-            )
+            self.load_state_dict(rename_keys_with_prefix(torch.load(ckpt_path, map_location=select_device())["state_dict"]))
             logger.info("Loaded weights from pre-trained model for Mass Spec Positive")
         if freeze_encoder:
             for param in self.encoder.parameters():
@@ -483,11 +440,7 @@ class MassSpecNegativeEncoder(FingerprintEncoder):
         super().__init__(input_dims, output_dims, latent_dim)
         # load weights from the pre-trained model
         if ckpt_path is not None:
-            self.load_state_dict(
-                rename_keys_with_prefix(
-                    torch.load(ckpt_path, map_location=select_device())["state_dict"]
-                )
-            )
+            self.load_state_dict(rename_keys_with_prefix(torch.load(ckpt_path, map_location=select_device())["state_dict"]))
             logger.info("Loaded weights from pre-trained model for Mass Spec Negative")
         if freeze_encoder:
             for param in self.encoder.parameters():
@@ -509,11 +462,7 @@ class hNmrEncoder(FingerprintEncoder):
         super().__init__(input_dims, output_dims, latent_dim)
         # load weights from the pre-trained model
         if ckpt_path is not None:
-            self.load_state_dict(
-                rename_keys_with_prefix(
-                    torch.load(ckpt_path, map_location=select_device())["state_dict"]
-                )
-            )
+            self.load_state_dict(rename_keys_with_prefix(torch.load(ckpt_path, map_location=select_device())["state_dict"]))
             logger.info("Loaded weights from pre-trained model for H-NMR")
 
         if freeze_encoder:
@@ -522,3 +471,117 @@ class hNmrEncoder(FingerprintEncoder):
 
     def forward(self, x: Tensor) -> Tensor:
         return self.encoder(x)
+
+
+def conv_out_dim(length_in: int, kernel: int, stride: int, padding: int, dilation: int) -> int:
+    return (length_in + 2 * padding - dilation * (kernel - 1) - 1) // stride + 1
+
+
+class hNmrCNNEncoder(nn.Module):
+    def __init__(self, ckpt_path: str | None = None, freeze_encoder: bool = False) -> None:
+        super().__init__()
+        cfg = DictConfig(
+            {
+                "length_in": 10000,
+                "channels_in": 1,
+                "channels_med_1": 2,
+                "channels_out": 4,
+                "latent_dim": 512,
+                "conv_layer": {"kernel": 200, "stride": 1, "padding": 100, "pool_factor": 50},
+                "pool_layer": {"kernel": 50, "stride": 50, "padding": 0, "pool_factor": 50},
+                "fc_dim_1": 512,
+                "lr": 0.001,
+                "conv_kernel_dim_1": 200,
+                "conv_stride_1": 1,
+                "conv_padding_1": 100,
+                "conv_dilation": 1,
+                "pool_kernel_dim_1": 50,
+                "pool_stride_1": 50,
+                "pool_padding_1": 0,
+                "pool_dilation": 1,
+                "conv_kernel_dim_2": 200,
+                "conv_stride_2": 1,
+                "conv_padding_2": 100,
+                "pool_kernel_dim_2": 50,
+                "pool_stride_2": 50,
+                "pool_padding_2": 0,
+                "emb_dim": 512,
+            }
+        )
+
+        out_1 = conv_out_dim(
+            cfg.length_in,
+            cfg.conv_kernel_dim_1,
+            cfg.conv_stride_1,
+            cfg.conv_padding_1,
+            cfg.conv_dilation,
+        )
+        out_2 = conv_out_dim(
+            out_1,
+            cfg.pool_kernel_dim_1,
+            cfg.pool_stride_1,
+            cfg.pool_padding_1,
+            cfg.pool_dilation,
+        )
+        out_3 = conv_out_dim(
+            out_2,
+            cfg.conv_kernel_dim_2,
+            cfg.conv_stride_2,
+            cfg.conv_padding_2,
+            cfg.conv_dilation,
+        )
+        out_4 = conv_out_dim(
+            out_3,
+            cfg.pool_kernel_dim_2,
+            cfg.pool_stride_2,
+            cfg.pool_padding_2,
+            cfg.pool_dilation,
+        )
+        self.cnn_out = cfg.channels_out * out_4
+        self.conv1 = nn.Conv1d(
+            cfg.channels_in,
+            cfg.channels_med_1,
+            cfg.conv_kernel_dim_1,
+            stride=cfg.conv_stride_1,
+            padding=cfg.conv_padding_1,
+            dilation=cfg.conv_dilation,
+        )
+        self.norm1 = nn.BatchNorm1d(cfg.channels_med_1)
+        self.pool1 = nn.MaxPool1d(
+            cfg.pool_kernel_dim_1,
+            stride=cfg.pool_stride_1,
+            padding=cfg.pool_padding_1,
+            dilation=cfg.pool_dilation,
+        )
+        self.pool2 = nn.MaxPool1d(
+            cfg.pool_kernel_dim_2,
+            stride=cfg.pool_stride_2,
+            padding=cfg.pool_padding_2,
+            dilation=cfg.pool_dilation,
+        )
+        self.conv2 = nn.Conv1d(
+            cfg.channels_med_1,
+            cfg.channels_out,
+            cfg.conv_kernel_dim_2,
+            stride=cfg.conv_stride_2,
+            padding=cfg.conv_padding_2,
+            dilation=cfg.conv_dilation,
+        )
+        self.norm2 = nn.BatchNorm1d(cfg.channels_out)
+        self.fc1 = nn.Linear(cfg.channels_out * out_4, cfg.fc_dim_1)
+        self.fc2 = nn.Linear(cfg.fc_dim_1, cfg.emb_dim)
+        self.norm3 = nn.BatchNorm1d(cfg.fc_dim_1)
+
+        if ckpt_path is not None:
+            self.load_state_dict(rename_keys_with_prefix(torch.load(ckpt_path, map_location=select_device())["state_dict"]))
+            logger.info("Loaded weights from pre-trained model for H-NMR CNN")
+        if freeze_encoder:
+            for param in self.parameters():
+                param.requires_grad = False
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.pool1(F.relu(self.norm1(self.conv1(x))))
+        x = self.pool2(F.relu(self.norm2(self.conv2(x))))
+        x = x.view(-1, self.cnn_out)
+        x = F.relu(self.norm3(self.fc1(x)))
+        return torch.tanh(self.fc2(x))

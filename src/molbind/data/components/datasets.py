@@ -438,13 +438,18 @@ class hNmrDataset(Dataset):
         self,
         data: list[list[float]],
         vec_len: int = 512,
+        architecture: str = "mlp",
         **kwargs,
     ) -> None:
         self.h_nmr = data
         self.vec_len = vec_len
         self.central_modality = kwargs["central_modality"]
-        self.other_modality = "h_nmr"
+        if architecture == "cnn":
+            self.other_modality = "h_nmr_cnn"
+        else:
+            self.other_modality = "h_nmr"
         self.central_modality_data = kwargs["central_modality_data"]
+        self.architecture = architecture
 
     def __len__(self):
         return len(self.h_nmr)
@@ -457,6 +462,11 @@ class hNmrDataset(Dataset):
 
     def hnmr_to_vec(self, nmr_shifts: list[list[float]]) -> Tensor:
         if len(nmr_shifts) == 10000:
+            # normalize the data
+            nmr_shifts = nmr_shifts / np.max(nmr_shifts)
+            if self.architecture == "cnn":
+                # add 1 channel if using CNN
+                return torch.tensor(nmr_shifts, dtype=torch.float32).unsqueeze(0)
             return torch.tensor(nmr_shifts, dtype=torch.float32)
         init_vec = torch.zeros(self.vec_len, dtype=torch.float32)
         if isinstance(nmr_shifts[0], (list, np.ndarray)):

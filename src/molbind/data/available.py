@@ -34,6 +34,7 @@ from molbind.models.components.custom_encoders import (
     SelfiesEncoder,
     SmilesEncoder,
     cNmrEncoder,
+    hNmrCNNEncoder,
     hNmrEncoder,
 )
 
@@ -56,6 +57,7 @@ class NonStringModalities(StrEnum):
     MASS_SPEC_NEGATIVE = "mass_spec_negative"
     STRUCTURE = "structure"
     MULTI_SPEC = "multi_spec"
+    H_NMR_CNN = "h_nmr_cnn"
 
 
 class ModalityConstants(Enum):
@@ -67,6 +69,7 @@ class ModalityConstants(Enum):
     description = (str, StringDataset, DescriptionEncoder, DESCRIPTION_TOKENIZER)
     fingerprint = (list, FingerprintMolBindDataset, CustomFingerprintEncoder, None)
     h_nmr = (list, hNmrDataset, hNmrEncoder, None)
+    h_nmr_cnn = (list, hNmrDataset, hNmrCNNEncoder, None)
     iupac_name = (str, StringDataset, IUPACNameEncoder, None)
     ir = (list, IrDataset, IrEncoder, None)
     mass_spec_negative = (list, MassSpecNegativeDataset, MassSpecNegativeEncoder, None)

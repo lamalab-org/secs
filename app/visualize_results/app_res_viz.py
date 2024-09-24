@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import plotly.express as px
 import streamlit as st
@@ -27,8 +28,8 @@ def average_tanimoto_of_top_n(sorted_df, n, exclude_original_molecule: bool = Tr
     if exclude_original_molecule:
         sorted_df = sorted_df[sorted_df["Tanimoto Similarity"] != 1]
         tanimoto_top_n = sorted_df.head(n)["Tanimoto Similarity"]
-        # max_possible = sorted_df[sorted_df["Tanimoto Similarity"] != 1]["Tanimoto Similarity"].max()
-        return tanimoto_top_n.max()
+        max_possible = sorted_df[sorted_df["Tanimoto Similarity"] != 1]["Tanimoto Similarity"].max()
+        return (max_possible - tanimoto_top_n.max()) / max_possible * 100
     tanimoto_top_n = sorted_df.head(n)["Tanimoto Similarity"]
     return tanimoto_top_n.max()
 
@@ -60,6 +61,9 @@ def collect_statistics_from_files(data, to_collect_columns, n, return_average=Fa
     data = data.drop_duplicates(subset=["SMILES"])
     metrics = {key: None for key in to_collect_columns}
 
+    # new column (add all similarities)
+    data["Sum of All Similarities"] = data["IR Similarity"] + data["C-NMR Similarity"] + data["H-NMR Similarity"]
+    # check sum of best candidates
     for column in to_collect_columns:
         metrics[column] = determine_if_the_molecule_with_sim_1_in_top_n(
             data.sort_values(by=column, ascending=False), n, return_average, exclude_original_molecule
@@ -71,12 +75,15 @@ def app():
     st.title("Results Visualization")
     # Add more to the UI
     # 1. Read all result files
-    result_files = Path("../../experiments/structure_elucidation/results").rglob("*.csv")
+    result_files = list(Path("../../experiments/structure_elucidation/results_large_dataset").rglob("*.csv"))
+    # result_files = list(Path("../../experiments/structure_elucidation/results").rglob("*.csv"))
+
     # smiles_from_file = [find_original_smiles_from_file_name(file) for file in result_files]
 
     to_collect_columns = [
         # "MolBind Similarity",
-        "Sum of Similarities",
+        "Sum of All Similarities",
+        # "Sum of Similarities",
         "Similarity of sums",
         "MultiSpec Similarity",
         "IR Similarity",
@@ -90,7 +97,7 @@ def app():
     top_n = st.number_input(
         "Select number of top candidates:",
         min_value=1,
-        max_value=20,
+        max_value=50,
         value=1,
     )
 
@@ -145,7 +152,6 @@ def app():
     # sort by mean
     # mean = mean.sort_values(by=f"Top {top_n}", ascending=False)
     # st.write(f"Max possible score: {max_possible}")
-    col1, col2 = st.columns(2)
     if not average_or_not:
         fig = px.bar(
             mean,
@@ -164,7 +170,7 @@ def app():
             x=mean.index,
             y=f"Top {top_n}",
             color=mean.index,
-            labels={"index": "Metric", f"Top {top_n}": f"Average Max Tanimoto Similarity of Top-{top_n}"},
+            labels={"index": "Metric", f"Top {top_n}": f"Error of Max Tanimoto Top-{top_n}" if average_or_not else f"Is in Top-{top_n}"},
             height=600,
             width=800,
         )

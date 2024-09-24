@@ -8,13 +8,14 @@ model:
   embedding_size: 512
   encoders:
     h_nmr:
-      input_dims: [10000, 1024, 512, 256]
-      output_dims: [256, 512, 1024, 10000]
-      latent_dim: 256
-    
+      input_dims: [10000, 2048, 1024, 512]
+      output_dims: [512, 2048, 1024, 10000]
+      latent_dim: 512
+      freeze_encoder: False
+
   projection_heads:
     h_nmr:
-      dims: [256, "${model.embedding_size}"]
+      dims: [512, "${model.embedding_size}"]
       activation: LeakyReLU
 
 data:
@@ -22,17 +23,17 @@ data:
     - h_nmr
   modalities_to_read:
     - h_nmr
-  valid_frac: 0.3
-  batch_size: 256
+  valid_frac: 1
+  batch_size: 1024
   dataset_path: "${paths.data_dir}/simulated_spectra_test_set.parquet"
 
-ckpt_path: "${paths.checkpoints_dir}/hnmr_simulated_detailed_20240828_1855/best_model.ckpt"
+ckpt_path: "${paths.checkpoints_dir}/hnmr_simulated_detailed_20240920_1211/best_model.ckpt"
 
 trainer:
   num_nodes: 1
   gpus_per_node: 1
 
-top_k: 
+top_k:
   - 1
   - 2
   - 5

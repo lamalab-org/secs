@@ -28,5 +28,5 @@ top_k:
   - 5
   - 20
 
-run_id: "metrics_hnmr_simulated"
+run_id: "metrics_hnmr_simulated_testset"
 embeddings_path: 1_test_set_hnmr_embeddings
