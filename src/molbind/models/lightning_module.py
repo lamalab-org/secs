@@ -293,7 +293,7 @@ class MolBindModuleCustomSamples(MolBindModule):
             logger.error(f"Loss is nan for {prefix} batch.")
         # compute retrieval metrics
         k_list = [1, 5]
-        if prefix in ["valid", "test", "predict"]:
+        if prefix in {"valid", "test", "predict"}:
             self.retrieval_metrics(
                 embeddings_dict[modality_pair[0]],
                 embeddings_dict[modality_pair[1]],
