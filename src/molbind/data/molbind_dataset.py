@@ -230,9 +230,6 @@ class MolBindDataset:
 
     def _handle_central_modality_data(self, data_pair: pd.DataFrame) -> tuple[Tensor, Tensor]:
         if self.central_modality_data_type is str and self.custom_negatives:
-            import pdb
-
-            pdb.set_trace()
             central_modality_data = (
                 self.central_modality_data[0][data_pair.index.to_list()],
                 self.central_modality_data[1][data_pair.index.to_list()],
