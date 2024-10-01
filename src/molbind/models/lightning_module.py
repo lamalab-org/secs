@@ -243,12 +243,10 @@ class MolBindModuleCustomSamples(MolBindModule):
             return self.loss(z1, z2, negative_samples)
 
     def forward(self, batch) -> dict:
-        if isinstance(batch, tuple) and isinstance(batch[0], Data):
-            dict_input_data = self._treat_graph_batch(batch[0])
-            forward_pass = self.model(dict_input_data)
-        else:
-            forward_pass = self.model(batch)
-        return forward_pass
+        if not isinstance(batch, tuple) or not isinstance(batch[0], Data):
+            return self.model(batch)
+        dict_input_data = self._treat_graph_batch(batch[0])
+        return self.model(dict_input_data)
 
     def training_step(self, batch: dict) -> Tensor:
         embeddings_dict = self.forward(batch)
