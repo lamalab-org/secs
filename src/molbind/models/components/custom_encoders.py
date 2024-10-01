@@ -1,5 +1,4 @@
 from pathlib import Path
-from omegaconf import DictConfig
 from typing import (
     Callable,
 )
@@ -8,6 +7,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from loguru import logger
+from omegaconf import DictConfig
 from torch import Tensor
 from torch_geometric.data import Data
 from torch_geometric.nn import radius_graph
@@ -39,7 +39,10 @@ class SmilesEncoder(BaseModalityEncoder):
                 param.requires_grad = False
 
     def forward(self, x: tuple[Tensor, Tensor]) -> Tensor:
-        token_ids, attention_mask = x
+        if len(x) == 2:
+            token_ids, attention_mask = x
+        else:
+            token_ids, attention_mask = x[0], x[1]
         output = self.encoder(
             input_ids=token_ids,
             attention_mask=attention_mask,

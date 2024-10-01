@@ -38,7 +38,11 @@ class MolBindDataset:
         self.data = data
         self.central_modality = central_modality
         self.central_modality_data_type = ModalityConstants[central_modality].data_type
-
+        self.custom_negatives = kwargs.get("custom_negatives", False)
+        if self.custom_negatives:
+            self.custom_negatives_samples = data["custom_negatives"].to_list()
+        else:
+            self.custom_negatives_samples = None
         # if self.central_modality_data_type == str:
         init_str_fn = partial(
             self._tokenize_strings,
@@ -214,9 +218,7 @@ class MolBindDataset:
             architecture="cnn",
         )
 
-    def build_datasets_for_modalities(
-        self,
-    ) -> dict[str, Dataset]:
+    def build_datasets_for_modalities(self) -> dict[str, Dataset]:
         datasets = {}
         for modality in self.other_modalities:
             if modality in self.data.columns:
@@ -227,7 +229,19 @@ class MolBindDataset:
         return datasets
 
     def _handle_central_modality_data(self, data_pair: pd.DataFrame) -> tuple[Tensor, Tensor]:
-        if self.central_modality_data_type is str:
+        if self.central_modality_data_type is str and self.custom_negatives:
+            import pdb
+
+            pdb.set_trace()
+            central_modality_data = (
+                self.central_modality_data[0][data_pair.index.to_list()],
+                self.central_modality_data[1][data_pair.index.to_list()],
+                [
+                    self._tokenize_strings(list(self.custom_negatives_samples[i]), 128, self.central_modality)
+                    for i in data_pair.index.to_list()
+                ],
+            )
+        else:
             central_modality_data = (
                 self.central_modality_data[0][data_pair.index.to_list()],
                 self.central_modality_data[1][data_pair.index.to_list()],
