@@ -39,10 +39,7 @@ class SmilesEncoder(BaseModalityEncoder):
                 param.requires_grad = False
 
     def forward(self, x: tuple[Tensor, Tensor]) -> Tensor:
-        if len(x) == 2:
-            token_ids, attention_mask = x
-        else:
-            token_ids, attention_mask = x[0], x[1]
+        token_ids, attention_mask = x if len(x) == 2 else (x[0], x[1])
         output = self.encoder(
             input_ids=token_ids,
             attention_mask=attention_mask,
