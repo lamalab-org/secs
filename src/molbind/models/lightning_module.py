@@ -224,6 +224,11 @@ class MolBindModuleCustomSamples(MolBindModule):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.loss = InfoNCE(temperature=self.config.model.loss.temperature, negative_mode="paired")
+        self.loss_unpaired = InfoNCE(temperature=self.config.model.loss.temperature, negative_mode="unpaired")
+
+    def beta(self, epoch: int) -> float:
+        # beta is annealed from 0 to 1 over the first 10 epochs
+        return min(1, epoch / 10)
 
     def _info_nce_loss(self, z1: Tensor, z2: Tensor, negative_samples: Tensor = None) -> float:
         if self.world_size > 1:
@@ -234,7 +239,13 @@ class MolBindModuleCustomSamples(MolBindModule):
             all_z1 = all_z1.flatten(0, 1)
             all_z2 = all_z2.flatten(0, 1)
             if negative_samples is not None:
-                all_negative_samples = self.all_gather(negative_samples, sync_grads=True)
+                all_negative_samples = self.all_gather(negative_samples, sync_grads=False)
+                # (World_Size, Batch_Size, Num_Negative_Samples, Embedding_Size) -> (World_Size*Batch_Size, Num_Negative_Samples, Embedding_Size)
+                all_negative_samples = all_negative_samples.flatten(0, 1)
+                if torch.isnan(all_negative_samples).any():
+                    logger.error("Negative samples are nan.")
+                if torch.isnan(all_z1).any() or torch.isnan(all_z2).any():
+                    logger.error("Positive samples are nan.")
                 return self.loss(all_z1, all_z2, all_negative_samples)
             return self.loss(all_z1, all_z2)
         else:
@@ -243,30 +254,33 @@ class MolBindModuleCustomSamples(MolBindModule):
             return self.loss(z1, z2, negative_samples)
 
     def forward(self, batch) -> dict:
-        if not isinstance(batch, tuple) or not isinstance(batch[0], Data):
-            return self.model(batch)
-        dict_input_data = self._treat_graph_batch(batch[0])
-        return self.model(dict_input_data)
+        if isinstance(batch, tuple) and isinstance(batch[0], Data):
+            dict_input_data = self._treat_graph_batch(batch[0])
+            forward_pass = self.model(dict_input_data)
+        else:
+            forward_pass = self.model(batch)
+        if isinstance(batch, tuple):
+            batch, _, _ = batch
+        # compute negative samples
+        if len(batch[self.central_modality]) > 2:
+            negative_samples_embeddings = torch.stack(
+                [
+                    self.model(
+                        (
+                            batch[self.central_modality][2][0][i],
+                            batch[self.central_modality][2][1][i],
+                        ),
+                    )
+                    for i in range(self.per_device_batch_size)
+                ]
+            )
+            forward_pass["negative_samples"] = negative_samples_embeddings
+        return forward_pass
 
     def training_step(self, batch: dict) -> Tensor:
         embeddings_dict = self.forward(batch)
         if isinstance(batch, tuple):
             batch, _, _ = batch
-
-        if len(batch[self.central_modality]) > 2:
-            negative_samples_embeddings = [
-                self.model.encode_modality(
-                    (
-                        batch[self.central_modality][2][0][i],
-                        batch[self.central_modality][2][1][i],
-                    ),
-                    self.central_modality,
-                )
-                for i in range(self.batch_size)
-            ]
-            # shape (Batch_Size, Num_Negative_Samples, Embedding_Size)
-            negative_samples_embeddings = torch.stack(negative_samples_embeddings)
-            embeddings_dict["negative_samples"] = negative_samples_embeddings
         return self._multimodal_loss(embeddings_dict, "train")
 
     def _multimodal_loss(self, embeddings_dict: dict[str, Tensor], prefix: str) -> float:
@@ -284,12 +298,13 @@ class MolBindModuleCustomSamples(MolBindModule):
             )
         else:
             central_to_modality_loss = self._info_nce_loss(embeddings_dict[modality_pair[0]], embeddings_dict[modality_pair[1]])
-        loss = central_to_modality_loss
         if self.config.model.loss.sparse:
-            loss = loss + self.config.model.loss.l1_loss_weight * self.l1_loss(
+            loss = central_to_modality_loss + self.config.model.loss.l1_loss_weight * self.l1_loss(
                 embeddings_dict[modality_pair[0]], embeddings_dict[modality_pair[1]]
             )
-        if torch.isnan(loss):
+            if torch.isnan(loss):
+                logger.error(f"Loss is nan for {prefix} batch.")
+        if torch.isnan(central_to_modality_loss):
             logger.error(f"Loss is nan for {prefix} batch.")
         # compute retrieval metrics
         k_list = [1, 5]
@@ -301,4 +316,15 @@ class MolBindModuleCustomSamples(MolBindModule):
                 k_list,
                 prefix=prefix,
             )
-        return loss
+        self.log(
+            f"{prefix}_loss",
+            central_to_modality_loss,
+            batch_size=self.batch_size,
+            sync_dist=self.world_size > 1,
+            prog_bar=True,
+        )
+        return central_to_modality_loss if not self.config.model.loss.sparse else loss
+
+    def validation_step(self, batch: dict) -> Tensor:
+        embeddings_dict = self.forward(batch)
+        return self._multimodal_loss(embeddings_dict, "valid")

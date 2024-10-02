@@ -4,8 +4,8 @@ modalities:
   - ir
 modalities_to_read:
   - ir
-train_frac : 0.8
-valid_frac : 0.2
+train_frac: 0.8
+valid_frac: 0.2
 drop_last: true
 num_workers: 4
 seed: 42

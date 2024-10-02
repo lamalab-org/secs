@@ -45,8 +45,13 @@ class MolBind(nn.Module):
         self,
         input_data: dict[str, tuple[Tensor, Tensor] | Tensor],
     ) -> Tensor:
-        store_embeddings = {}
         # Input data = [data, batch_index, dataloader_index]
+        if len(input_data) == 2:
+            embedding = self.dict_encoders[self.central_modality].forward(input_data)
+            if self.central_modality in self.dict_projection_heads:
+                embedding = self.dict_projection_heads[self.central_modality](embedding)
+            return embedding
+        store_embeddings = {}
         if isinstance(input_data, tuple):
             input_data, _, _ = input_data
             modality = [*input_data][1]
