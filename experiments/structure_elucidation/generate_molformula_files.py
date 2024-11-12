@@ -286,37 +286,6 @@ def cli(
         list_of_molecular_formulas[start_index:end_index],
         indexes[start_index:end_index],
     ):
-        top_k_results_999 = pd.read_csv("results_999.csv")
-        top_k_results_888 = pd.read_csv("results_888.csv")
-        top_k_results_777 = pd.read_csv("results_777.csv")
-        top_k_results_666 = pd.read_csv("results_666.csv")
-        top_k_results_555 = pd.read_csv("results_555.csv")
-        top_k_results_444 = pd.read_csv("results_444.csv")
-        top_k_results_333 = pd.read_csv("results_333.csv")
-        top_k_results_222 = pd.read_csv("results_222.csv")
-        top_k_results_111 = pd.read_csv("results_111.csv")
-
-        top_k_results_999_indices = top_k_results_999[top_k_results_999["Found"] == 1]["molecule_id"].to_list()
-        top_k_results_888_indices = top_k_results_888[top_k_results_888["Found"] == 1]["molecule_id"].to_list()
-        top_k_results_777_indices = top_k_results_777[top_k_results_777["Found"] == 1]["molecule_id"].to_list()
-        top_k_results_666_indices = top_k_results_666[top_k_results_666["Found"] == 1]["molecule_id"].to_list()
-        top_k_results_555_indices = top_k_results_555[top_k_results_555["Found"] == 1]["molecule_id"].to_list()
-        top_k_results_444_indices = top_k_results_444[top_k_results_444["Found"] == 1]["molecule_id"].to_list()
-        top_k_results_333_indices = top_k_results_333[top_k_results_333["Found"] == 1]["molecule_id"].to_list()
-        top_k_results_222_indices = top_k_results_222[top_k_results_222["Found"] == 1]["molecule_id"].to_list()
-        top_k_results_111_indices = top_k_results_111[top_k_results_111["Found"] == 1]["molecule_id"].to_list()
-        if i in set(
-            top_k_results_999_indices
-            + top_k_results_888_indices
-            + top_k_results_777_indices
-            + top_k_results_666_indices
-            + top_k_results_555_indices
-            + top_k_results_444_indices
-            + top_k_results_333_indices
-            + top_k_results_222_indices
-            + top_k_results_111_indices
-        ):
-            continue
         get_molformulas = gen_close_molformulas_from_seed(molecular_formula)
         molecular_formulas = [molecular_formula, *get_molformulas]
         filter_cached = filter_polars_col_by_molecular_formulas(cached_data, molecular_formulas)
@@ -340,8 +309,8 @@ def cli(
 
 if __name__ == "__main__":
     cli(
-        start_index=60,
-        end_index=100,
+        start_index=0,
+        end_index=1001,
         dataset_path="../3_test_set_multi_spec.pkl",
         cnmr_embeddings_path="../7_test_set_cnmr_embeddings_large_dataset_20241016_1343.pkl",
         ir_embeddings_path="../7_test_set_ir_embeddings_large_dataset_20241015_2306.pkl",
