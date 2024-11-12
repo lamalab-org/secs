@@ -1,2 +1,0 @@
-smiles,canonical_smiles,sascore,unique_hydrogens,unique_carbons,ir_similarity,cnmr_similarity,hnmr_similarity,similarity,sum_of_similarities,cnmr_ir_similarity,ir_hnmr_similarity,cnmr_hnmr_similarity,tanimoto
-CC(C)COC1=C(C=C(C=N1)OC2=C(C=C(C(=C2)F)C(=O)NS(=O)(=O)N(C)C)Cl)Cl,CC(C)COc1ncc(Oc2cc(F)c(C(=O)NS(=O)(=O)N(C)C)cc2Cl)cc1Cl,2.743321917353576,9,16,0.8866258859634399,-0.11692775785923004,-0.027069751173257828,0.2874288558959961,0.7426283769309521,0.37823686003685,0.552715539932251,-0.07390350103378296,1.0
