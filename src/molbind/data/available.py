@@ -27,7 +27,7 @@ from molbind.models.components.custom_encoders import (
     CustomStructureEncoder,
     DescriptionEncoder,
     ImageEncoder,
-    IrEncoder,
+    IrCNNEncoder,
     IUPACNameEncoder,
     MassSpecNegativeEncoder,
     MassSpecPositiveEncoder,
@@ -71,7 +71,7 @@ class ModalityConstants(Enum):
     h_nmr = (list, hNmrDataset, hNmrEncoder, None)
     h_nmr_cnn = (list, hNmrDataset, hNmrCNNEncoder, None)
     iupac_name = (str, StringDataset, IUPACNameEncoder, None)
-    ir = (list, IrDataset, IrEncoder, None)
+    ir = (list, IrDataset, IrCNNEncoder, None)
     mass_spec_negative = (list, MassSpecNegativeDataset, MassSpecNegativeEncoder, None)
     mass_spec_positive = (list, MassSpecPositiveDataset, MassSpecPositiveEncoder, None)
     smiles = (str, StringDataset, SmilesEncoder, SMILES_TOKENIZER)
@@ -79,7 +79,7 @@ class ModalityConstants(Enum):
     graph = (Graph, GraphDataset, CustomGraphEncoder, None)
     structure = (Graph, StructureDataset, CustomStructureEncoder, None)
     image = (ndarray, ImageDataset, ImageEncoder, None)
-    multi_spec = (list, MultiSpecDataset, IrEncoder, None)
+    multi_spec = (list, MultiSpecDataset, IrCNNEncoder, None)
 
     @property
     def data_type(self):
