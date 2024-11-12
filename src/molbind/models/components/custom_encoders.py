@@ -384,26 +384,26 @@ class cNmrEncoder(FingerprintEncoder):
         return self.encoder(x)
 
 
-# class IrEncoder(FingerprintEncoder):
-#     def __init__(
-#         self,
-#         input_dims: list[int],
-#         output_dims: list[int],
-#         latent_dim: int,
-#         ckpt_path: str | None = None,
-#         freeze_encoder: bool = False,
-#     ) -> None:
-#         super().__init__(input_dims, output_dims, latent_dim)
-#         # load weights from the pre-trained model
-#         if ckpt_path is not None:
-#             self.load_state_dict(rename_keys_with_prefix(torch.load(ckpt_path, map_location=select_device())["state_dict"]))
-#             logger.info("Loaded weights from pre-trained model for IR")
-#         if freeze_encoder:
-#             for param in self.encoder.parameters():
-#                 param.requires_grad = False
+class IrEncoder(FingerprintEncoder):
+    def __init__(
+        self,
+        input_dims: list[int],
+        output_dims: list[int],
+        latent_dim: int,
+        ckpt_path: str | None = None,
+        freeze_encoder: bool = False,
+    ) -> None:
+        super().__init__(input_dims, output_dims, latent_dim)
+        # load weights from the pre-trained model
+        if ckpt_path is not None:
+            self.load_state_dict(rename_keys_with_prefix(torch.load(ckpt_path, map_location=select_device())["state_dict"]))
+            logger.info("Loaded weights from pre-trained model for IR")
+        if freeze_encoder:
+            for param in self.encoder.parameters():
+                param.requires_grad = False
 
-#     def forward(self, x: Tensor) -> Tensor:
-#         return self.encoder(x)
+    def forward(self, x: Tensor) -> Tensor:
+        return self.encoder(x)
 
 
 class MassSpecPositiveEncoder(FingerprintEncoder):
