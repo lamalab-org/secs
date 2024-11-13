@@ -62,7 +62,7 @@ def collect_statistics_from_files(data, to_collect_columns, n, return_average=Fa
 
 # Main code without streamlit
 result_files = list(
-    Path("../../experiments/structure_elucidation/results_large_dataset_multiple_molecular_formulas_per_file").rglob("*.csv")
+    Path("results_large_dataset_multiple_molecular_formulas_per_file").rglob("*.csv")
 )
 to_collect_columns = [
     "¹³C-NMR + IR + ¹H-NMR",
@@ -100,13 +100,6 @@ mean = mean.rename(columns={0: f"Top {top_n}"})
 
 # Plotting the results
 if not average_or_not:
-    # custom_colors = {
-    #     "ref. top 1": "rgba(152, 86, 86, 0.3)",
-    #     "top 1": "rgba(152, 86, 86, 0.7)",
-    #     "ref. top 5": "rgba(86, 86, 152, 0.3)",
-    #     "top 5": "rgba(86, 86, 152, 0.7)",
-    #     "in the population": "rgba(86, 86, 86, 0.7)",
-    # }
     fig = px.bar(
         mean,
         y=mean.index,
@@ -191,20 +184,20 @@ if not average_or_not:
     )
 
     # Add reference line for perfect score
-    fig.add_vline(
-        x=1,
-        line_dash="dot",
-        line_color="rgb(120, 120, 120)",
-        annotation={
-            "text": "perfect score",
-            "textangle": 90,
-            "x": 1.01,
-            "yref": "paper",
-            "y": 0.7,
-            "showarrow": False,
-            "font": {"color": "rgb(120, 120, 120)"},
-        },
-    )
+    # fig.add_vline(
+    #     x=1,
+    #     line_dash="dot",
+    #     line_color="rgb(120, 120, 120)",
+    #     annotation={
+    #         "text": "perfect score",
+    #         "textangle": 90,
+    #         "x": 1.01,
+    #         "yref": "paper",
+    #         "y": 0.7,
+    #         "showarrow": False,
+    #         "font": {"color": "rgb(120, 120, 120)"},
+    #     },
+    # )
     fig.update_layout(showlegend=False, width=sizing * 1.618, height=sizing, bargap=0.15, bargroupgap=0.03, plot_bgcolor="white")
     fig.update_layout(plot_bgcolor="white")
     fig.update_yaxes(title_text="")
@@ -215,7 +208,7 @@ if not average_or_not:
     fig.update_xaxes(showgrid=False)
     fig.update_yaxes(showgrid=False)
     # Saving the figure
-    fig.write_image(f"is_in_{top_n}.pdf", scale=3)
+    fig.write_image(f"figures/is_in_{top_n}.pdf", scale=3)
 
 else:
     fig = px.bar(

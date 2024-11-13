@@ -283,10 +283,10 @@ def cli(
 if __name__ == "__main__":
     cli(
         start_index=0,
-        end_index=5,
-        dataset_path="../valid_dataset_20241110_1616.pkl",
-        cnmr_embeddings_path="../cnmr_angewandte_20241110_1614.pkl",
-        hnmr_embeddings_path="../hnmr_angewandte_20241110_1616.pkl",
+        end_index=3,
+        dataset_path="../valid_dataset_20241113_1514.pkl",
+        cnmr_embeddings_path="../cnmr_angewandte_20241113_1514.pkl",
+        hnmr_embeddings_path="../hnmr_angewandte_20241113_1514.pkl",
         cnmr_experiment="metrics/cnmr_simulated_large_dataset_testset",
         hnmr_experiment="metrics/hnmr_cnn_detailed_large_dataset",
         folder_results="results_angewandte",

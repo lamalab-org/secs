@@ -172,9 +172,10 @@ def main(
     # load the original smiles
     file_with_results = pd.read_csv(result_file)
     spectra_id = result_file.split("/")[-1].split("_")[0]
+    valid_dataset_filename = "valid_dataset_20241113_1514.pkl"
     # find the one with tanimoto=1
     # original_smiles = file_with_results[file_with_results["tanimoto"] == 1]["canonical_smiles"].to_list()[0]
-    read_file_2_test_set = pd.read_pickle("../valid_dataset_20241110_1616.pkl")
+    read_file_2_test_set = pd.read_pickle(f"../{valid_dataset_filename}")
     original_smiles = read_file_2_test_set.smiles.to_list()[int(spectra_id)]
     # drop original smiles
     logger.debug(len(file_with_results))
@@ -193,9 +194,9 @@ def main(
         hnmr_model=hnmr_model,
         id_spectra=spectra_id,
         atom_counts_original_smiles=compute_individual_atom_counts(original_smiles),
-        cnmr_embeddings_path="../cnmr_angewandte_20241110_1614.pkl",
-        hnmr_embeddings_path="../hnmr_angewandte_20241110_1616.pkl",
-        dataset_path="../valid_dataset_20241110_1616.pkl",
+        cnmr_embeddings_path="../cnmr_angewandte_20241113_1514.pkl",
+        hnmr_embeddings_path="../hnmr_angewandte_20241113_1514.pkl",
+        dataset_path=f"../{valid_dataset_filename}",
     )
 
     logger.debug(len(file_with_results))
