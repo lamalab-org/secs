@@ -117,13 +117,8 @@ if not average_or_not:
         orientation="h",
     )
     # change margins to 0
-    fig.update_layout(margin={"l": 0, "r": 0, "t": 0, "b": 0})
-    sizing = 305
     fig.update_layout(
         template="plotly_white",
-        width=sizing * 1.618,
-        height=sizing,
-        margin={"l": 40, "r": 20, "t": 20, "b": 40},
         plot_bgcolor="white",
         font={"color": "rgb(120, 120, 120)"},
         bargap=0.15,
@@ -138,7 +133,7 @@ if not average_or_not:
                 "x1": 1,
                 "y0": -0.5,
                 "y1": -0.5,  # Position below the bottom bar
-                "line": {"color": "rgb(120, 120, 120)", "width": 1},
+                "line": {"color": "rgb(120, 120, 120)", "width": 0.5},
             },
             # Add y-axis line
             {
@@ -149,7 +144,7 @@ if not average_or_not:
                 "y0": 0,
                 "x1": 0,
                 "y1": 1,
-                "line": {"color": "rgb(120, 120, 120)", "width": 1},
+                "line": {"color": "rgb(120, 120, 120)", "width": 0.5},
             },
         ],
     )
@@ -157,12 +152,12 @@ if not average_or_not:
     # Update x-axis
     fig.update_xaxes(
         title_text="fraction of correct predictions",
-        range=[-0.0, 1.02],  # Add padding
+        range=[-0.0, 1],  # Add padding
         showgrid=False,
         zeroline=False,
         showline=False,
         ticks="outside",
-        tickwidth=1,
+        tickwidth=0.2,
         tickcolor="rgb(120, 120, 120)",
         ticklen=5,
         tickvals=np.arange(0, 1.2, 0.2),
@@ -178,37 +173,30 @@ if not average_or_not:
         zeroline=False,
         showline=False,
         ticks="outside",
-        tickwidth=1,
+        tickwidth=0.2,
         tickcolor="rgb(120, 120, 120)",
         ticklen=5,
     )
-
-    # Add reference line for perfect score
-    # fig.add_vline(
-    #     x=1,
-    #     line_dash="dot",
-    #     line_color="rgb(120, 120, 120)",
-    #     annotation={
-    #         "text": "perfect score",
-    #         "textangle": 90,
-    #         "x": 1.01,
-    #         "yref": "paper",
-    #         "y": 0.7,
-    #         "showarrow": False,
-    #         "font": {"color": "rgb(120, 120, 120)"},
-    #     },
-    # )
-    fig.update_layout(showlegend=False, width=sizing * 1.618, height=sizing, bargap=0.15, bargroupgap=0.03, plot_bgcolor="white")
-    fig.update_layout(plot_bgcolor="white")
-    fig.update_yaxes(title_text="")
-    fig.update_xaxes(range=[0, 1], tickvals=np.arange(0, 1.2, 0.1), title_text="fraction of correctly retrieved @1", tickangle=0)
-    for trace in fig.data:
-        trace.width = 0.6
-    fig.update_layout(font_family="CMU Sans Serif")
+    fig.update_yaxes(title_text=None)
+    fig.update_layout(font_size=8)
+    fig.update_layout(font_family="Helvetica")
     fig.update_xaxes(showgrid=False)
     fig.update_yaxes(showgrid=False)
+    fig.update_layout(font={"color": "rgb(120, 120, 120)"})
+
+    # add scatter for 660 index with a highlighted color
+    # df = pd.DataFrame(relative_ranks)
+    # ylabel
+    # rotate text xaxis
+    # fig.update_xaxes(tickangle=90)
+    # no legend
+    fig.update_layout(showlegend=False)
+    # drop xaxis "variable" title
+    # 0 margin
+    fig.update_layout(margin={"l": 0, "r": 7, "t": 0, "b": 0})
+    fig.update_xaxes(title_text=None)
     # Saving the figure
-    fig.write_image(f"figures/is_in_{top_n}.pdf", scale=3)
+    fig.write_image(f"figures/is_in_{top_n}.pdf", width=240.94488189, height=240.94488189/1.618)
 
 else:
     fig = px.bar(
