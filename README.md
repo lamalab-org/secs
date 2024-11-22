@@ -57,3 +57,7 @@ To run the metrics on these experiments:
 ```python
 python retrieval.py 'experiment="metrics/ir_simulated"'
 ```
+
+## 💰: Funding
+
+This work was funded by the Carl-Zeiss Foundation. In addition, this work was partly funded by the SOL-AI project funded as part of the Helmholtz Foundation Model Initiative of the Helmholtz Association. Moreover, this work was supported by Helmholtz AI computing resources (HAICORE) of the Helmholtz Association’s Initiative and Networking Fund through Helmholtz AI.
