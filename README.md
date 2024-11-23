@@ -22,7 +22,7 @@ conda activate molbind
 
 ## :file_folder: Data availability
 
-The simulated spectra data have been compiled from [IBM's Multimodal Spectroscopic Dataset](https://zenodo.org/records/11611178). Experimental $\mathrm{IR}$ spectra have been mined from the `NIST` database. The code for mining is available at [chemistry-spectra-datasets](https://github.com/lamalab-org/chemistry-spectra-dataset/tree/main). The experimental $\mathrm{^1H\space NMR}$  and $\mathrm{^{13}C\space NMR}$ were taken from [Kwon et al.](https://github.com/seokhokang/nmr_mpnn/blob/master/datasets.zip)
+The simulated spectra data have been compiled from [IBM's Multimodal Spectroscopic Dataset](https://zenodo.org/records/11611178).
 
 (WIP :building_construction:) Run `molbind-get-datasets` from the command line to download the data.
 
