@@ -6,14 +6,7 @@
 
 ## :scroll: Installation guide
 
-It is recommmended using `mamba` or `conda` for creating a virtual environment. For inference/embeddings the installation guide is given below:
-
-```conda
-conda create -n molbind python=3.12
-pip install -e .[inference]
-```
-
-If you want to (re)train the models, your system needs to have `CUDA` dependencies, please use the `environment.yaml` file for the installation.
+It is recommmended using `conda` for creating a virtual environment. If you want to (re)train the models, your system needs to have `CUDA` dependencies, please use the `environment.yaml` file for the installation.
 
 ```conda
 conda env create -f environment.yaml
@@ -45,18 +38,25 @@ load_dotenv("path/to/.env")
 
 ## :chart_with_downwards_trend: Train models
 
-The experiment configs can be found at config
-For example, to run the `train.py`
+The experiment configs can be found at config. For example, to run the `train.py`
 
 ```python
-python train.py 'experiment="train/ir_simulated"'
+python train.py 'experiment="train/ir_simulated_large_dataset"'
 ```
+
+The training scripts outputs the checkpoints at `experiments/checkpoints/<run-code-name>/<checkpoint-file-name>.ckpt`
+To find all three checkpoints used in this work, please access the supplementary information on [Zenodo](https://zenodo.org/records/14177705).
 
 To run the metrics on these experiments:
 
 ```python
-python retrieval.py 'experiment="metrics/ir_simulated"'
+python retrieval.py 'experiment="metrics/ir_simulated_large_dataset"'
 ```
+
+## ⚙️ System requirements
+
+For the training script 4 NVIDIA A100-40GB GPUs have been used. For the retrieval script 1 NVIDIA A100-40GB GPUs has been used.
+
 
 ## 💰 Funding
 
