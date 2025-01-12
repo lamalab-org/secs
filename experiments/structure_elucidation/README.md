@@ -4,6 +4,12 @@
 
 </div>
 
+All the files necessary for this Notebook to run can be found on [Zenodo](https://zenodo.org/records/14177705).
+
+## ⚙️System Requirements
+
+To run the notebook you need a CUDA compatible device.
+
 ## 📓 Demo
 
 The `demo.ipynb` is a Jupyter Notebook showcasing the pipeline that consists of 4 steps. It is assumed that we know the molecular formula of the compound. All the files for this demo can be found on the
