@@ -4,7 +4,7 @@
 
 </div>
 
-## Demo
+## 📓 Demo
 
 The `demo.ipynb` is a Jupyter Notebook showcasing the pipeline that consists of 4 steps. It is assumed that we know the molecular formula of the compound. All the files for this demo can be found on the
 
