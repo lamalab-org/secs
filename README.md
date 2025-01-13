@@ -45,7 +45,7 @@ python train.py 'experiment="train/ir_simulated_large_dataset"'
 ```
 
 The training scripts outputs the checkpoints at `experiments/checkpoints/<run-code-name>/<checkpoint-file-name>.ckpt`
-To find all three checkpoints used in this work, please access the supplementary information on [Zenodo](https://zenodo.org/records/14177705).
+To find all three checkpoints used in this work, please access the supplementary information on [Zenodo](https://zenodo.org/records/14634449).
 
 To run the metrics on these experiments:
 
