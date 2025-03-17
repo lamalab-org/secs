@@ -6,11 +6,13 @@
 
 ## :scroll: Installation guide
 
-It is recommmended using `conda` for creating a virtual environment. If you want to (re)train the models, your system needs to have `CUDA` dependencies, please use the `environment.yaml` file for the installation.
+It is recommmended using `yv` for creating a virtual environment.
 
 ```conda
-conda env create -f environment.yaml
-conda activate molbind
+uv venv --python 3.11 molbind
+source molbind/bin/activate
+uv pip install -e .
+uv pip install torch-scatter torch-cluster torch-sparse -f https://data.pyg.org/whl/torch-2.2.0+cu121.html
 ```
 
 ## :file_folder: Data availability
