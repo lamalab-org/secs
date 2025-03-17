@@ -48,6 +48,14 @@ dependencies = [
   "hydra-colorlog==1.2.0",
   "hydra-optuna-sweeper==1.2.0",
   "omegaconf",
+  "chromadb",
+  "torch==2.2.0",
+  "pyglib",
+  "torchvision==0.17.0",
+  "torch_scatter==2.1.2",
+  "torch_sparse==0.6.18",
+  "torch_cluster==1.6.3",
+  "torch_geometric",
   ]
 
 [project.optional-dependencies]
@@ -59,15 +67,6 @@ docs = [
     "mkdocs-literate-nav>=0.6.0",
     "pillow>=10.0.0",
     "cairosvg>=2.7.1"
-]
-inference=[
-  "chromadb",
-  "torch==2.2.0",
-  "torchvision==0.17.0",
-  "torch_scatter==2.1.2",
-  "torch_sparse==0.6.18",
-  "torch_cluster==1.6.3",
-  "torch_geometric",
 ]
 
 [tool.setuptools.package-data]
