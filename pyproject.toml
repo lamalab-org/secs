@@ -4,33 +4,37 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "molbind"
-description="A package for binding molecular embeddings across modalities."
+description = "A package for binding molecular modalities."
 version = "0.0.1"
 readme = "README.md"
 license = { text = "MIT" }
 authors = [{ name = "Adrian Mirza", email = "andrian.mirza@uni-jena.de" }]
 keywords = ["embeddings", "contrastive learning"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Intended Audience :: Science/Research",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Intended Audience :: Science/Research",
-    "Topic :: Scientific/Engineering",
-    "Operating System :: Microsoft :: Windows",
-    "Operating System :: Unix",
-    "Operating System :: MacOS",
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Intended Audience :: Science/Research",
+  "Topic :: Scientific/Engineering",
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: Unix",
+  "Operating System :: MacOS",
 ]
-requires-python = ">=3.9, <3.13"
+
+requires-python = ">=3.11, <3.13"
 dependencies = [
-  "numpy",
+  "chromadb",
+  "torch==2.2.0",
+  "torchvision",
+  "torch_geometric",
+  "numpy<2.0",
   "loguru",
   "transformers",
   "datasets",
-  "selfies",
   "fire",
   "rdkit",
   "pyarrow",
@@ -48,25 +52,26 @@ dependencies = [
   "hydra-colorlog==1.2.0",
   "hydra-optuna-sweeper==1.2.0",
   "omegaconf",
-  "chromadb",
-  "torch==2.2.0",
-  "pyglib",
-  "torchvision==0.17.0",
-  "torch_scatter==2.1.2",
-  "torch_sparse==0.6.18",
-  "torch_cluster==1.6.3",
-  "torch_geometric",
-  ]
+  "pymatgen",
+  "torchinfo",
+  "matminer",
+  "mp-api",
+]
 
 [project.optional-dependencies]
-dev = ["codecov-cli>=0.4.1", "pytest>=7.4.0", "pytest-cov>=3.0.0", "ruff>=0.0.285"]
+dev = [
+  "codecov-cli>=0.4.1",
+  "pytest>=7.4.0",
+  "pytest-cov>=3.0.0",
+  "ruff>=0.0.285",
+]
 docs = [
-    "mkdocs-material>=9.4.0",
-    "mkdocstrings[python]>=0.22.0",
-    "mkdocs-gen-files>=0.5.0",
-    "mkdocs-literate-nav>=0.6.0",
-    "pillow>=10.0.0",
-    "cairosvg>=2.7.1"
+  "mkdocs-material>=9.4.0",
+  "mkdocstrings[python]>=0.22.0",
+  "mkdocs-gen-files>=0.5.0",
+  "mkdocs-literate-nav>=0.6.0",
+  "pillow>=10.0.0",
+  "cairosvg>=2.7.1",
 ]
 
 [tool.setuptools.package-data]
@@ -102,38 +107,40 @@ source = ["src"]
 
 [tool.coverage.report]
 exclude_also = [
-    "if TYPE_CHECKING:",
-    "if __name__ == .__main__.:",
-    "except ImportError",
+  "if TYPE_CHECKING:",
+  "if __name__ == .__main__.:",
+  "except ImportError",
 ]
 
 [tool.ruff]
 # line-length = 88
 line-length = 130
 lint.select = [
-  "E", "F", "W", # flake8
-  "B",           # flake8-bugbear
-  "I",           # isort
-  "ARG",         # flake8-unused-arguments
-  "C4",          # flake8-comprehensions
-  "EM",          # flake8-errmsg
-  "ICN",         # flake8-import-conventions
-  "ISC",         # flake8-implicit-str-concat
-  "G",           # flake8-logging-format
-  "PGH",         # pygrep-hooks
-  "PIE",         # flake8-pie
-  "PL",          # pylint
-  "PT",          # flake8-pytest-style
-  "PTH",         # flake8-use-pathlib
-  "RET",         # flake8-return
-  "RUF",         # Ruff-specific
-  "SIM",         # flake8-simplify
-  "T20",         # flake8-print
-  "UP",          # pyupgrade
-  "YTT",         # flake8-2020
-  "EXE",         # flake8-executable
-  "NPY",         # NumPy specific rules
-  "PD",          # pandas-vet
+  "E",
+  "F",
+  "W",   # flake8
+  "B",   # flake8-bugbear
+  "I",   # isort
+  "ARG", # flake8-unused-arguments
+  "C4",  # flake8-comprehensions
+  "EM",  # flake8-errmsg
+  "ICN", # flake8-import-conventions
+  "ISC", # flake8-implicit-str-concat
+  "G",   # flake8-logging-format
+  "PGH", # pygrep-hooks
+  "PIE", # flake8-pie
+  "PL",  # pylint
+  "PT",  # flake8-pytest-style
+  "PTH", # flake8-use-pathlib
+  "RET", # flake8-return
+  "RUF", # Ruff-specific
+  "SIM", # flake8-simplify
+  "T20", # flake8-print
+  "UP",  # pyupgrade
+  "YTT", # flake8-2020
+  "EXE", # flake8-executable
+  "NPY", # NumPy specific rules
+  "PD",  # pandas-vet
 ]
 lint.extend-ignore = [
   "PLR",    # Design related pylint codes
