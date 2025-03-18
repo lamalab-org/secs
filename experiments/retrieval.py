@@ -49,7 +49,6 @@ def embed(config: DictConfig):
 
     # Shuffling the data with a specified fraction and seed
     shuffled_data = data.sample(frac=config.data.fraction_data, random_state=config.data.seed)
-    shuffled_data["h_nmr_cnn"] = shuffled_data["h_nmr"]
 
     # Get the total length of the dataset
     dataset_length = len(shuffled_data)
@@ -105,6 +104,8 @@ def embed(config: DictConfig):
     )
     retrieval_metrics = pd.DataFrame(retrieval_metrics)
     retrieval_metrics.to_csv(f"{config.run_id}_retrieval_metrics.csv")
+    # print path to save csv
+    print(f"Saved retrieval metrics to {config.run_id}_retrieval_metrics.csv")
     logger.info(f"Database size: {len(valid_shuffled_data)}")
     logger.info(f"Database level retrieval metrics: \n {pformat(retrieval_metrics)}")
 
