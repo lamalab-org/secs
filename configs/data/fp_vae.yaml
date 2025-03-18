@@ -1,3 +1,0 @@
-dataset_path: "${paths.data_dir}/sf_graph_fps_frag_smi_struc_img.pkl"
-fraction_data: 0.2
-batch_size: 512
