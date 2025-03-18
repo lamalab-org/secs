@@ -23,7 +23,7 @@ defaults:
 # task name, determines output directory path
 task_name: "train"
 task_seed: 42
-run_id: c_nmr_test
+run_id: psmiles_test
 
 # tags to help you identify your experiments
 # you can overwrite this in experiment configs

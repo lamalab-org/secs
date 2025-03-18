@@ -1,14 +1,14 @@
-central_modality: smiles
+central_modality: psmiles
 context_length: 128
 modalities:
-  - ir
+  - bigsmiles
 modalities_to_read:
-  - ir
-train_frac : 0.8
-valid_frac : 0.2
+  - bigsmiles
+train_frac: 0.8
+valid_frac: 0.2
 drop_last: true
 num_workers: 4
 seed: 42
 fraction_data: 1
-dataset_path: "${paths.data_dir}/spectra_129k.parquet"
+dataset_path: "/home/ta45woj/UniPolymer/configs/data/PI1M_canonicalize_with_BigSMILES.csv"
 batch_size: 128
