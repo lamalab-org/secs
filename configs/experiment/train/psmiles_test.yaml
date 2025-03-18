@@ -1,0 +1,28 @@
+# @package _global_
+defaults:
+  - override /data: molbind
+  - override /model: molbind
+  - override /trainer: gpu
+
+model:
+  embedding_size: 512
+  encoders:
+    smiles:
+      freeze_encoder: True
+  projection_heads:
+    ir_freeze: False
+    smiles_freeze: False
+
+data:
+  modalities:
+    - bigsmiles
+  modalities_to_read:
+    - bigsmiles
+  batch_size: 128
+  dataset_path: "${paths.data_dir}/PI1M_canonicalize_with_BigSMILES.csv"
+
+trainer:
+  num_nodes: 1
+  gpus_per_node: 1
+
+run_id: "psmiles_test"

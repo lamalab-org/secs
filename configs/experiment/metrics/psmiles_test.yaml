@@ -1,0 +1,32 @@
+# @package _global_
+defaults:
+  - override /data: molbind
+  - override /model: molbind
+  - override /trainer: gpu
+
+model:
+  embedding_size: 512
+
+data:
+  modalities:
+    - bigsmiles
+  modalities_to_read:
+    - bigsmiles
+  valid_frac: 1
+  batch_size: 128
+  dataset_path: "${paths.data_dir}/PI1M_canonicalize_with_BigSMILES.csv"
+
+ckpt_path: "${paths.checkpoints_dir}/psmiles_test_20250317_2207/best_model.ckpt"
+
+trainer:
+  num_nodes: 1
+  gpus_per_node: 1
+
+top_k:
+  - 1
+  - 2
+  - 5
+  - 20
+
+run_id: "psmiles_test_metrics"
+embeddings_path: psmiles_test_embeddings

@@ -3,6 +3,12 @@ encoders:
   smiles:
     pretrained: True
     freeze_encoder: True
+  bigsmiles:
+    pretrained: True
+    freeze_encoder: True
+  psmiles:
+    pretrained: True
+    freeze_encoder: True
   selfies:
     pretrained: True
     freeze_encoder: True
@@ -71,6 +77,8 @@ embedding_size: 512
 projection_heads:
   # this determines whether the projection head is added to the model
   smiles_is_on: True
+  bigsmiles_is_on: True
+  psmiles_is_on: True
   selfies_is_on: True
   graph_is_on: True
   fingerprint_is_on: True
@@ -86,11 +94,19 @@ projection_heads:
   c_nmr_freeze: True
   ir_freeze: True
   smiles_freeze: True
+  bigsmiles_freeze: False
+  psmiles_freeze: False
   selfies_freeze: True
   multi_spec_freeze: False
   mass_spec_positive_freeze: False
   h_nmr_freeze: False
   # default projection heads for each modality
+  bigsmiles:
+    dims: [768, "${model.embedding_size}"]
+    activation: LeakyReLU
+  psmiles:
+    dims: [768, "${model.embedding_size}"]
+    activation: LeakyReLU
   smiles:
     dims: [768, "${model.embedding_size}"]
     activation: LeakyReLU
