@@ -6,7 +6,7 @@
 
 ## :scroll: Installation guide
 
-It is recommmended using `uv` for creating a virtual environment. The instructions to install `uv` can be found on [uv's homepage](https://docs.astral.sh/uv/getting-started/installation/).
+It is recommmended to use `uv` for creating a virtual environment. The instructions to install `uv` can be found on [uv's homepage](https://docs.astral.sh/uv/getting-started/installation/).
 
 ```conda
 uv venv --python 3.11 molbind
