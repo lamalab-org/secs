@@ -63,3 +63,19 @@ For the training script 4 NVIDIA A100-40GB GPUs have been used. For the retrieva
 ## 💰 Funding
 
 This work was funded by the Carl-Zeiss Foundation. In addition, this work was partly funded by the SOL-AI project funded as part of the Helmholtz Foundation Model Initiative of the Helmholtz Association. Moreover, this work was supported by Helmholtz AI computing resources (HAICORE) of the Helmholtz Association’s Initiative and Networking Fund through Helmholtz AI.
+
+## Citation
+
+```bib
+@article{mirza2024elucidating,
+  title={Elucidating structures from spectra using multimodal embeddings and discrete optimization},
+  author={Mirza, Adrian and Jablonka, Kevin Maik},
+  year={2024}
+}
+@inproceedings{mirza2024bridging,
+  title={Bridging chemical modalities by aligning embeddings},
+  author={Mirza, Adrian and Starke, Sebastian and Merdivan, Erinc and Jablonka, Kevin Maik},
+  booktitle={AI for Accelerated Materials Design-Vienna 2024},
+  year={2024}
+}
+```
