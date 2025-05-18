@@ -12,7 +12,6 @@ It is recommmended to use `uv` for creating a virtual environment. The instructi
 uv venv --python 3.11 molbind
 source molbind/bin/activate
 uv pip install -e .
-uv pip install torch-scatter torch-cluster torch-sparse -f https://data.pyg.org/whl/torch-2.2.0+cu121.html
 ```
 
 ## :file_folder: Data availability
