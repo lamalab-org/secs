@@ -112,7 +112,6 @@ class MolBindDataModule(LightningDataModule):
     def build_predict_dataloader(
         self,
         batch_size: int | dict[str, int],
-        drop_last: bool,
         shuffle: bool,
         num_workers: int,
         mode: str,

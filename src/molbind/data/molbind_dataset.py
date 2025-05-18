@@ -2,7 +2,6 @@ from functools import partial
 
 import pandas as pd
 import polars as pl
-import selfies as sf
 from torch import Tensor
 from torch.utils.data import Dataset
 
@@ -13,14 +12,11 @@ from molbind.data.available import (
 )
 from molbind.data.components.datasets import (
     FingerprintMolBindDataset,
-    GraphDataset,
-    ImageDataset,
     IrDataset,
     MassSpecNegativeDataset,
     MassSpecPositiveDataset,
     MultiSpecDataset,
     StringDataset,
-    StructureDataset,
     cNmrDataset,
     hNmrDataset,
 )
@@ -38,11 +34,7 @@ class MolBindDataset:
         self.data = data
         self.central_modality = central_modality
         self.central_modality_data_type = ModalityConstants[central_modality].data_type
-        self.custom_negatives = kwargs.get("custom_negatives", False)
-        if self.custom_negatives:
-            self.custom_negatives_samples = data["custom_negatives"].to_list()
-        else:
-            self.custom_negatives_samples = None
+
         # if self.central_modality_data_type == str:
         init_str_fn = partial(
             self._tokenize_strings,
@@ -99,27 +91,6 @@ class MolBindDataset:
 
         self.other_modalities = other_modalities
 
-    def build_graph_dataset(self) -> GraphDataset:
-        modality = "graph"
-        graph_data = self.data[[self.central_modality, modality]].dropna()
-        # perform graph operations
-        # add graph dataset logic here
-        return GraphDataset(
-            graph_data=graph_data,
-            central_modality=self.central_modality,
-            central_modality_data=self._handle_central_modality_data(graph_data),
-        )
-
-    def build_3D_coordinates_dataset(self) -> StructureDataset:
-        modality = "structure"
-        struc_data = self.data[[self.central_modality, modality]].dropna()
-        return StructureDataset(
-            sdf_file_list=struc_data[modality].to_list(),
-            dataset_mode="molbind",
-            central_modality=self.central_modality,
-            central_modality_data=self._handle_central_modality_data(struc_data),
-        )
-
     def build_string_dataset(self, modality: str, context_length: int = 256) -> StringDataset:
         string_data = self.data[[self.central_modality, modality]].dropna()
         other_modality_data = self._tokenize_strings(
@@ -142,16 +113,6 @@ class MolBindDataset:
             central_modality=self.central_modality,
             fingerprint_data=fp_data[modality].to_list(),
             central_modality_data=self._handle_central_modality_data(fp_data),
-        )
-
-    def build_image_dataset(self) -> ImageDataset:
-        modality = "image"
-        image_data = self.data[[self.central_modality, modality]].dropna()
-        # perform image operations
-        return ImageDataset(
-            image_files=image_data[modality].to_list(),
-            central_modality=self.central_modality,
-            central_modality_data=self._handle_central_modality_data(image_data),
         )
 
     def build_c_nmr_dataset(self) -> cNmrDataset:
@@ -229,21 +190,10 @@ class MolBindDataset:
         return datasets
 
     def _handle_central_modality_data(self, data_pair: pd.DataFrame) -> tuple[Tensor, Tensor]:
-        if self.central_modality_data_type is str and self.custom_negatives:
-            central_modality_data = (
-                self.central_modality_data[0][data_pair.index.to_list()],
-                self.central_modality_data[1][data_pair.index.to_list()],
-                [
-                    self._tokenize_strings(list(self.custom_negatives_samples[i]), 128, self.central_modality)
-                    for i in data_pair.index.to_list()
-                ],
-            )
-        else:
-            central_modality_data = (
-                self.central_modality_data[0][data_pair.index.to_list()],
-                self.central_modality_data[1][data_pair.index.to_list()],
-            )
-        return central_modality_data
+        return (
+            self.central_modality_data[0][data_pair.index.to_list()],
+            self.central_modality_data[1][data_pair.index.to_list()],
+        )
 
     @staticmethod
     def _tokenize_strings(
@@ -259,11 +209,3 @@ class MolBindDataset:
             max_length=context_length,
         )
         return tokenized_data["input_ids"], tokenized_data["attention_mask"]
-
-    @staticmethod
-    def _build_selfies_from_smiles(smi_list: list[str]) -> list[str]:
-        return [sf.encoder(smi) for smi in smi_list]
-
-    @staticmethod
-    def _build_smiles_from_selfies(selfies_list: list[str]) -> list[str]:
-        return [sf.decoder(selfies) for selfies in selfies_list]
