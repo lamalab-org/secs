@@ -15,7 +15,7 @@ from molbind.utils import rename_keys_with_prefix, select_device
 
 class SmilesEncoder(BaseModalityEncoder):
     def __init__(self, freeze_encoder: bool = False, pretrained: bool = True, **kwargs) -> None:
-        super().__init__("ibm/MoLFormer-XL-both-10pct", freeze_encoder, pretrained, **kwargs)
+        super().__init__("ibm-research/MoLFormer-XL-both-10pct", freeze_encoder, pretrained, **kwargs)
 
     def _initialize_encoder(self):
         self.encoder = AutoModel.from_pretrained(self.model_name, trust_remote_code=True)
