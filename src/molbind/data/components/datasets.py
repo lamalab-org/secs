@@ -143,7 +143,7 @@ class IrDataset(Dataset):
 
     def __getitem__(self, index: int) -> dict:
         # convert to tensor
-        ir = torch.tensor(self.ir[index], dtype=torch.float32)[100:1700]
+        ir = torch.tensor(self.ir[index], dtype=torch.float32)[100:1700].unsqueeze(0)
         return {
             self.central_modality: [i[index] for i in self.central_modality_data],
             self.other_modality: ir,

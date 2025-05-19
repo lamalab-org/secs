@@ -15,6 +15,7 @@ from request_pubchem import (
 
 from molbind.data.analysis.utils import aggregate_embeddings
 from molbind.models import MolBind
+from molbind.utils.spec2struct import gen_close_molformulas_from_seed
 
 
 def main(
@@ -168,62 +169,6 @@ def get_atom_counts_from_formula(formula):
     return dict(atom_counts)
 
 
-def gen_close_molformulas_from_seed(seed_formula):
-    atom_counts = get_atom_counts_from_formula(seed_formula)
-    carbons = atom_counts.get("C", 0)
-    hydrogens = atom_counts.get("H", 0)
-    nitrogens = atom_counts.get("N", 0)
-    chlorine = atom_counts.get("Cl", 0)
-    bromine = atom_counts.get("Br", 0)
-    fluorine = atom_counts.get("F", 0)
-    phosphorus = atom_counts.get("P", 0)
-    sulphur = atom_counts.get("S", 0)
-    total_halogens = chlorine + bromine + fluorine
-    seed_formula_0 = seed_formula.replace(f"C{carbons}", f"C{carbons - 3}").replace(f"H{hydrogens}", f"H{hydrogens - 6}")
-    seed_formula_1 = seed_formula.replace(f"C{carbons}", f"C{carbons + 1}").replace(f"H{hydrogens}", f"H{hydrogens + 2}")
-    seed_formula_2 = seed_formula.replace(f"C{carbons}", f"C{carbons - 1}").replace(f"H{hydrogens}", f"H{hydrogens - 2}")
-    seed_formula_3 = seed_formula.replace(f"C{carbons}", f"C{carbons + 2}").replace(f"H{hydrogens}", f"H{hydrogens + 4}")
-    seed_formula_4 = seed_formula.replace(f"C{carbons}", f"C{carbons - 2}").replace(f"H{hydrogens}", f"H{hydrogens - 4}")
-    seed_formula_5 = seed_formula.replace(f"N{nitrogens}", f"N{nitrogens + 1}").replace(f"H{hydrogens}", f"H{hydrogens + 1}")
-    seed_formula_6 = seed_formula.replace(f"N{nitrogens}", f"N{nitrogens - 1}").replace(f"H{hydrogens}", f"H{hydrogens - 1}")
-    seed_formula_7 = seed_formula.replace(f"Cl{chlorine}", f"Cl{chlorine + 1}").replace(f"H{hydrogens}", f"H{hydrogens + 1}")
-    seed_formula_8 = seed_formula.replace(f"Cl{chlorine}", f"Cl{chlorine - 1}").replace(f"H{hydrogens}", f"H{hydrogens - 1}")
-    seed_formula_9 = seed_formula.replace(f"Br{bromine}", f"Br{bromine + 1}").replace(f"H{hydrogens}", f"H{hydrogens + 1}")
-    seed_formula_10 = seed_formula.replace(f"Br{bromine}", f"Br{bromine - 1}").replace(f"H{hydrogens}", f"H{hydrogens - 1}")
-    seed_formula_11 = seed_formula.replace(f"F{fluorine}", f"F{fluorine + 1}").replace(f"H{hydrogens}", f"H{hydrogens + 1}")
-    # keep just C,N,H,O
-    # if count is 1, then replace the element with an empty string
-    seed_formula_12 = seed_formula.replace("Cl", "") if chlorine == 1 else seed_formula.replace(f"Cl{chlorine}", "")
-    seed_formula_12 = seed_formula_12.replace("Br", "") if bromine == 1 else seed_formula_12.replace(f"Br{bromine}", "")
-    seed_formula_12 = seed_formula_12.replace("F", "") if fluorine == 1 else seed_formula_12.replace(f"F{fluorine}", "")
-    seed_formula_12 = seed_formula_12.replace(f"H{hydrogens}", f"H{hydrogens + total_halogens}")
-    seed_formula_13 = seed_formula.replace("P", "") if phosphorus == 1 else seed_formula.replace(f"P{phosphorus}", "")
-    seed_formula_13 = seed_formula_13.replace(f"H{hydrogens}", f"H{hydrogens + 5}")
-    seed_formula_14 = seed_formula.replace("S", "") if sulphur == 1 else seed_formula.replace(f"S{sulphur}", "")
-    seed_formula_14 = seed_formula_14.replace(f"H{hydrogens}", f"H{hydrogens + 4}")
-    seed_formula_15 = seed_formula.replace(f"S{sulphur}", f"S{sulphur + 1}")
-    seed_formula_16 = seed_formula.replace(f"S{sulphur}", f"S{sulphur - 1}")
-    return [
-        seed_formula_0,
-        seed_formula_1,
-        seed_formula_2,
-        seed_formula_3,
-        seed_formula_4,
-        seed_formula_5,
-        seed_formula_6,
-        seed_formula_7,
-        seed_formula_8,
-        seed_formula_9,
-        seed_formula_10,
-        seed_formula_11,
-        seed_formula_12,
-        seed_formula_13,
-        seed_formula_14,
-        seed_formula_15,
-        seed_formula_16,
-    ]
-
-
 def filter_polars_col_by_molecular_formulas(df, molecular_formulas):
     return df[df["molecular_formula"].isin(molecular_formulas)]
 
@@ -260,6 +205,7 @@ def cli(
     for molecular_formula, i in zip(
         list_of_molecular_formulas[start_index:end_index],
         indexes[start_index:end_index],
+        strict=False,
     ):
         get_molformulas = gen_close_molformulas_from_seed(molecular_formula)
         molecular_formulas = [molecular_formula, *get_molformulas]

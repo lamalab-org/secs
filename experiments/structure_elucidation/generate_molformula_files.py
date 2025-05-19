@@ -1,322 +1,335 @@
-import re
-from collections import Counter
 from functools import partial
 from pathlib import Path
+from typing import Any, ClassVar
 
 import pandas as pd
-from gafuncs import sascore
+from datasets import load_dataset
 from loguru import logger
 from maygen_out_to_canonical import isomer_to_canonical
-from prune_sim import embedding_pruning, get_number_of_topologically_distinct_atoms, load_models, tanimoto_similarity
-from request_pubchem import (
-    convert_to_molecular_formulas,
-    read_cached_CID_smiles,
-)
+from prune_sim import embedding_pruning, load_models, tanimoto_similarity
+from tqdm.auto import tqdm
 
 from molbind.data.analysis.utils import aggregate_embeddings
-from molbind.models import MolBind
+from molbind.utils.spec2struct import gen_close_molformulas_from_seed, smiles_to_molecular_formula
+
+ModelType = Any
 
 
-def main(
-    file_with_isomers: str,
-    pruned_file: str,
-    index_of_smiles_to_test: int,
-    dataset_path: str,
-    ir_embeddings_path: str,
-    cnmr_embeddings_path: str,
-    hnmr_embeddings_path: str,
-    ir_model: MolBind,
-    cnmr_model: MolBind,
-    hnmr_model: MolBind,
-    folder_results: str,
-    ir_ratio: float = 1,
-    cnmr_ratio: float = 1,
-    hnmr_ratio: float = 1,
-    synthetic_access_quantile: float | None = None,
-) -> None:
-    index_of_smiles_to_test = int(index_of_smiles_to_test)
-    ir_embeddings = pd.read_pickle(ir_embeddings_path)
-    c_nmr_embeddings = pd.read_pickle(cnmr_embeddings_path)
-    h_nmr_embeddings = pd.read_pickle(hnmr_embeddings_path)
-    # sum up spectra embeddings
-    list_of_smiles = pd.read_pickle(dataset_path).smiles.to_list()
-    original_smiles = list_of_smiles[index_of_smiles_to_test]
-    # print molecular formula of the original smiles
-    # print the original smilesa
-    logger.debug(f"Original smiles: {original_smiles}")
-    ir_embeddings = aggregate_embeddings(embeddings=ir_embeddings, modalities=["smiles", "ir"], central_modality="smiles")
-    c_nmr_embeddings = aggregate_embeddings(
-        embeddings=c_nmr_embeddings,
-        modalities=["smiles", "c_nmr"],
-        central_modality="smiles",
-    )
-    h_nmr_embeddings = aggregate_embeddings(
-        embeddings=h_nmr_embeddings,
-        modalities=["smiles", "h_nmr_cnn"],
-        central_modality="smiles",
-    )
+class SimpleMoleculeAnalyzer:
+    """
+    A user-friendly class for analyzing molecular structures using spectroscopic data.
 
-    spectra_ir_embedding = ir_embeddings["ir"][index_of_smiles_to_test].to("cuda")
-    spectra_cnmr_embedding = c_nmr_embeddings["c_nmr"][index_of_smiles_to_test].to("cuda")
-    spectra_hnmr_embedding = h_nmr_embeddings["h_nmr_cnn"][index_of_smiles_to_test].to("cuda")
+    This class simplifies the process of analyzing molecular structures by providing
+    a clean interface to the underlying functionality. It allows customization of
+    which spectra (from IR, CNMR, HNMR) are actively used in similarity calculations.
+    """
 
-    isomer_df = pd.read_csv(file_with_isomers)
-    # drop duplicates
-    isomer_df = isomer_df.drop_duplicates(subset=["canonical_smiles"])
-    isomer_df["unique_hydrogens"] = isomer_df["canonical_smiles"].progress_apply(
-        lambda x: get_number_of_topologically_distinct_atoms(x, atomic_number=1)
-    )
-    isomer_df["unique_carbons"] = isomer_df["canonical_smiles"].progress_apply(
-        lambda x: get_number_of_topologically_distinct_atoms(x, atomic_number=6)
-    )
-    isomer_df["sascore"] = isomer_df["canonical_smiles"].progress_apply(sascore)
-    if synthetic_access_quantile:
-        logger.info("You requested to filter based on synthetic accessibility")
-        isomer_df = isomer_df[isomer_df["synthetic_access"] < isomer_df["synthetic_access"].quantile(synthetic_access_quantile)]
-        logger.debug(f"Length of isomer_df after synthetic access filtering: {len(isomer_df)}")
+    # Define known spectra types and their corresponding modality keys used in embeddings
+    ALL_SPECTRA_TYPES: ClassVar[list[str]] = ["ir", "cnmr", "hnmr"]
+    MODALITY_MAP: ClassVar[dict[str, str]] = {
+        "ir": "ir",
+        "cnmr": "c_nmr",
+        "hnmr": "h_nmr_cnn",
+    }
 
-    logger.debug(f"Length of isomer_df: {len(isomer_df)}")
-    (
-        cosine_similarities,
-        ir_similarities,
-        cnmr_similarities,
-        hnmr_similarities,
-        cnmr_ir_similarities,
-        ir_hnmr_similarities,
-        cnmr_hnmr_similarities,
-    ) = embedding_pruning(
-        spectra_ir_embedding=spectra_ir_embedding,
-        spectra_cnmr_embedding=spectra_cnmr_embedding,
-        spectra_hnmr_embedding=spectra_hnmr_embedding,
-        ir_model=ir_model,
-        cnmr_model=cnmr_model,
-        hnmr_model=hnmr_model,
-        smiles=isomer_df["canonical_smiles"].to_list(),
-        ir_ratio=ir_ratio,
-        cnmr_ratio=cnmr_ratio,
-        hnmr_ratio=hnmr_ratio,
-    )
-    cosine_similarities = cosine_similarities.tolist()
-    ir_similarities = ir_similarities.tolist()
-    cnmr_similarities = cnmr_similarities.tolist()
-    hnmr_similarities = hnmr_similarities.tolist()
-    cnmr_ir_similarities = cnmr_ir_similarities.tolist()
-    ir_hnmr_similarities = ir_hnmr_similarities.tolist()
-    cnmr_hnmr_similarities = cnmr_hnmr_similarities.tolist()
-    isomer_df["ir_similarity"] = ir_similarities
-    isomer_df["cnmr_similarity"] = cnmr_similarities
-    isomer_df["hnmr_similarity"] = hnmr_similarities
-    isomer_df["similarity"] = cosine_similarities
-    isomer_df["sum_of_similarities"] = isomer_df["ir_similarity"] + isomer_df["cnmr_similarity"] + isomer_df["hnmr_similarity"]
-    isomer_df["cnmr_ir_similarity"] = cnmr_ir_similarities
-    isomer_df["ir_hnmr_similarity"] = ir_hnmr_similarities
-    isomer_df["cnmr_hnmr_similarity"] = cnmr_hnmr_similarities
-
-    # tanimoto similarity with the original smiles
-    tanimoto = partial(tanimoto_similarity, original_smiles)
-    isomer_df["tanimoto"] = isomer_df["canonical_smiles"].progress_apply(lambda x: tanimoto(x))
-    # save backup
-    csv_path = Path(folder_results) / Path(
-        str(index_of_smiles_to_test) + "_" + str(Path(pruned_file).with_suffix("")) + "_sim"
-    ).with_suffix(".csv")
-
-    isomer_df.to_csv(csv_path, index=False)
-
-
-def run_scripts_pipe(
-    molecular_formula,
-    smiles_index,
-    ir_model,
-    cnmr_model,
-    hnmr_model,
-    pubchem_cache=None,
-    ir_embeddings_path: str | None = None,
-    cnmr_embeddings_path: str | None = None,
-    hnmr_embeddings_path: str | None = None,
-    dataset_path: str | None = None,
-    folder_results: str | None = None,
-):
-    # run script 1: request_pubchem.py
-    # os.system(f"python request_pubchem.py '{molecular_formula}'")
-    # read cached CID_smiles
-    # filter data based on molecular formula
-    # pubchem_cache = pubchem_cache.filter(
-    #     pl.col("molecular_formula") == molecular_formula
-    # )
-    # save smiles to a file
-    # if not Path(f"isomers/{molecular_formula}.txt").exists():
-    with Path(f"isomers_multiform/{molecular_formula}.txt").open("w") as f:
-        for smiles in pubchem_cache["smiles"]:
-            f.write(smiles + "\n")
-    cid_file = f"isomers_multiform/{molecular_formula}.txt"
-    # cids is a txt file with a list of CIDs
-    with Path(cid_file).open("r") as f:
-        smiles = f.read().splitlines()
-    logger.info(f"Found {len(smiles)} CIDs for molecular formula {molecular_formula}")
-    # run script 2: maygen_out_to_canonical.py (converts SMILES to canonical SMILES)
-    isomer_to_canonical(cid_file, f"isomers_multiform/{molecular_formula}.csv")
-
-    main(
-        f"isomers_multiform/{molecular_formula}.csv",
-        "out.csv",
-        index_of_smiles_to_test=smiles_index,
-        ir_model=ir_model,
-        cnmr_model=cnmr_model,
-        hnmr_model=hnmr_model,
-        ir_embeddings_path=ir_embeddings_path,
-        cnmr_embeddings_path=cnmr_embeddings_path,
-        hnmr_embeddings_path=hnmr_embeddings_path,
-        dataset_path=dataset_path,
-        folder_results=folder_results,
-    )
-
-
-# Function to extract atom counts from a molecular formula
-def get_atom_counts_from_formula(formula):
-    # Regular expression to match elements and their counts
-    pattern = r"([A-Z][a-z]*)(\d*)"
-
-    # Find all matches in the formula
-    matches = re.findall(pattern, formula)
-
-    # Create a Counter to store atom counts
-    atom_counts = Counter()
-
-    # Loop through matches and update the counter
-    for element, count in matches:
-        count_atom = 1 if count == "" else int(count)
-        atom_counts[element] += count_atom
-
-    return dict(atom_counts)
-
-
-def gen_close_molformulas_from_seed(seed_formula):
-    atom_counts = get_atom_counts_from_formula(seed_formula)
-    carbons = atom_counts.get("C", 0)
-    hydrogens = atom_counts.get("H", 0)
-    nitrogens = atom_counts.get("N", 0)
-    chlorine = atom_counts.get("Cl", 0)
-    bromine = atom_counts.get("Br", 0)
-    fluorine = atom_counts.get("F", 0)
-    phosphorus = atom_counts.get("P", 0)
-    sulphur = atom_counts.get("S", 0)
-    total_halogens = chlorine + bromine + fluorine
-    seed_formula_0 = seed_formula.replace(f"C{carbons}", f"C{carbons - 3}").replace(f"H{hydrogens}", f"H{hydrogens - 6}")
-    seed_formula_1 = seed_formula.replace(f"C{carbons}", f"C{carbons + 1}").replace(f"H{hydrogens}", f"H{hydrogens + 2}")
-    seed_formula_2 = seed_formula.replace(f"C{carbons}", f"C{carbons - 1}").replace(f"H{hydrogens}", f"H{hydrogens - 2}")
-    seed_formula_3 = seed_formula.replace(f"C{carbons}", f"C{carbons + 2}").replace(f"H{hydrogens}", f"H{hydrogens + 4}")
-    seed_formula_4 = seed_formula.replace(f"C{carbons}", f"C{carbons - 2}").replace(f"H{hydrogens}", f"H{hydrogens - 4}")
-    seed_formula_5 = seed_formula.replace(f"N{nitrogens}", f"N{nitrogens + 1}").replace(f"H{hydrogens}", f"H{hydrogens + 1}")
-    seed_formula_6 = seed_formula.replace(f"N{nitrogens}", f"N{nitrogens - 1}").replace(f"H{hydrogens}", f"H{hydrogens - 1}")
-    seed_formula_7 = seed_formula.replace(f"Cl{chlorine}", f"Cl{chlorine + 1}").replace(f"H{hydrogens}", f"H{hydrogens + 1}")
-    seed_formula_8 = seed_formula.replace(f"Cl{chlorine}", f"Cl{chlorine - 1}").replace(f"H{hydrogens}", f"H{hydrogens - 1}")
-    seed_formula_9 = seed_formula.replace(f"Br{bromine}", f"Br{bromine + 1}").replace(f"H{hydrogens}", f"H{hydrogens + 1}")
-    seed_formula_10 = seed_formula.replace(f"Br{bromine}", f"Br{bromine - 1}").replace(f"H{hydrogens}", f"H{hydrogens - 1}")
-    seed_formula_11 = seed_formula.replace(f"F{fluorine}", f"F{fluorine + 1}").replace(f"H{hydrogens}", f"H{hydrogens + 1}")
-    # keep just C,N,H,O
-    # if count is 1, then replace the element with an empty string
-    seed_formula_12 = seed_formula.replace("Cl", "") if chlorine == 1 else seed_formula.replace(f"Cl{chlorine}", "")
-    seed_formula_12 = seed_formula_12.replace("Br", "") if bromine == 1 else seed_formula_12.replace(f"Br{bromine}", "")
-    seed_formula_12 = seed_formula_12.replace("F", "") if fluorine == 1 else seed_formula_12.replace(f"F{fluorine}", "")
-    seed_formula_12 = seed_formula_12.replace(f"H{hydrogens}", f"H{hydrogens + total_halogens}")
-    seed_formula_13 = seed_formula.replace("P", "") if phosphorus == 1 else seed_formula.replace(f"P{phosphorus}", "")
-    seed_formula_13 = seed_formula_13.replace(f"H{hydrogens}", f"H{hydrogens + 5}")
-    seed_formula_14 = seed_formula.replace("S", "") if sulphur == 1 else seed_formula.replace(f"S{sulphur}", "")
-    seed_formula_14 = seed_formula_14.replace(f"H{hydrogens}", f"H{hydrogens + 4}")
-    seed_formula_15 = seed_formula.replace(f"S{sulphur}", f"S{sulphur + 1}")
-    seed_formula_16 = seed_formula.replace(f"S{sulphur}", f"S{sulphur - 1}")
-    return [
-        seed_formula_0,
-        seed_formula_1,
-        seed_formula_2,
-        seed_formula_3,
-        seed_formula_4,
-        seed_formula_5,
-        seed_formula_6,
-        seed_formula_7,
-        seed_formula_8,
-        seed_formula_9,
-        seed_formula_10,
-        seed_formula_11,
-        seed_formula_12,
-        seed_formula_13,
-        seed_formula_14,
-        seed_formula_15,
-        seed_formula_16,
-    ]
-
-
-def filter_polars_col_by_molecular_formulas(df, molecular_formulas):
-    return df[df["molecular_formula"].isin(molecular_formulas)]
-
-
-def cli(
-    start_index: int,
-    end_index: int,
-    dataset_path: str,
-    cnmr_embeddings_path: str,
-    hnmr_embeddings_path: str,
-    ir_embeddings_path: str,
-    ir_experiment: str,
-    cnmr_experiment: str,
-    hnmr_experiment: str,
-    folder_results: str,
-) -> None:
-    if not Path(folder_results).exists():
-        Path(folder_results).mkdir()
-
-    cached_data = read_cached_CID_smiles().to_pandas()
-    cached_data = cached_data.dropna()
-    # # save the cache with molecular formula
-    # cached_data.to_csv("CID-SMILES.csv", separator=",", write_header=True)
-    list_of_molecular_formulas = convert_to_molecular_formulas(dataset_path)
-    indexes = list(range(len(list_of_molecular_formulas)))
-    # save the first 30 molecular formulas to file
-    with Path("isomers_multiform/molecular_formulas.txt").open("w") as f:
-        f.write("\n".join(list_of_molecular_formulas[start_index:end_index]))
-
-    ir_model, cnmr_model, hnmr_model = load_models(
-        "../../configs",
-        ir_experiment=ir_experiment,
-        cnmr_experiment=cnmr_experiment,
-        hnmr_experiment=hnmr_experiment,
-    )
-
-    for molecular_formula, i in zip(
-        list_of_molecular_formulas[start_index:end_index],
-        indexes[start_index:end_index],
+    def __init__(
+        self,
+        models_config_path: str = "../../configs",
+        results_dir: str = "analysis_results",
+        cache_dir: str | None = None,
+        active_spectra: list[str] | None = None,
     ):
-        get_molformulas = gen_close_molformulas_from_seed(molecular_formula)
-        molecular_formulas = [molecular_formula, *get_molformulas]
-        filter_cached = filter_polars_col_by_molecular_formulas(cached_data, molecular_formulas)
-        # add molecular formula to the cache
-        logger.info(f"Processing {molecular_formula}")
-        run_scripts_pipe(
-            molecular_formula,
-            i,
-            pubchem_cache=filter_cached,
-            ir_model=ir_model,
-            cnmr_model=cnmr_model,
-            hnmr_model=hnmr_model,
-            dataset_path=dataset_path,
-            cnmr_embeddings_path=cnmr_embeddings_path,
-            ir_embeddings_path=ir_embeddings_path,
-            hnmr_embeddings_path=hnmr_embeddings_path,
-            folder_results=folder_results,
+        """
+        Initialize the SimpleMoleculeAnalyzer.
+
+        Args:
+            models_config_path: Path to the models configuration directory.
+            data_dir: Directory containing datasets and embeddings.
+            results_dir: Directory where results will be saved.
+            cache_dir: Directory for cached data (will use default if None).
+            active_spectra: list of spectra types to use (e.g., ["ir", "cnmr"]).
+                            Defaults to all available spectra (["ir", "cnmr", "hnmr"]).
+                            These spectra must be among "ir", "cnmr", "hnmr".
+        """
+        self.models_config_path = Path(models_config_path)
+
+        self.results_dir = Path(results_dir)
+        self.cache_dir = Path(cache_dir) if cache_dir else Path.cwd() / "cache"
+
+        self.results_dir.mkdir(exist_ok=True, parents=True)
+        self.cache_dir.mkdir(exist_ok=True, parents=True)
+
+        if active_spectra is None:
+            self.active_spectra = self.ALL_SPECTRA_TYPES[:]
+        else:
+            self.active_spectra = []
+            for spec_type in active_spectra:
+                if spec_type not in self.ALL_SPECTRA_TYPES:
+                    logger.warning(
+                        f"Unknown spectrum type '{spec_type}' in active_spectra. Ignoring. "
+                        f"Allowed types are: {self.ALL_SPECTRA_TYPES}"
+                    )
+                else:
+                    self.active_spectra.append(spec_type)
+
+        logger.info(f"Analyzer initialized. Active spectra: {self.active_spectra}")
+        logger.info(f"Results directory: {self.results_dir}")
+        logger.info(f"Cache directory: {self.cache_dir}")
+
+        # Initialize models and embeddings storage
+        self.models: dict[str, ModelType | None] = dict.fromkeys(self.ALL_SPECTRA_TYPES)
+        self.embeddings_data: dict[str, pd.DataFrame | None] = dict.fromkeys(self.ALL_SPECTRA_TYPES)
+        self.dataset: pd.DataFrame | None = None
+        self.pubchem_cache: Any | None = None  # Type depends on to_polars() output
+
+        # Paths for loaded data (set in load_data)
+        self.dataset_path: Path | None = None
+        self.embedding_paths: dict[str, Path | None] = dict.fromkeys(self.ALL_SPECTRA_TYPES)
+
+    def load_models(
+        self,
+        ir_experiment: str = "metrics/ir_simulated_large_dataset_testset",
+        cnmr_experiment: str = "metrics/cnmr_simulated_large_dataset_testset",
+        hnmr_experiment: str = "metrics/hnmr_cnn_detailed_large_dataset_testset",
+    ) -> None:
+        """
+        Load the spectroscopic models for IR, CNMR, and HNMR.
+
+        All three models are loaded as they are required by the underlying
+        `embedding_pruning` function. Inactive spectra (not in `self.active_spectra`)
+        will have their weights set to zero during processing.
+
+        Args:
+            ir_experiment: Name of the IR experiment.
+            cnmr_experiment: Name of the CNMR experiment.
+            hnmr_experiment: Name of the HNMR experiment.
+        """
+
+        loaded_ir_model, loaded_cnmr_model, loaded_hnmr_model = load_models(
+            self.models_config_path,
+            ir_experiment=ir_experiment,
+            cnmr_experiment=cnmr_experiment,
+            hnmr_experiment=hnmr_experiment,
         )
-        logger.info(f"Finished processing {molecular_formula}")
+        self.models["ir"] = loaded_ir_model
+        self.models["cnmr"] = loaded_cnmr_model
+        self.models["hnmr"] = loaded_hnmr_model
+
+    def load_data(self, dataset_path: str, ir_embeddings_path: str, cnmr_embeddings_path: str, hnmr_embeddings_path: str) -> None:
+        """
+        Load datasets and embeddings for IR, CNMR, and HNMR.
+
+        Args:
+            dataset_path: Path to the dataset pickle file.
+            ir_embeddings_path: Path to the IR embeddings pickle file.
+            cnmr_embeddings_path: Path to the CNMR embeddings pickle file.
+            hnmr_embeddings_path: Path to the HNMR embeddings pickle file.
+        """
+        self.dataset_path = Path(dataset_path)
+
+        paths_map = {"ir": Path(ir_embeddings_path), "cnmr": Path(cnmr_embeddings_path), "hnmr": Path(hnmr_embeddings_path)}
+        # check format of dataset_path
+        suffix = self.dataset_path.suffix
+        self.dataset = pd.read_pickle(self.dataset_path) if suffix == ".pkl" else pd.read_parquet(self.dataset_path)
+        # rename h_nmr to h_nmr_cnn
+        if "h_nmr" in self.dataset.columns:
+            self.dataset = self.dataset.rename(columns={"h_nmr": "h_nmr_cnn"})
+
+        for spec_type in self.ALL_SPECTRA_TYPES:
+            path = paths_map[spec_type]
+            self.embedding_paths[spec_type] = path
+            self.embeddings_data[spec_type] = pd.read_pickle(path)
+
+        self.pubchem_cache = load_dataset("jablonkagroup/pubchem-smiles-molecular-formula")["train"].to_polars()
+        self.pubchem_cache = self.pubchem_cache.drop_nulls()
+
+    def process_molecular_formula(self, smiles_index: int = 0) -> pd.DataFrame:
+        """
+        Process a molecular formula to find similar structures.
+
+        Args:
+            smiles_index: Index of the reference SMILES in the dataset.
+
+        Returns:
+            DataFrame with similarity results.
+        """
+
+        molecular_formula = smiles_to_molecular_formula(self.dataset["smiles"].iloc[smiles_index])
+
+        logger.info(f"Processing molecular formula: {molecular_formula}")
+        similar_formulas = [molecular_formula, *gen_close_molformulas_from_seed(molecular_formula)]
+        filtered_cache = self._filter_by_molecular_formulas(self.pubchem_cache, similar_formulas)
+
+        isomers_dir = self.cache_dir / "isomers_multiform"
+        isomers_dir.mkdir(exist_ok=True, parents=True)
+        isomer_file = isomers_dir / f"{molecular_formula}.txt"
+        with isomer_file.open("w") as f:
+            for smiles in filtered_cache["smiles"]:
+                f.write(smiles + "\n")
+
+        canonical_file = isomers_dir / f"{smiles_index}_{molecular_formula}.csv"
+        isomer_to_canonical(str(isomer_file), str(canonical_file))
+        isomer_df = pd.read_csv(canonical_file)
+        isomer_df = isomer_df.drop_duplicates(subset=["canonical_smiles"])
+
+        # --- 4. Aggregate embeddings and get reference embeddings ---
+        aggregated_embeddings_store: dict[str, Any] = {}
+
+        for spec_type in self.ALL_SPECTRA_TYPES:
+            modalities = ["smiles", self.MODALITY_MAP[spec_type]]
+            agg_emb = aggregate_embeddings(
+                embeddings=self.embeddings_data[spec_type],
+                modalities=modalities,
+                central_modality="smiles",
+            )
+            aggregated_embeddings_store[spec_type] = agg_emb
+
+        # perform embedding pruning
+        results_tuple = embedding_pruning(
+            spectra_ir_embedding=aggregated_embeddings_store["ir"]["ir"][smiles_index],
+            spectra_cnmr_embedding=aggregated_embeddings_store["cnmr"]["c_nmr"][smiles_index],
+            spectra_hnmr_embedding=aggregated_embeddings_store["hnmr"]["h_nmr_cnn"][smiles_index],
+            ir_model=self.models["ir"],
+            cnmr_model=self.models["cnmr"],
+            hnmr_model=self.models["hnmr"],
+            smiles=isomer_df["canonical_smiles"].to_list(),
+        )
+        # calculate similarities
+        (
+            cosine_similarities,
+            ir_similarities,
+            cnmr_similarities,
+            hnmr_similarities,
+        ) = results_tuple
+
+        def to_list_if_tensor(x):
+            return x.tolist() if hasattr(x, "tolist") else x
+
+        isomer_df["similarity"] = to_list_if_tensor(cosine_similarities)
+        isomer_df["ir_similarity"] = to_list_if_tensor(ir_similarities)
+        isomer_df["cnmr_similarity"] = to_list_if_tensor(cnmr_similarities)
+        isomer_df["hnmr_similarity"] = to_list_if_tensor(hnmr_similarities)
+
+        isomer_df["sum_of_all_individual_similarities"] = (
+            isomer_df["ir_similarity"].fillna(0) + isomer_df["cnmr_similarity"].fillna(0) + isomer_df["hnmr_similarity"].fillna(0)
+        )
+        original_smiles = self.dataset.smiles.to_list()[smiles_index]
+        tanimoto_func = partial(tanimoto_similarity, original_smiles)
+        tqdm.pandas(desc="Calculating Tanimoto similarity")
+        isomer_df["tanimoto"] = isomer_df["canonical_smiles"].progress_apply(lambda x: tanimoto_func(x) if pd.notna(x) else None)
+
+        # --- 7. Save results ---
+        result_path = self.results_dir / f"{smiles_index}_{molecular_formula}.csv"
+        isomer_df.to_csv(result_path, index=False)
+        logger.info(f"Results for {molecular_formula} saved to {result_path}")
+
+        return isomer_df
+
+    def analyze_multiple_formulas(
+        self,
+        molecular_formulas: list[str],
+        start_index: int = 0,
+    ) -> dict[str, pd.DataFrame]:
+        """
+        Analyze multiple molecular formulas.
+
+        Args:
+            molecular_formulas: list of molecular formulas to analyze.
+            start_index: Starting index for SMILES references in the dataset.
+
+        Returns:
+            Dictionary mapping each formula to its result DataFrame.
+        """
+        results_dict = {}
+        for i, formula in enumerate(tqdm(molecular_formulas, desc="Processing formulas")):
+            logger.info(f"Processing formula {i + 1}/{len(molecular_formulas)}: {formula}")
+            current_smiles_index = start_index + i
+            result_df = self.process_molecular_formula(
+                molecular_formula=formula,
+                smiles_index=current_smiles_index,
+            )
+            results_dict[formula] = result_df
+
+        return results_dict
+
+    def find_best_matches(
+        self,
+        results_df: pd.DataFrame,
+        similarity_threshold: float = 0.8,
+        max_results: int = 10,
+        sort_by: str = "similarity",
+    ) -> pd.DataFrame:
+        """
+        Find the best matching structures from results.
+
+        Args:
+            results_df: DataFrame with similarity results from `process_molecular_formula`.
+            similarity_threshold: Minimum 'similarity' (weighted) threshold.
+            max_results: Maximum number of results to return.
+            sort_by: Column to sort by. Common choices: "similarity",
+                     "sum_of_all_individual_similarities", "ir_similarity",
+                     "cnmr_similarity", "hnmr_similarity", or "tanimoto".
+
+        Returns:
+            DataFrame with best matches.
+        """
+        if results_df.empty:
+            logger.warning("Input results_df is empty. Returning empty DataFrame.")
+            return pd.DataFrame()
+
+        if "similarity" not in results_df.columns:
+            # Fallback: try to sort by 'sort_by' if it exists, otherwise return head
+            if sort_by in results_df.columns:
+                return results_df.sort_values(by=sort_by, ascending=False).head(max_results)
+            return results_df.head(max_results)
+
+        if sort_by not in results_df.columns:
+            logger.warning(
+                f"Sort column '{sort_by}' not found in results. Defaulting to 'similarity'. "
+                f"Available columns: {results_df.columns.tolist()}"
+            )
+            sort_by = "similarity"  # 'similarity' is confirmed to exist by now or errored above
+
+        filtered_df = results_df[results_df["similarity"] >= similarity_threshold]
+
+        if filtered_df.empty:
+            logger.info(f"No results found above similarity threshold {similarity_threshold}.")
+            return pd.DataFrame()
+
+        sorted_df = filtered_df.sort_values(by=sort_by, ascending=False)
+        return sorted_df.head(max_results)
+
+    def _filter_by_molecular_formulas(self, df: Any, molecular_formulas: list[str]) -> Any:
+        """Helper method to filter Polars or Pandas DataFrame by molecular formulas."""
+        if df is None:
+            logger.warning("DataFrame for filtering is None.")
+            # Depending on how Polars handles None, this might need to return an empty Polars DF
+            return None  # Or an empty Polars DataFrame: polars.DataFrame()
+
+        # Check for Polars DataFrame (duck typing)
+        if hasattr(df, "lazy") and callable(df.lazy) and hasattr(df, "filter"):
+            return df.filter(df["molecular_formula"].is_in(molecular_formulas))
+        elif isinstance(df, pd.DataFrame):
+            return df[df["molecular_formula"].isin(molecular_formulas)]
+        return df
 
 
+# Example usage (adjust paths as needed)
 if __name__ == "__main__":
-    cli(
-        start_index=0,
-        end_index=1001,
-        dataset_path="../3_test_set_multi_spec.pkl",
-        cnmr_embeddings_path="../7_test_set_cnmr_embeddings_large_dataset_20241016_1343.pkl",
-        ir_embeddings_path="../7_test_set_ir_embeddings_large_dataset_20241015_2306.pkl",
-        hnmr_embeddings_path="../7_hnmr_simulated_detailed_cnn_architecture_large_dataset_20241015_2321.pkl",
-        cnmr_experiment="metrics/cnmr_simulated_large_dataset_testset",
-        ir_experiment="metrics/ir_simulated_large_dataset_testset",
-        hnmr_experiment="metrics/hnmr_cnn_detailed_large_dataset",
-        folder_results="results_large_dataset_multiple_molecular_formulas_per_file",
+    # Create analyzer, e.g., only use IR and CNMR for weighted similarity
+    analyzer = SimpleMoleculeAnalyzer(
+        models_config_path="../../configs",  # Adjust if your configs are elsewhere
+        results_dir="./analysis_results_custom",
+        cache_dir="./cache_custom",
+        active_spectra=["ir", "cnmr", "hnmr"],
     )
+
+    analyzer.load_models()
+    analyzer.load_data(
+        dataset_path="../valid_dataset_20250519_1151.pkl",
+        ir_embeddings_path="../7_test_set_ir_embeddings_large_dataset_20250519_1151.pkl",
+        cnmr_embeddings_path="../7_test_set_cnmr_embeddings_large_dataset_20250519_1150.pkl",
+        hnmr_embeddings_path="../7_hnmr_simulated_detailed_cnn_architecture_large_dataset_20250519_1149.pkl",
+    )
+
+    results_df = analyzer.process_molecular_formula(smiles_index=3)

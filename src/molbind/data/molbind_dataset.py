@@ -15,7 +15,6 @@ from molbind.data.components.datasets import (
     IrDataset,
     MassSpecNegativeDataset,
     MassSpecPositiveDataset,
-    MultiSpecDataset,
     StringDataset,
     cNmrDataset,
     hNmrDataset,
@@ -63,26 +62,17 @@ class MolBindDataset:
                 modality=StringModalities.SELFIES,
                 context_length=kwargs.get("context_length", 256),
             ),
-            StringModalities.IUPAC_NAME: partial(
-                self.build_string_dataset,
-                modality=StringModalities.IUPAC_NAME,
-                context_length=kwargs.get("context_length", 256),
-            ),
             StringModalities.DESCRIPTION: partial(
                 self.build_string_dataset,
                 modality=StringModalities.DESCRIPTION,
                 context_length=kwargs.get("context_length", 256),
             ),
-            NonStringModalities.GRAPH: self.build_graph_dataset,
-            NonStringModalities.STRUCTURE: self.build_3D_coordinates_dataset,
             NonStringModalities.FINGERPRINT: self.build_fp_dataset,
-            NonStringModalities.IMAGE: self.build_image_dataset,
             NonStringModalities.C_NMR: self.build_c_nmr_dataset,
             NonStringModalities.H_NMR: self.build_h_nmr_dataset,
             NonStringModalities.IR: self.build_ir_dataset,
             NonStringModalities.MASS_SPEC_POSITIVE: self.build_mass_spec_positive_dataset,
             NonStringModalities.MASS_SPEC_NEGATIVE: self.build_mass_spec_negative_dataset,
-            NonStringModalities.MULTI_SPEC: self.build_multi_spec_dataset,
             NonStringModalities.H_NMR_CNN: self.build_hnmr_cnn_dataset,
         }
         self.data = data.reset_index(drop=True)
@@ -158,15 +148,6 @@ class MolBindDataset:
             data=h_nmr_data[modality].to_list(),
             central_modality=self.central_modality,
             central_modality_data=self._handle_central_modality_data(h_nmr_data),
-        )
-
-    def build_multi_spec_dataset(self) -> MultiSpecDataset:
-        modality = "multi_spec"
-        multi_spec_data = self.data[[self.central_modality, modality]].dropna()
-        return MultiSpecDataset(
-            data=multi_spec_data[modality].to_list(),
-            central_modality=self.central_modality,
-            central_modality_data=self._handle_central_modality_data(multi_spec_data),
         )
 
     def build_hnmr_cnn_dataset(self) -> hNmrDataset:
