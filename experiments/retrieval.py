@@ -16,6 +16,7 @@ from molbind.data.datamodule import MolBindDataModule
 from molbind.data.molbind_dataset import MolBindDataset
 from molbind.metrics.retrieval import full_database_retrieval
 from molbind.models.lightning_module import MolBindModule
+from molbind.utils.utils import HANDLERS as handlers
 
 load_dotenv()
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
@@ -35,19 +36,10 @@ def embed(config: DictConfig):
     # extract format of dataset file
     data_format = Path(config.data.dataset_path).suffix
 
-    handlers = {
-        ".csv": pd.read_csv,
-        ".pickle": pd.read_pickle,
-        ".pkl": pd.read_pickle,
-        ".parquet": pd.read_parquet,
-    }
-
     try:
         shuffled_data = handlers[data_format](config.data.dataset_path)
     except KeyError:
         logger.error(f"Format {data_format} not supported")
-
-    shuffled_data["h_nmr_cnn"] = shuffled_data["h_nmr"]
 
     # Get the total length of the dataset
     dataset_length = len(shuffled_data)

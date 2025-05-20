@@ -214,16 +214,13 @@ class hNmrDataset(Dataset):
         self,
         data: list[list[float]],
         vec_len: int = 512,
-        architecture: str = "mlp",
+        architecture: str = "cnn",
         **kwargs,
     ) -> None:
         self.h_nmr = data
         self.vec_len = vec_len
         self.central_modality = kwargs["central_modality"]
-        if architecture == "cnn":
-            self.other_modality = "h_nmr_cnn"
-        else:
-            self.other_modality = "h_nmr"
+        self.other_modality = "h_nmr"
         self.central_modality_data = kwargs["central_modality_data"]
         self.architecture = architecture
 

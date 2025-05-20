@@ -63,8 +63,6 @@ def train_molbind(config: DictConfig):
         logger.error(f"Format {data_format} not supported")
     # Shuffling the data with a specified fraction and seed
     shuffled_data = data.sample(frac=config.data.fraction_data, random_state=config.data.seed)
-    # copy h_nmr to h_nmr_cnn column
-    shuffled_data["h_nmr_cnn"] = shuffled_data["h_nmr"]
     # Get the total length of the dataset
     dataset_length = len(shuffled_data)
 

@@ -1,6 +1,14 @@
 from typing import Any
 
+import pandas as pd
 import torch
+
+HANDLERS = {
+    ".csv": pd.read_csv,
+    ".pickle": pd.read_pickle,
+    ".pkl": pd.read_pickle,
+    ".parquet": pd.read_parquet,
+}
 
 
 def rename_keys_with_prefix(d: dict, prefix: str = "model.") -> dict:
