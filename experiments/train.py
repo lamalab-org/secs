@@ -4,7 +4,6 @@ import re
 from pathlib import Path
 
 import hydra
-import pandas as pd
 import pytorch_lightning as L
 import rootutils
 import torch
@@ -20,6 +19,7 @@ from pytorch_lightning.strategies.ddp import DDPStrategy
 from molbind.data.datamodule import MolBindDataModule
 from molbind.data.molbind_dataset import MolBindDataset
 from molbind.models.lightning_module import MolBindModule
+from molbind.utils.utils import HANDLERS as handlers
 
 load_dotenv()
 
@@ -50,12 +50,6 @@ def train_molbind(config: DictConfig):
     world_size = torch.cuda.device_count()
     # extract format of dataset file
     data_format = Path(config.data.dataset_path).suffix
-    handlers = {
-        ".csv": pd.read_csv,
-        ".pickle": pd.read_pickle,
-        ".pkl": pd.read_pickle,
-        ".parquet": pd.read_parquet,
-    }
     # load and handle the data
     try:
         data = handlers[data_format](config.data.dataset_path)
@@ -203,26 +197,6 @@ def main(config: DictConfig):
     train_molbind(config)
 
 
-def patch_lightning_slurm_master_addr():
-    # Quit if we're not on a Jülich machine.
-    if os.getenv("SYSTEMNAME", "") not in [
-        "juwelsbooster",
-        "juwels",
-        "jurecadc",
-    ]:
-        return
-
-    old_resolver = SLURMEnvironment.resolve_root_node_address
-
-    def new_resolver(nodes):
-        # Append an i" for communication over InfiniBand.
-        return old_resolver(nodes) + "i"
-
-    SLURMEnvironment.__old_resolve_root_node_address = old_resolver
-    SLURMEnvironment.resolve_root_node_address = new_resolver
-
-
 if __name__ == "__main__":
-    patch_lightning_slurm_master_addr()
     seed_everything(42)
     main()
