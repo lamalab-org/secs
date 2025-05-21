@@ -13,7 +13,6 @@ from omegaconf import DictConfig
 from pytorch_lightning import seed_everything
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
-from pytorch_lightning.plugins.environments import SLURMEnvironment
 from pytorch_lightning.strategies.ddp import DDPStrategy
 
 from molbind.data.datamodule import MolBindDataModule
@@ -116,7 +115,7 @@ def train_molbind(config: DictConfig):
         num_nodes=config.trainer.num_nodes,
         devices=world_size if world_size > 1 else "auto",
         strategy=DDPStrategy(find_unused_parameters=True) if world_size > 1 else "auto",
-        gradient_clip_val=0.5,
+        gradient_clip_val=2.0,
         precision=config.trainer.precision,
         deterministic=True,
     )
