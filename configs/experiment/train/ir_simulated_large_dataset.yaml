@@ -19,7 +19,7 @@ data:
   modalities_to_read:
     - ir
   batch_size: 128
-  dataset_path: "${paths.data_dir}/spectra_dataset_0_40_45_end_reduced.parquet"
+  dataset_path: jablonkagroup/spectral-dataset
 
 trainer:
   num_nodes: 1

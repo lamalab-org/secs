@@ -7,6 +7,7 @@ import hydra
 import pytorch_lightning as L
 import rootutils
 import torch
+from datasets import load_dataset
 from dotenv import load_dotenv
 from loguru import logger
 from omegaconf import DictConfig
@@ -18,7 +19,6 @@ from pytorch_lightning.strategies.ddp import DDPStrategy
 from molbind.data.datamodule import MolBindDataModule
 from molbind.data.molbind_dataset import MolBindDataset
 from molbind.models.lightning_module import MolBindModule
-from molbind.utils.utils import HANDLERS as handlers
 
 load_dotenv()
 
@@ -47,21 +47,17 @@ def train_molbind(config: DictConfig):
     )
     # define the number of GPUs available for the dataloaders
     world_size = torch.cuda.device_count()
-    # extract format of dataset file
-    data_format = Path(config.data.dataset_path).suffix
     # load and handle the data
-    try:
-        data = handlers[data_format](config.data.dataset_path)
-    except KeyError:
-        logger.error(f"Format {data_format} not supported")
+    data = load_dataset(config.data.dataset_path)
+    features = [*config.data.modalities, config.data.central_modality]
+    train_data = data["train"].to_pandas()[features]
+    logger.info(f"Train data shape: {train_data.shape}")
+    valid_data = data["val"].to_pandas()[features]
+    logger.info(f"Validation data shape: {valid_data.shape}")
     # Shuffling the data with a specified fraction and seed
-    shuffled_data = data.sample(frac=config.data.fraction_data, random_state=config.data.seed)
-    # Get the total length of the dataset
-    dataset_length = len(shuffled_data)
+    train_shuffled_data = train_data.sample(frac=1, random_state=42).reset_index(drop=True)
+    valid_shuffled_data = valid_data.copy()
 
-    # Split the data into validation and training datasets
-    valid_shuffled_data = shuffled_data.tail(int(config.data.valid_frac * dataset_length))
-    train_shuffled_data = shuffled_data.head(int(config.data.train_frac * dataset_length))
     # set up the dataloaders
     train_dataloader, valid_dataloader = (
         MolBindDataset(
@@ -192,7 +188,7 @@ def init_distributed_mode(port=12354):
 
 @hydra.main(version_base="1.3", config_path="../configs", config_name="molbind_config.yaml")
 def main(config: DictConfig):
-    init_distributed_mode(12354)
+    # init_distributed_mode(12354)
     train_molbind(config)
 
 

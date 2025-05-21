@@ -13,20 +13,20 @@ model:
       freeze_encoder: False
 
   projection_heads:
-    h_nmr_cnn:
+    h_nmr:
       dims: [512, "${model.embedding_size}"]
       activation: LeakyReLU
-    h_nmr_cnn_freeze: False
-    h_nmr_cnn_is_on: True
+    h_nmr_freeze: False
+    h_nmr_is_on: True
     smiles_freeze: False
 
 data:
   modalities:
-    - h_nmr_cnn
+    - h_nmr
   modalities_to_read:
-    - h_nmr_cnn
+    - h_nmr
   batch_size: 128
-  dataset_path: "${paths.data_dir}/spectra_dataset_0_40_45_end_reduced.parquet"
+  dataset_path: jablonkagroup/spectral-dataset
 
 trainer:
   num_nodes: 1

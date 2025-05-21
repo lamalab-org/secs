@@ -19,10 +19,10 @@ data:
   modalities_to_read:
     - c_nmr
   batch_size: 128
-  dataset_path: "${paths.data_dir}/spectra_dataset_0_40_45_end_reduced.parquet"
+  dataset_path: jablonkagroup/spectral-dataset
 
 trainer:
   num_nodes: 1
-  gpus_per_node: 4
+  gpus_per_node: 6
 
 run_id: "cnmr_simulated_large_dataset"

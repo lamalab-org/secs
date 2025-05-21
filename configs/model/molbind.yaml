@@ -3,40 +3,6 @@ encoders:
   smiles:
     pretrained: True
     freeze_encoder: True
-  selfies:
-    pretrained: True
-    freeze_encoder: True
-  graph:
-    ckpt_path: "${paths.pretrained_models_dir}/graph/model.pth"
-    drop_ratio: 0
-    num_layer: 5
-    feat_dim: 512
-    pool: "mean"
-    emb_dim: 300
-    # freeze_encoder: True
-  fingerprint:
-    ckpt_path: "${paths.pretrained_models_dir}/fingerprint/morgan_frag_vae.ckpt"
-    input_dims: [2143, 1024, 768]
-    output_dims: [768, 1024, 2143]
-    latent_dim: 512
-    # freeze_encoder: True
-  structure:
-    ckpt_path: "${paths.pretrained_models_dir}/structure/dimenet.ckpt"
-    hidden_channels: 128
-    out_channels: 1
-    num_blocks: 6
-    num_bilinear: 8
-    num_spherical: 7
-    num_radial: 6
-    cutoff: 5.0
-    envelope_exponent: 5
-    num_before_skip: 1
-    num_after_skip: 2
-    num_output_layers: 3
-    # freeze_encoder: True
-  image:
-    ckpt_path: "${paths.pretrained_models_dir}/image/img2mol.ckpt"
-    # freeze_encoder: True
   c_nmr:
     # ckpt_path: null
     input_dims: [512, 256, 256]
@@ -55,59 +21,22 @@ encoders:
     output_dims: [256, 512, 1024]
     latent_dim: 256
     freeze_encoder: False
-  h_nmr:
-    # ckpt_path: null
-    input_dims: [512, 256, 256, 256, 128]
-    output_dims: [128, 256, 256, 256, 512]
-    latent_dim: 128
-    freeze_encoder: False
-  multi_spec:
-    input_dims: [2624, 1024, 512]
-    output_dims: [512, 1024, 2624]
-    latent_dim: 512
-    freeze_encoder: False
 
 embedding_size: 512
 projection_heads:
   # this determines whether the projection head is added to the model
   smiles_is_on: True
-  selfies_is_on: True
-  graph_is_on: True
-  fingerprint_is_on: True
-  structure_is_on: True
-  image_is_on: True
   c_nmr_is_on: True
   ir_is_on: True
-  multi_spec_is_on: True
-  mass_spec_negative_is_on: True
-  mass_spec_positive_is_on: True
   h_nmr_is_on: True
   # freeze projection heads
   c_nmr_freeze: True
   ir_freeze: True
   smiles_freeze: True
-  selfies_freeze: True
-  multi_spec_freeze: False
-  mass_spec_positive_freeze: False
   h_nmr_freeze: False
   # default projection heads for each modality
   smiles:
     dims: [768, "${model.embedding_size}"]
-    activation: LeakyReLU
-  selfies:
-    dims: [768, "${model.embedding_size}"]
-    activation: LeakyReLU
-  graph:
-    dims: [256, "${model.embedding_size}"]
-    activation: LeakyReLU
-  fingerprint:
-    dims: [768, "${model.embedding_size}"]
-    activation: LeakyReLU
-  structure:
-    dims: [128, "${model.embedding_size}"]
-    activation: LeakyReLU
-  image:
-    dims: [512, "${model.embedding_size}"]
     activation: LeakyReLU
   c_nmr:
     dims: [256, "${model.embedding_size}"]
