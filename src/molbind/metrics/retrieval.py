@@ -3,8 +3,6 @@ import numpy as np
 import pandas as pd
 from loguru import logger
 
-# import chromadb # No longer needed
-
 
 # Helper function for L2 normalization (important for cosine similarity in Faiss)
 def normalize_embeddings(embeddings_np: np.ndarray) -> np.ndarray:

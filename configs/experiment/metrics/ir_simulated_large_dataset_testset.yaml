@@ -16,7 +16,9 @@ data:
   batch_size: 1024
   dataset_path: "${paths.data_dir}/simulated_spectra_test_set.parquet"
 
-ckpt_path: "${paths.checkpoints_dir}/ir_simulated_large_dataset_20241015_2122/best_model.ckpt"
+# ckpt_path: "${paths.checkpoints_dir}/ir_simulated_large_dataset_20241015_2122/best_model.ckpt"
+
+ckpt_path: null
 
 trainer:
   num_nodes: 1

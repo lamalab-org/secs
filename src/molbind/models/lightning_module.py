@@ -15,7 +15,7 @@ from torchmetrics.retrieval import (
     RetrievalRecall,
 )
 
-from molbind.models import MolBind
+from molbind.models.model import MolBind
 from molbind.utils import rename_keys_with_prefix, select_device
 
 

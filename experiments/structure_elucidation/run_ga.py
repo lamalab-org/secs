@@ -1,3 +1,5 @@
+# run_ga.py
+
 import json
 import pickle as pkl
 import random
@@ -6,384 +8,271 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import rootutils
 import torch
-from gafuncs import CachedBatchFunction  # Assuming gafuncs is a custom module
+from gafuncs import CachedBatchFunction  # Assuming this custom module is available
+
+# Use the SAME helper and SimpleMoleculeAnalyzer's PKL config definition
+from generate_molformula_files import SimpleMoleculeAnalyzer, get_1d_target_embedding_from_raw_batches_pkl
 from loguru import logger
 from mol_ga.graph_ga.gen_candidates import graph_ga_blended_generation
 from mol_ga.preconfigured_gas import default_ga
-from prune_sim import read_weights, tanimoto_similarity, tokenize_string  # Assuming prune_sim is a custom module
-from rdkit import Chem
-from rdkit.Chem.rdMolDescriptors import CalcExactMolWt
-from torch.nn.functional import cosine_similarity
+from prune_sim import gpu_encode_smiles_variable, load_models_dict, tanimoto_similarity
+from rdkit import Chem  # For atom counts
+from torch.nn.functional import cosine_similarity as torch_cosine_similarity
 from tqdm import tqdm
 
-from molbind.data.analysis import aggregate_embeddings
-
-# Assuming molbind.utils.spec2struct is available for smiles_to_molecular_formula
-from molbind.utils.spec2struct import smiles_to_molecular_formula
+rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 
 
-def encode_smiles(individual, ir_model, cnmr_model, hnmr_model):
-    input_ids, attention_mask = tokenize_string(individual, "smiles")
-    input_ids = input_ids.to("cuda")
-    attention_mask = attention_mask.to("cuda")
-
-    with torch.inference_mode():
-        ir_embedding = ir_model.encode_modality((input_ids, attention_mask), modality="smiles")
-        cnmr_embedding = cnmr_model.encode_modality((input_ids, attention_mask), modality="smiles")
-        hnmr_embedding = hnmr_model.encode_modality((input_ids, attention_mask), modality="smiles")
-
-    return ir_embedding, cnmr_embedding, hnmr_embedding
-
-
-def gpu_encode_smiles(individuals, ir_model, cnmr_model, hnmr_model):
-    # split into chunks of 128
-    chunk_size = 8192  # Consider making this configurable or smaller if OOM occurs
-    ir_embeddings = []
-    cnmr_embeddings = []
-    hnmr_embeddings = []
-    if not individuals:  # Handle empty list
-        return torch.empty(0), torch.empty(0), torch.empty(0)
-
-    chunk_range = [*list(range(0, len(individuals), chunk_size)), len(individuals)]
-    for i, j in enumerate(tqdm(chunk_range[:-1], desc="Encoding SMILES")):
-        ir_embedding, cnmr_embedding, hnmr_embedding = encode_smiles(
-            individuals[j : chunk_range[i + 1]],
-            ir_model,
-            cnmr_model,
-            hnmr_model,
-        )
-        torch.cuda.empty_cache()
-        ir_embeddings.append(ir_embedding)
-        cnmr_embeddings.append(cnmr_embedding)
-        hnmr_embeddings.append(hnmr_embedding)
-
-    if not ir_embeddings:  # Handle case where individuals length < chunk_size or empty
-        return torch.empty(0, device="cuda"), torch.empty(0, device="cuda"), torch.empty(0, device="cuda")
-
-    ir_embeddings = torch.cat(ir_embeddings, dim=0)
-    cnmr_embeddings = torch.cat(cnmr_embeddings, dim=0)
-    hnmr_embeddings = torch.cat(hnmr_embeddings, dim=0)
-    return ir_embeddings, cnmr_embeddings, hnmr_embeddings
-
-
-def compute_individual_atom_counts(individual: str):
+def compute_individual_atom_counts(individual: str) -> dict | None:
     mol = Chem.MolFromSmiles(individual)
-    if mol is None:
-        logger.warning(f"Could not parse SMILES: {individual} in compute_individual_atom_counts")
+    if not mol:
+        logger.warning(f"Invalid SMILES for atom count: {individual}")
         return None
-    mol = Chem.AddHs(mol)  # Add hydrogens explicitly
-    atom_counts = {}
+    mol = Chem.AddHs(mol)
+    counts = {}
     for atom in mol.GetAtoms():
-        atom_counts[atom.GetSymbol()] = atom_counts.get(atom.GetSymbol(), 0) + 1
-    return atom_counts
+        counts[atom.GetSymbol()] = counts.get(atom.GetSymbol(), 0) + 1
+    return counts
 
 
-def binary_vector_numpy(length):
-    generator = np.random.default_rng(seed=42)
-    return generator.integers(1, 3, size=length)
-
-
-def reward_function_molecular_formula(
-    individuals: list[str],
-    ir_model: torch.nn.Module,
-    cnmr_model: torch.nn.Module,
-    hnmr_model: torch.nn.Module,
-    id_spectra: int,  # Changed: This will now be an integer index
-    atom_counts_original_smiles: dict,
-    cnmr_embeddings_path: str,
-    ir_embeddings_path: str,
-    hnmr_embeddings_path: str,
-    dataset_path: str,
-):
-    if not individuals:  # Handle empty individuals list
+def reward_function_ga(individuals: list[str], ga_models: dict, target_1D_embs: dict, atom_counts_orig: dict):
+    if not individuals:
         return np.array([])
+    cand_smiles_embs = gpu_encode_smiles_variable(individuals, ga_models)  # Dict: mod -> (N,D)
 
-    ir_embedding, cnmr_embedding, hnmr_embedding = gpu_encode_smiles(individuals, ir_model, cnmr_model, hnmr_model)
+    mf_loss = np.zeros(len(individuals))
+    total_orig_atoms = sum(atom_counts_orig.values()) if atom_counts_orig else 1.0
+    if total_orig_atoms == 0:
+        total_orig_atoms = 1.0
 
-    spectra_ir_embedding, spectra_cnmr_embedding, spectra_hnmr_embedding = find_spectra_embeddings(
-        id_spectra,  # Pass the integer index
-        ir_embeddings_path,
-        cnmr_embeddings_path,
-        hnmr_embeddings_path,
-        dataset_path,
-    )
+    for idx, smi in enumerate(individuals):
+        counts_i = compute_individual_atom_counts(smi)
+        if not counts_i:
+            mf_loss[idx] = -1000.0
+            continue
+        penalty = sum(abs(counts_i.get(s, 0) - atom_counts_orig.get(s, 0)) for s in set(counts_i) | set(atom_counts_orig))
+        mf_loss[idx] = -penalty / total_orig_atoms
 
-    molecular_formula_loss = np.zeros(len(individuals))
-    nr_of_atoms_in_original_smiles = sum(atom_counts_original_smiles.values())
-    if nr_of_atoms_in_original_smiles == 0:  # Avoid division by zero
-        logger.warning("Number of atoms in original SMILES is zero.")
-        # Handle this case appropriately, e.g., by setting loss to a large negative value or skipping this penalty
-        nr_of_atoms_in_original_smiles = 1  # Avoid division by zero, effectively making loss 0 if counts are also 0
+    scores_all_mods_np, num_ok_mods = [], 0
+    for spec, target_emb_1D_gpu in target_1D_embs.items():  # target_emb is 1D (D,)
+        if spec not in cand_smiles_embs or cand_smiles_embs[spec] is None or cand_smiles_embs[spec].nelement() == 0:
+            continue  # No candidate embeddings for this modality
 
-    for individual_idx, individual in enumerate(individuals):
-        atom_counts_individual = compute_individual_atom_counts(individual)
-        molecular_formula_loss_per_individual = 0
-        if atom_counts_individual is None:
-            # Penalize invalid SMILES heavily
-            molecular_formula_loss[individual_idx] = -100  # Large penalty
+        cand_embs_mod_gpu = cand_smiles_embs[spec]  # (N, D_mod)
+
+        if target_emb_1D_gpu.ndim != 1 or cand_embs_mod_gpu.shape[1] != target_emb_1D_gpu.shape[0]:
+            logger.warning(
+                f"Reward: Dim mismatch for {spec}. Target: {target_emb_1D_gpu.shape}, Cand: {cand_embs_mod_gpu.shape}. Skipping."
+            )
             continue
 
-        all_atoms = set(atom_counts_individual.keys()) | set(atom_counts_original_smiles.keys())
-        for atom in all_atoms:
-            molecular_formula_loss_per_individual += abs(
-                atom_counts_individual.get(atom, 0) - atom_counts_original_smiles.get(atom, 0)
-            )
+        sims_gpu = torch_cosine_similarity(
+            target_emb_1D_gpu.unsqueeze(0).to("cuda"), cand_embs_mod_gpu.to("cuda"), dim=1
+        )  # (1,D) vs (N,D) -> (N,)
+        scores_all_mods_np.append(sims_gpu.cpu().numpy())
+        num_ok_mods += 1
 
-        if nr_of_atoms_in_original_smiles > 0:
-            molecular_formula_loss[individual_idx] = -molecular_formula_loss_per_individual / nr_of_atoms_in_original_smiles
-        else:  # if original smiles had 0 atoms (edge case)
-            molecular_formula_loss[individual_idx] = -molecular_formula_loss_per_individual
+    if num_ok_mods == 0:
+        return mf_loss  # Only MF penalty if no spectral scores
 
-    ir_cosine_similarity = cosine_similarity(ir_embedding, spectra_ir_embedding.unsqueeze(0), dim=1).cpu().numpy()
-    cnmr_cosine_similarity = cosine_similarity(cnmr_embedding, spectra_cnmr_embedding.unsqueeze(0), dim=1).cpu().numpy()
-    hnmr_cosine_similarity = cosine_similarity(hnmr_embedding, spectra_hnmr_embedding.unsqueeze(0), dim=1).cpu().numpy()
-
-    sum_cosine_similarity = ir_cosine_similarity + cnmr_cosine_similarity + hnmr_cosine_similarity
-
-    return sum_cosine_similarity / 3 + molecular_formula_loss
+    avg_cosine_sim = np.mean(np.array(scores_all_mods_np), axis=0)
+    final_rewards = avg_cosine_sim + mf_loss
+    return final_rewards
 
 
-def find_spectra_embeddings(
-    index_of_smiles_to_test: int,  # Changed: This is now an integer index
-    ir_embeddings_path: str,
-    cnmr_embeddings_path: str,
-    hnmr_embeddings_path: str,
-    dataset_path: str,
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:  # Corrected return type
-    # index_of_smiles_to_test = int(index_of_smiles_to_test) # REMOVED: No longer needed, it's already an int
-
-    ir_embeddings_df = pd.read_pickle(ir_embeddings_path)
-    c_nmr_embeddings_df = pd.read_pickle(cnmr_embeddings_path)
-    h_nmr_embeddings_df = pd.read_pickle(hnmr_embeddings_path)
-
-    dataset_df = pd.read_pickle(dataset_path)
-    list_of_smiles = dataset_df.smiles.to_list()
-
-    if not (0 <= index_of_smiles_to_test < len(list_of_smiles)):
-        raise IndexError(
-            f"index_of_smiles_to_test {index_of_smiles_to_test} is out of bounds for dataset size {len(list_of_smiles)}"
-        )
-
-    original_smiles = list_of_smiles[index_of_smiles_to_test]
-    logger.debug(f"Original smiles for index {index_of_smiles_to_test}: {original_smiles}")
-
-    # Assuming aggregate_embeddings returns a dict where keys are modalities
-    # and values are lists/arrays of embeddings, indexed corresponding to the original dataset.
-    aggregated_ir_embeddings = aggregate_embeddings(
-        embeddings=ir_embeddings_df, modalities=["smiles", "ir"], central_modality="smiles"
-    )
-    aggregated_c_nmr_embeddings = aggregate_embeddings(
-        embeddings=c_nmr_embeddings_df,
-        modalities=["smiles", "c_nmr"],
-        central_modality="smiles",
-    )
-    aggregated_h_nmr_embeddings = aggregate_embeddings(
-        embeddings=h_nmr_embeddings_df,
-        modalities=["smiles", "h_nmr_cnn"],
-        central_modality="smiles",
-    )
-
-    spectra_ir_embedding = aggregated_ir_embeddings["ir"][index_of_smiles_to_test].to("cuda")
-    spectra_cnmr_embedding = aggregated_c_nmr_embeddings["c_nmr"][index_of_smiles_to_test].to("cuda")
-    spectra_hnmr_embedding = aggregated_h_nmr_embeddings["h_nmr_cnn"][index_of_smiles_to_test].to("cuda")
-
-    return spectra_ir_embedding, spectra_cnmr_embedding, spectra_hnmr_embedding
-
-
-def load_models(configs_path: str, ir_experiment: str, cnmr_experiment: str, hnmr_experiment: str):
-    from hydra import compose, initialize
-
-    with initialize(version_base="1.3", config_path=configs_path):
-        ir_config = compose(config_name="molbind_config", overrides=[f"experiment={ir_experiment}"])
-    with initialize(version_base="1.3", config_path=configs_path):
-        hnmr_config = compose(
-            config_name="molbind_config",
-            overrides=[f"experiment={hnmr_experiment}"],
-        )
-    with initialize(version_base="1.3", config_path=configs_path):
-        cnmr_config = compose(
-            config_name="molbind_config",
-            overrides=[f"experiment={cnmr_experiment}"],
-        )
-    ir_model = read_weights(ir_config)
-    cnmr_model = read_weights(cnmr_config)
-    hnmr_model = read_weights(hnmr_config)
-    return ir_model, cnmr_model, hnmr_model
-
-
-def calculate_molar_mass(smiles):
-    mol = Chem.MolFromSmiles(smiles)
-    if mol is None:
-        return 0.0  # Handle invalid SMILES
-    return CalcExactMolWt(mol)
-
-
-def main(
-    result_df: pd.DataFrame,
-    ir_model: torch.nn.Module,
-    cnmr_model: torch.nn.Module,
-    hnmr_model: torch.nn.Module,
-    rng: random.Random,
-    target_spectra_idx: int,  # Added: integer index of the target spectra
-    cache_dir="cache_ga",
-    init_population_size=512,
-    number_of_generations=20,
+def run_ga_instance(
+    initial_df: pd.DataFrame,
+    models: dict,
+    seed_val: int,
+    idx: int,
+    orig_smi: str,
+    atom_counts_orig: dict,
+    target_1D_embs: dict,
+    out_dir: Path,
+    init_pop: int,
+    gens: int,
+    offspring: int,
+    pop_ga: int,
 ):
-    read_file_2_test_set = pd.read_pickle("../valid_dataset_20250519_1151.pkl")
-    all_smiles_list = read_file_2_test_set.smiles.to_list()
-
-    if not (0 <= target_spectra_idx < len(all_smiles_list)):
-        logger.error(f"Target spectra index {target_spectra_idx} is out of bounds. Skipping.")
-        return None
-
-    original_smiles = all_smiles_list[target_spectra_idx]
-    logger.info(f"Target original SMILES for GA (index {target_spectra_idx}): {original_smiles}")
-
-    # Filter out the original smiles from the initial population if it's present
-    file_with_results = result_df[result_df["canonical_smiles"] != original_smiles]
-    # The original code used tanimoto == 1, which might be more robust if canonical_smiles can vary.
-    file_with_results = file_with_results[file_with_results["tanimoto"] != 1]
-
-    current_init_pop_size = len(file_with_results) if len(file_with_results) < init_population_size else init_population_size
-
-    top_n = (
-        file_with_results.sort_values(by="sum_of_all_individual_similarities", ascending=False)
-        .head(current_init_pop_size)["canonical_smiles"]
-        .to_list()
+    sort_key = next(
+        (
+            k
+            for k in ["sum_of_all_individual_similarities", "similarity"]
+            if k in initial_df.columns and not initial_df[k].isnull().all()
+        ),
+        None,
     )
-
-    atom_counts_orig = compute_individual_atom_counts(original_smiles)
-    init_reward = partial(
-        reward_function_molecular_formula,
-        ir_model=ir_model,
-        cnmr_model=cnmr_model,
-        hnmr_model=hnmr_model,
-        id_spectra=target_spectra_idx,
-        atom_counts_original_smiles=atom_counts_orig,
-        ir_embeddings_path="../7_test_set_ir_embeddings_large_dataset_20250519_1151.pkl",
-        cnmr_embeddings_path="../7_test_set_cnmr_embeddings_large_dataset_20250519_1150.pkl",
-        hnmr_embeddings_path="../7_hnmr_simulated_detailed_cnn_architecture_large_dataset_20250519_1149.pkl",
-        dataset_path="../valid_dataset_20250519_1151.pkl",
+    top_n_smiles = (
+        initial_df.sort_values(by=sort_key, ascending=False)["canonical_smiles"].head(init_pop).tolist()
+        if sort_key
+        else initial_df["canonical_smiles"].head(init_pop).tolist()
     )
+    if not top_n_smiles:
+        logger.warning(f"GA: No initial population for idx {idx}.")
+        return
 
-    ga_results = default_ga(
-        starting_population_smiles=top_n,
-        scoring_function=CachedBatchFunction(init_reward),  # Ensure CachedBatchFunction is compatible
-        max_generations=number_of_generations,
-        offspring_size=2048,  # Consider making these configurable
-        population_size=2048,
-        logger=logger,
-        rng=rng,
+    reward_f = partial(reward_function_ga, ga_models=models, target_1D_embs=target_1D_embs, atom_counts_orig=atom_counts_orig)
+
+    # Ensure logger for mol-ga is the global loguru logger or a compatible one
+    ga_logger = logger
+
+    ga_res = default_ga(
+        starting_population_smiles=top_n_smiles,
+        scoring_function=CachedBatchFunction(reward_f, original_smiles=orig_smi),
+        max_generations=gens,
+        offspring_size=offspring,
+        population_size=pop_ga,
+        logger=ga_logger,
+        rng=random.Random(seed_val),
         offspring_gen_func=partial(graph_ga_blended_generation, frac_graph_ga_mutate=0.1),
     )
 
-    best_score, best_individual_smiles = max(ga_results.population)
+    best_sc, best_smi = max(ga_res.population, key=lambda x: x[0]) if ga_res.population else (-float("inf"), "N/A")
+    logger.info(f"GA Best for idx {idx}: {best_smi} (score {best_sc:.4f})")
 
-    logger.info(f"Best individual: {best_individual_smiles} with score {best_score}")
-    logger.info(f"Original smiles: {original_smiles}")
-
-    cache_dict = {
-        "initial_population": list(top_n),
-        "final_population": {v: np.float64(k) for k, v in ga_results.population},  # Store as SMILES: score
-        "best_individual_smiles": best_individual_smiles,
-        "best_score": np.float64(best_score),
-        "original_smiles": original_smiles,
-        "tanimoto_similarity_to_original": np.float64(tanimoto_similarity(best_individual_smiles, original_smiles))
-        if best_individual_smiles != "N/A"
-        else 0.0,
+    summary_data = {
+        "target_idx": idx,
+        "original_smiles": orig_smi,
+        "best_ga_smiles": best_smi,
+        "best_ga_score": float(best_sc),
+        "tanimoto_to_original": tanimoto_similarity(best_smi, orig_smi) if best_smi != "N/A" else 0.0,
+        "ga_modalities_scored": list(target_1D_embs.keys()),
+        "initial_population_size": len(top_n_smiles),
     }
-
-    output_path = Path(cache_dir)
-    output_path.mkdir(parents=True, exist_ok=True)
-
-    with (output_path / f"{target_spectra_idx}.json").open("w") as f:
-        json.dump(cache_dict, f, indent=4)
-    with (output_path / f"{target_spectra_idx}.pkl").open("wb") as f:
-        pkl.dump(ga_results.gen_info, f, protocol=pkl.HIGHEST_PROTOCOL)
-
-    return ga_results
-
-
-def query_enamine_vector_db(vector_db, vector, top_k=1):
-    return vector_db.search(collection_name="enamine_db_last", query_vector=vector, limit=top_k)
+    with (out_dir / f"{idx}_ga_summary.json").open("w") as f:
+        json.dump(summary_data, f, indent=2)
+    with (out_dir / f"{idx}_ga_details.pkl").open("wb") as f:
+        pkl.dump(ga_res, f)  # Save full GA results object
+    return ga_res
 
 
 def cli(
     start_range: int,
     end_range: int,
     seed: int,
-    cache_dir_base="FINAL_RESULTS",
-    init_population_size=512,
-    ir_experiment="metrics/ir_simulated_large_dataset_testset",
-    cnmr_experiment="metrics/cnmr_simulated_large_dataset_testset",
-    hnmr_experiment="metrics/hnmr_cnn_detailed_large_dataset_testset",
-    generations: int = 20,
+    configs_path: str = "../../configs",
+    dataset_path: str = "../valid_dataset_20250522_1801.pkl",
+    # GA: model experiments & RAW target embedding file paths (List[BATCH Dict])
+    ga_ir_exp: str | None = None,
+    ga_cnmr_exp: str | None = None,
+    ga_hnmr_exp: str | None = "experimental/hnmr",
+    ga_ir_raw_emb_path: str | None = None,
+    ga_cnmr_raw_emb_path: str | None = None,
+    ga_hnmr_raw_emb_path: str | None = "../luc_nmrium_hnmr_10_simple_20250522_1919.pkl",
+    # Analyzer: model experiments & RAW embedding file paths
+    analyzer_ir_exp: str | None = None,
+    analyzer_cnmr_exp: str | None = None,
+    analyzer_hnmr_exp: str | None = "experimental/hnmr",
+    # GA parameters
+    init_pop_ga: int = 512,
+    gens_ga: int = 20,
+    offspring_ga: int = 2048,
+    pop_ga: int = 256,
+    base_cache_dir: str = "GA_RESULTS_V7_POLARS_DEBUG",  # Updated version
 ):
-    start_range = int(start_range)
-    end_range = int(end_range)
-    init_population_size = int(init_population_size)
+    ga_model_exps = {"ir": ga_ir_exp, "cnmr": ga_cnmr_exp, "hnmr": ga_hnmr_exp}
+    ga_models_for_scoring = load_models_dict(configs_path, ga_model_exps)
+    active_ga_model_modalities = [m for m, model in ga_models_for_scoring.items() if model]
+    if not active_ga_model_modalities:
+        logger.error("No GA models loaded. Exiting.")
+        return
+    logger.info(f"GA scoring models: {active_ga_model_modalities}")
 
-    ir_model, cnmr_model, hnmr_model = load_models(
-        "../../configs",  # Relative path, ensure it's correct from execution location
-        ir_experiment=ir_experiment,
-        cnmr_experiment=cnmr_experiment,
-        hnmr_experiment=hnmr_experiment,
+    analyzer_user_active_spectra = [m for m in SimpleMoleculeAnalyzer.ALL_SPECTRA_TYPES if locals().get(f"analyzer_{m}_exp")]
+    analyzer = SimpleMoleculeAnalyzer(
+        models_config_path=configs_path,
+        results_dir=str(Path(base_cache_dir) / "analyzer_candidates_output"),
+        cache_dir=str(Path(base_cache_dir) / "analyzer_process_cache"),
+        active_spectra=analyzer_user_active_spectra,
     )
+    analyzer.load_models(ir_experiment=analyzer_ir_exp, cnmr_experiment=analyzer_cnmr_exp, hnmr_experiment=analyzer_hnmr_exp)
+    analyzer.load_data(
+        dataset_path,
+        ir_embeddings_path=ga_ir_raw_emb_path,
+        cnmr_embeddings_path=ga_cnmr_raw_emb_path,
+        hnmr_embeddings_path=ga_hnmr_raw_emb_path,
+    )
+    if not analyzer.available_modalities:
+        logger.error("Analyzer not ready (no available modalities after loading models/data). Exiting.")
+        return
+    logger.info(f"Analyzer ready with modalities: {analyzer.available_modalities}. Summary: {analyzer.get_summary()}")
 
-    # Construct the specific cache directory for this run
-    current_run_cache_dir = Path(f"{cache_dir_base}_{init_population_size}_seed_{seed}")
-    current_run_cache_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        main_dataset_df = pd.read_pickle(dataset_path)
+    except Exception as e:
+        logger.error(f"Cannot load main dataset: {dataset_path} - {e}")
+        return
 
-    read_file_2_test_set = pd.read_pickle("../valid_dataset_20250519_1151.pkl")
-    all_smiles_in_dataset = read_file_2_test_set.smiles.to_list()
-
-    # Log molecular formulas for the range being processed
-    formulas_in_range_for_logging = []
-    for k_idx in range(start_range, end_range):
-        smiles_for_log = all_smiles_in_dataset[k_idx]
-        formulas_in_range_for_logging.append(smiles_to_molecular_formula(smiles_for_log))
-
-    for i in range(start_range, end_range):
-        results_df = analyzer.process_molecular_formula(smiles_index=i)
-        if not (0 <= i < len(all_smiles_in_dataset)):
-            logger.error(f"Index {i} is out of bounds for dataset size {len(all_smiles_in_dataset)}. Skipping.")
+    for i in range(int(start_range), int(end_range)):
+        target_idx = i
+        logger.info(f"--- GA for Target Index: {target_idx} ---")
+        if not (0 <= target_idx < len(main_dataset_df)):
+            logger.error(f"Idx {target_idx} OOB for main dataset.")
             continue
 
-        iter_rng = random.Random(seed)
+        original_smiles = main_dataset_df.smiles.iloc[target_idx]
+        atom_counts_orig = compute_individual_atom_counts(original_smiles)
+        if not atom_counts_orig:
+            logger.error(f"No atom counts for {original_smiles}. Skipping GA for this index.")
+            continue
 
-        main(
-            result_df=results_df,
-            ir_model=ir_model,
-            cnmr_model=cnmr_model,
-            hnmr_model=hnmr_model,
-            rng=iter_rng,
-            target_spectra_idx=i,  # Pass the integer index 'i'
-            init_population_size=init_population_size,
-            cache_dir=str(current_run_cache_dir),  # Pass the constructed cache_dir
-            number_of_generations=generations,
+        initial_candidates_df = analyzer.process_molecular_formula(smiles_index=target_idx)
+        if initial_candidates_df.empty:
+            logger.warning(f"No initial candidates from Analyzer for idx {target_idx}. Skipping GA for this index.")
+            continue
+
+        ga_target_1D_embs = {}
+        ga_raw_emb_paths_map = {"ir": ga_ir_raw_emb_path, "cnmr": ga_cnmr_raw_emb_path, "hnmr": ga_hnmr_raw_emb_path}
+
+        for spec_type in active_ga_model_modalities:  # Only prepare targets for which GA has a scoring model
+            raw_path = ga_raw_emb_paths_map.get(spec_type)
+            pickle_config = SimpleMoleculeAnalyzer.RAW_EMBEDDING_PKL_CONFIGS.get(spec_type)
+            if not raw_path or not pickle_config:
+                continue
+
+            model_device = "cuda" if ga_models_for_scoring[spec_type] else "cpu"
+            emb = get_1d_target_embedding_from_raw_batches_pkl(
+                raw_path, target_idx, pickle_config, len(main_dataset_df), model_device
+            )
+            if emb is not None:
+                ga_target_1D_embs[spec_type] = emb
+
+        if not ga_target_1D_embs:
+            logger.error(f"No 1D target embeddings prepared for GA reward (idx {target_idx}). Skipping GA for this index.")
+            continue
+
+        # Ensure GA models only include those for which we have a target embedding
+        final_ga_models_to_use = {m: ga_models_for_scoring[m] for m in ga_target_1D_embs if m in ga_models_for_scoring}
+        if not final_ga_models_to_use:
+            logger.error(f"No GA models align with prepared target embeddings for idx {target_idx}. Skipping GA.")
+            continue
+
+        ga_run_dir = Path(base_cache_dir) / f"idx_{target_idx}_ga_run"
+        ga_run_dir.mkdir(parents=True, exist_ok=True)
+        run_ga_instance(
+            initial_df=initial_candidates_df,
+            models=final_ga_models_to_use,
+            seed_val=seed,
+            idx=target_idx,
+            orig_smi=original_smiles,
+            atom_counts_orig=atom_counts_orig,
+            target_1D_embs=ga_target_1D_embs,
+            out_dir=ga_run_dir,
+            init_pop=init_pop_ga,
+            gens=gens_ga,
+            offspring=offspring_ga,
+            pop_ga=pop_ga,
         )
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    logger.info("All specified GA runs complete.")
 
 
 if __name__ == "__main__":
     import fire
-    from generate_molformula_files import SimpleMoleculeAnalyzer
 
-    # deactivate batch normalization in the models
-    torch.backends.cudnn.benchmark = True
-    # Create analyzer, e.g., only use IR and CNMR for weighted similarity
-    analyzer = SimpleMoleculeAnalyzer(
-        models_config_path="../../configs",  # Adjust if your configs are elsewhere
-        results_dir="./analysis_results_custom",
-        cache_dir="./cache_custom",
-        active_spectra=["ir", "cnmr", "hnmr"],
-    )
-
-    analyzer.load_models()
-    analyzer.load_data(
-        dataset_path="../valid_dataset_20250519_1151.pkl",
-        ir_embeddings_path="../7_test_set_ir_embeddings_large_dataset_20250519_1151.pkl",
-        cnmr_embeddings_path="../7_test_set_cnmr_embeddings_large_dataset_20250519_1150.pkl",
-        hnmr_embeddings_path="../7_hnmr_simulated_detailed_cnn_architecture_large_dataset_20250519_1149.pkl",
-    )
+    logger.remove()  # Remove default handler to avoid duplicate logs if any
+    logger.add(lambda msg: tqdm.write(msg, end=""), colorize=True, level="INFO")  # Log INFO and above with tqdm
     fire.Fire(cli)
