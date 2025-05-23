@@ -1,0 +1,43 @@
+# @package _global_
+defaults:
+  - override /data: molbind
+  - override /model: molbind
+  - override /trainer: gpu
+
+model:
+  embedding_size: 512
+  encoders:
+    smiles:
+      freeze_encoder: False
+    h_nmr:
+      freeze_encoder: False
+
+  projection_heads:
+    h_nmr:
+      dims: [512, "${model.embedding_size}"]
+      activation: LeakyReLU
+    h_nmr_freeze: False
+    h_nmr_is_on: True
+    smiles_freeze: False
+
+data:
+  modalities:
+    - h_nmr
+  valid_frac: 1
+  batch_size: 1024
+  dataset_path: "${paths.data_dir}/h_nmr_luc_10_simple.parquet"
+
+ckpt_path: "${paths.checkpoints_dir}/hnmr_20250522_1121/best_model.ckpt"
+
+trainer:
+  num_nodes: 1
+  gpus_per_node: 1
+
+top_k:
+  - 1
+  - 2
+  - 5
+  - 20
+
+run_id: "luc_nmrium_hnmr_10_simple"
+embeddings_path: luc_nmrium_hnmr_10_simple
