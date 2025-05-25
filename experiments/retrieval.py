@@ -31,6 +31,7 @@ def embed(config: DictConfig):
         log_every_n_steps=config.trainer.log_every_n_steps,
         devices=1,
         strategy="auto",
+        sync_batchnorm=True,
     )
 
     # extract format of dataset file

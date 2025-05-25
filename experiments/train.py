@@ -189,9 +189,10 @@ def init_distributed_mode(port=12354):
 @hydra.main(version_base="1.3", config_path="../configs", config_name="molbind_config.yaml")
 def main(config: DictConfig):
     # init_distributed_mode(12354)
+    torch.use_deterministic_algorithms(True, warn_only=True)
     train_molbind(config)
 
 
 if __name__ == "__main__":
-    seed_everything(42)
+    seed_everything(42, workers=True)
     main()
