@@ -16,6 +16,7 @@ from molbind.data.datamodule import MolBindDataModule
 from molbind.data.molbind_dataset import MolBindDataset
 from molbind.metrics.retrieval import full_database_retrieval
 from molbind.models.lightning_module import MolBindModule
+from molbind.utils.utils import HANDLERS as handlers
 
 load_dotenv()
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
@@ -30,26 +31,16 @@ def embed(config: DictConfig):
         log_every_n_steps=config.trainer.log_every_n_steps,
         devices=1,
         strategy="auto",
+        sync_batchnorm=True,
     )
 
     # extract format of dataset file
     data_format = Path(config.data.dataset_path).suffix
 
-    handlers = {
-        ".csv": pd.read_csv,
-        ".pickle": pd.read_pickle,
-        ".pkl": pd.read_pickle,
-        ".parquet": pd.read_parquet,
-    }
-
     try:
-        data = handlers[data_format](config.data.dataset_path)
+        shuffled_data = handlers[data_format](config.data.dataset_path)
     except KeyError:
         logger.error(f"Format {data_format} not supported")
-
-    # Shuffling the data with a specified fraction and seed
-    shuffled_data = data.sample(frac=config.data.fraction_data, random_state=config.data.seed)
-    shuffled_data["h_nmr_cnn"] = shuffled_data["h_nmr"]
 
     # Get the total length of the dataset
     dataset_length = len(shuffled_data)
@@ -82,7 +73,7 @@ def embed(config: DictConfig):
         model=MolBindModule(config),
         datamodule=datamodule,
     )
-    with open(f"{config.embeddings_path}_{RETRIEVAL_TIME}.pkl", "wb") as f:  # noqa: PTH123
+    with open(f"{config.embeddings_path}_{RETRIEVAL_TIME}.pkl", "wb") as f:
         pkl.dump(predictions, f, protocol=pkl.HIGHEST_PROTOCOL)
 
     aggregated_embeddings = aggregate_embeddings(

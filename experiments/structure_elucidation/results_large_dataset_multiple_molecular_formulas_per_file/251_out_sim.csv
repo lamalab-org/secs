@@ -1,2 +1,0 @@
-smiles,canonical_smiles,unique_hydrogens,unique_carbons,sascore,ir_similarity,cnmr_similarity,hnmr_similarity,similarity,sum_of_similarities,cnmr_ir_similarity,ir_hnmr_similarity,cnmr_hnmr_similarity,tanimoto
-CCOP(=O)(OCC)C(F)(F)CCOCCOCCN=[N+]=[N-],CCOP(=O)(OCC)C(F)(F)CCOCCOCCN=[N+]=[N-],8,9,3.4110325879559866,0.9266375303268433,0.87652987241745,0.8831244111061096,0.810202419757843,2.686291813850403,0.8678758144378662,0.8768525123596191,0.6969820857048035,1.0

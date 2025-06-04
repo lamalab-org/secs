@@ -13,3 +13,6 @@ def pickle_load_function(path: str) -> pl.DataFrame:
 def parquet_load_function(path: str) -> pl.DataFrame:
     data = pd.read_parquet(path)
     return pl.from_pandas(data)
+
+def process_jcamp_file():
+    return None

@@ -1,322 +1,355 @@
-import re
-from collections import Counter
-from functools import partial
+import pickle as pkl
 from pathlib import Path
+from typing import Any, ClassVar
 
+import numpy as np
 import pandas as pd
-from gafuncs import sascore
+import polars as pl
+import torch
+from datasets import load_dataset
 from loguru import logger
 from maygen_out_to_canonical import isomer_to_canonical
-from prune_sim import embedding_pruning, get_number_of_topologically_distinct_atoms, load_models, tanimoto_similarity
-from request_pubchem import (
-    convert_to_molecular_formulas,
-    read_cached_CID_smiles,
-)
+from prune_sim import embedding_pruning_variable, load_models_dict, tanimoto_similarity
+from tqdm.auto import tqdm
 
-from molbind.data.analysis.utils import aggregate_embeddings
 from molbind.models import MolBind
+from molbind.utils.spec2struct import gen_close_molformulas_from_seed, is_neutral_no_isotopes, smiles_to_molecular_formula
+
+ModelType = MolBind
 
 
-def main(
-    file_with_isomers: str,
-    pruned_file: str,
-    index_of_smiles_to_test: int,
-    dataset_path: str,
-    ir_embeddings_path: str,
-    cnmr_embeddings_path: str,
-    hnmr_embeddings_path: str,
-    ir_model: MolBind,
-    cnmr_model: MolBind,
-    hnmr_model: MolBind,
-    folder_results: str,
-    ir_ratio: float = 1,
-    cnmr_ratio: float = 1,
-    hnmr_ratio: float = 1,
-    synthetic_access_quantile: float | None = None,
-) -> None:
-    index_of_smiles_to_test = int(index_of_smiles_to_test)
-    ir_embeddings = pd.read_pickle(ir_embeddings_path)
-    c_nmr_embeddings = pd.read_pickle(cnmr_embeddings_path)
-    h_nmr_embeddings = pd.read_pickle(hnmr_embeddings_path)
-    # sum up spectra embeddings
-    list_of_smiles = pd.read_pickle(dataset_path).smiles.to_list()
-    original_smiles = list_of_smiles[index_of_smiles_to_test]
-    # print molecular formula of the original smiles
-    # print the original smilesa
-    logger.debug(f"Original smiles: {original_smiles}")
-    ir_embeddings = aggregate_embeddings(embeddings=ir_embeddings, modalities=["smiles", "ir"], central_modality="smiles")
-    c_nmr_embeddings = aggregate_embeddings(
-        embeddings=c_nmr_embeddings,
-        modalities=["smiles", "c_nmr"],
-        central_modality="smiles",
-    )
-    h_nmr_embeddings = aggregate_embeddings(
-        embeddings=h_nmr_embeddings,
-        modalities=["smiles", "h_nmr_cnn"],
-        central_modality="smiles",
-    )
+# --- User-provided aggregate_embeddings function ---
+def aggregate_embeddings_user_provided(
+    embeddings: list[dict[str, torch.Tensor]],
+    modalities: list[str],
+) -> dict[str, torch.Tensor]:
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    collected_tensors_for_modality = {mod: [] for mod in modalities}
 
-    spectra_ir_embedding = ir_embeddings["ir"][index_of_smiles_to_test].to("cuda")
-    spectra_cnmr_embedding = c_nmr_embeddings["c_nmr"][index_of_smiles_to_test].to("cuda")
-    spectra_hnmr_embedding = h_nmr_embeddings["h_nmr_cnn"][index_of_smiles_to_test].to("cuda")
+    for batch_dict in embeddings:  # Each dict is for a batch
+        for mod in modalities:
+            if mod in batch_dict and batch_dict[mod] is not None and batch_dict[mod].nelement() > 0:
+                collected_tensors_for_modality[mod].append(batch_dict[mod].cpu())
 
-    isomer_df = pd.read_csv(file_with_isomers)
-    # drop duplicates
-    isomer_df = isomer_df.drop_duplicates(subset=["canonical_smiles"])
-    isomer_df["unique_hydrogens"] = isomer_df["canonical_smiles"].progress_apply(
-        lambda x: get_number_of_topologically_distinct_atoms(x, atomic_number=1)
-    )
-    isomer_df["unique_carbons"] = isomer_df["canonical_smiles"].progress_apply(
-        lambda x: get_number_of_topologically_distinct_atoms(x, atomic_number=6)
-    )
-    isomer_df["sascore"] = isomer_df["canonical_smiles"].progress_apply(sascore)
-    if synthetic_access_quantile:
-        logger.info("You requested to filter based on synthetic accessibility")
-        isomer_df = isomer_df[isomer_df["synthetic_access"] < isomer_df["synthetic_access"].quantile(synthetic_access_quantile)]
-        logger.debug(f"Length of isomer_df after synthetic access filtering: {len(isomer_df)}")
-
-    logger.debug(f"Length of isomer_df: {len(isomer_df)}")
-    (
-        cosine_similarities,
-        ir_similarities,
-        cnmr_similarities,
-        hnmr_similarities,
-        cnmr_ir_similarities,
-        ir_hnmr_similarities,
-        cnmr_hnmr_similarities,
-    ) = embedding_pruning(
-        spectra_ir_embedding=spectra_ir_embedding,
-        spectra_cnmr_embedding=spectra_cnmr_embedding,
-        spectra_hnmr_embedding=spectra_hnmr_embedding,
-        ir_model=ir_model,
-        cnmr_model=cnmr_model,
-        hnmr_model=hnmr_model,
-        smiles=isomer_df["canonical_smiles"].to_list(),
-        ir_ratio=ir_ratio,
-        cnmr_ratio=cnmr_ratio,
-        hnmr_ratio=hnmr_ratio,
-    )
-    cosine_similarities = cosine_similarities.tolist()
-    ir_similarities = ir_similarities.tolist()
-    cnmr_similarities = cnmr_similarities.tolist()
-    hnmr_similarities = hnmr_similarities.tolist()
-    cnmr_ir_similarities = cnmr_ir_similarities.tolist()
-    ir_hnmr_similarities = ir_hnmr_similarities.tolist()
-    cnmr_hnmr_similarities = cnmr_hnmr_similarities.tolist()
-    isomer_df["ir_similarity"] = ir_similarities
-    isomer_df["cnmr_similarity"] = cnmr_similarities
-    isomer_df["hnmr_similarity"] = hnmr_similarities
-    isomer_df["similarity"] = cosine_similarities
-    isomer_df["sum_of_similarities"] = isomer_df["ir_similarity"] + isomer_df["cnmr_similarity"] + isomer_df["hnmr_similarity"]
-    isomer_df["cnmr_ir_similarity"] = cnmr_ir_similarities
-    isomer_df["ir_hnmr_similarity"] = ir_hnmr_similarities
-    isomer_df["cnmr_hnmr_similarity"] = cnmr_hnmr_similarities
-
-    # tanimoto similarity with the original smiles
-    tanimoto = partial(tanimoto_similarity, original_smiles)
-    isomer_df["tanimoto"] = isomer_df["canonical_smiles"].progress_apply(lambda x: tanimoto(x))
-    # save backup
-    csv_path = Path(folder_results) / Path(
-        str(index_of_smiles_to_test) + "_" + str(Path(pruned_file).with_suffix("")) + "_sim"
-    ).with_suffix(".csv")
-
-    isomer_df.to_csv(csv_path, index=False)
+    concatenated_embeddings = {}
+    for mod, tensor_list in collected_tensors_for_modality.items():
+        if tensor_list:
+            try:
+                concatenated_embeddings[mod] = torch.cat(tensor_list, dim=0).to(device)
+                logger.debug(f"Aggregated '{mod}', final shape: {concatenated_embeddings[mod].shape}")
+            except Exception as e_cat:
+                logger.error(f"aggregate_embeddings: Error concatenating for '{mod}': {e_cat}")
+                concatenated_embeddings[mod] = torch.empty(0, device=device)
+        else:
+            logger.warning(f"aggregate_embeddings: No tensors collected for '{mod}'.")
+            concatenated_embeddings[mod] = torch.empty(0, device=device)
+    return concatenated_embeddings
 
 
-def run_scripts_pipe(
-    molecular_formula,
-    smiles_index,
-    ir_model,
-    cnmr_model,
-    hnmr_model,
-    pubchem_cache=None,
-    ir_embeddings_path: str | None = None,
-    cnmr_embeddings_path: str | None = None,
-    hnmr_embeddings_path: str | None = None,
-    dataset_path: str | None = None,
-    folder_results: str | None = None,
-):
-    # run script 1: request_pubchem.py
-    # os.system(f"python request_pubchem.py '{molecular_formula}'")
-    # read cached CID_smiles
-    # filter data based on molecular formula
-    # pubchem_cache = pubchem_cache.filter(
-    #     pl.col("molecular_formula") == molecular_formula
-    # )
-    # save smiles to a file
-    # if not Path(f"isomers/{molecular_formula}.txt").exists():
-    with Path(f"isomers_multiform/{molecular_formula}.txt").open("w") as f:
-        for smiles in pubchem_cache["smiles"]:
-            f.write(smiles + "\n")
-    cid_file = f"isomers_multiform/{molecular_formula}.txt"
-    # cids is a txt file with a list of CIDs
-    with Path(cid_file).open("r") as f:
-        smiles = f.read().splitlines()
-    logger.info(f"Found {len(smiles)} CIDs for molecular formula {molecular_formula}")
-    # run script 2: maygen_out_to_canonical.py (converts SMILES to canonical SMILES)
-    isomer_to_canonical(cid_file, f"isomers_multiform/{molecular_formula}.csv")
+def get_1d_target_embedding_from_raw_batches_pkl(
+    raw_embedding_file_path: str,
+    target_idx: int,
+    pickle_content_config: dict,  # Must contain 'modalities_in_batch_dict' and 'primary_spectral_key'
+    expected_total_molecules_after_aggregation: int,
+    device: str = "cuda" if torch.cuda.is_available() else "cpu",
+) -> torch.Tensor | None:
+    modalities_in_batch_dict = pickle_content_config.get("modalities_in_batch_dict")
+    primary_spec_key = pickle_content_config.get("primary_spectral_key")
 
-    main(
-        f"isomers_multiform/{molecular_formula}.csv",
-        "out.csv",
-        index_of_smiles_to_test=smiles_index,
-        ir_model=ir_model,
-        cnmr_model=cnmr_model,
-        hnmr_model=hnmr_model,
-        ir_embeddings_path=ir_embeddings_path,
-        cnmr_embeddings_path=cnmr_embeddings_path,
-        hnmr_embeddings_path=hnmr_embeddings_path,
-        dataset_path=dataset_path,
-        folder_results=folder_results,
-    )
+    if not modalities_in_batch_dict or not primary_spec_key:
+        logger.error(f"Config error for {raw_embedding_file_path}.")
+        return None
 
+    try:
+        with open(raw_embedding_file_path, "rb") as f:
+            list_of_batch_dicts = pkl.load(f)
+        if not isinstance(list_of_batch_dicts, list) or not list_of_batch_dicts:
+            logger.error(f"{raw_embedding_file_path} not a valid list of batch dicts.")
+            return None
 
-# Function to extract atom counts from a molecular formula
-def get_atom_counts_from_formula(formula):
-    # Regular expression to match elements and their counts
-    pattern = r"([A-Z][a-z]*)(\d*)"
+        # Use the first modality in modalities_in_batch_dict as a reference for central_modality
+        # This assumes 'smiles' or a similar common key is listed first if it's the intended central one.
+        ref_central_modality = modalities_in_batch_dict[0] if modalities_in_batch_dict else "smiles"
 
-    # Find all matches in the formula
-    matches = re.findall(pattern, formula)
+        aggregated_data = aggregate_embeddings_user_provided(embeddings=list_of_batch_dicts, modalities=modalities_in_batch_dict)
 
-    # Create a Counter to store atom counts
-    atom_counts = Counter()
+        all_spectral_embs = aggregated_data.get(primary_spec_key)
+        if all_spectral_embs is None or all_spectral_embs.nelement() == 0:
+            logger.warning(f"No aggregated '{primary_spec_key}' from {raw_embedding_file_path}.")
+            return None
 
-    # Loop through matches and update the counter
-    for element, count in matches:
-        count_atom = 1 if count == "" else int(count)
-        atom_counts[element] += count_atom
+        if all_spectral_embs.shape[0] != expected_total_molecules_after_aggregation:
+            logger.error(
+                f"Data Mismatch: Aggregated '{primary_spec_key}' from {raw_embedding_file_path} has {all_spectral_embs.shape[0]} entries, expected {expected_total_molecules_after_aggregation}."
+            )
+            return None
 
-    return dict(atom_counts)
+        if not (0 <= target_idx < all_spectral_embs.shape[0]):
+            logger.error(f"Target idx {target_idx} OOB for aggregated data (len {all_spectral_embs.shape[0]}).")
+            return None
 
+        target_mol_emb = all_spectral_embs[target_idx].to(device)
 
-def gen_close_molformulas_from_seed(seed_formula):
-    atom_counts = get_atom_counts_from_formula(seed_formula)
-    carbons = atom_counts.get("C", 0)
-    hydrogens = atom_counts.get("H", 0)
-    nitrogens = atom_counts.get("N", 0)
-    chlorine = atom_counts.get("Cl", 0)
-    bromine = atom_counts.get("Br", 0)
-    fluorine = atom_counts.get("F", 0)
-    phosphorus = atom_counts.get("P", 0)
-    sulphur = atom_counts.get("S", 0)
-    total_halogens = chlorine + bromine + fluorine
-    seed_formula_0 = seed_formula.replace(f"C{carbons}", f"C{carbons - 3}").replace(f"H{hydrogens}", f"H{hydrogens - 6}")
-    seed_formula_1 = seed_formula.replace(f"C{carbons}", f"C{carbons + 1}").replace(f"H{hydrogens}", f"H{hydrogens + 2}")
-    seed_formula_2 = seed_formula.replace(f"C{carbons}", f"C{carbons - 1}").replace(f"H{hydrogens}", f"H{hydrogens - 2}")
-    seed_formula_3 = seed_formula.replace(f"C{carbons}", f"C{carbons + 2}").replace(f"H{hydrogens}", f"H{hydrogens + 4}")
-    seed_formula_4 = seed_formula.replace(f"C{carbons}", f"C{carbons - 2}").replace(f"H{hydrogens}", f"H{hydrogens - 4}")
-    seed_formula_5 = seed_formula.replace(f"N{nitrogens}", f"N{nitrogens + 1}").replace(f"H{hydrogens}", f"H{hydrogens + 1}")
-    seed_formula_6 = seed_formula.replace(f"N{nitrogens}", f"N{nitrogens - 1}").replace(f"H{hydrogens}", f"H{hydrogens - 1}")
-    seed_formula_7 = seed_formula.replace(f"Cl{chlorine}", f"Cl{chlorine + 1}").replace(f"H{hydrogens}", f"H{hydrogens + 1}")
-    seed_formula_8 = seed_formula.replace(f"Cl{chlorine}", f"Cl{chlorine - 1}").replace(f"H{hydrogens}", f"H{hydrogens - 1}")
-    seed_formula_9 = seed_formula.replace(f"Br{bromine}", f"Br{bromine + 1}").replace(f"H{hydrogens}", f"H{hydrogens + 1}")
-    seed_formula_10 = seed_formula.replace(f"Br{bromine}", f"Br{bromine - 1}").replace(f"H{hydrogens}", f"H{hydrogens - 1}")
-    seed_formula_11 = seed_formula.replace(f"F{fluorine}", f"F{fluorine + 1}").replace(f"H{hydrogens}", f"H{hydrogens + 1}")
-    # keep just C,N,H,O
-    # if count is 1, then replace the element with an empty string
-    seed_formula_12 = seed_formula.replace("Cl", "") if chlorine == 1 else seed_formula.replace(f"Cl{chlorine}", "")
-    seed_formula_12 = seed_formula_12.replace("Br", "") if bromine == 1 else seed_formula_12.replace(f"Br{bromine}", "")
-    seed_formula_12 = seed_formula_12.replace("F", "") if fluorine == 1 else seed_formula_12.replace(f"F{fluorine}", "")
-    seed_formula_12 = seed_formula_12.replace(f"H{hydrogens}", f"H{hydrogens + total_halogens}")
-    seed_formula_13 = seed_formula.replace("P", "") if phosphorus == 1 else seed_formula.replace(f"P{phosphorus}", "")
-    seed_formula_13 = seed_formula_13.replace(f"H{hydrogens}", f"H{hydrogens + 5}")
-    seed_formula_14 = seed_formula.replace("S", "") if sulphur == 1 else seed_formula.replace(f"S{sulphur}", "")
-    seed_formula_14 = seed_formula_14.replace(f"H{hydrogens}", f"H{hydrogens + 4}")
-    seed_formula_15 = seed_formula.replace(f"S{sulphur}", f"S{sulphur + 1}")
-    seed_formula_16 = seed_formula.replace(f"S{sulphur}", f"S{sulphur - 1}")
-    return [
-        seed_formula_0,
-        seed_formula_1,
-        seed_formula_2,
-        seed_formula_3,
-        seed_formula_4,
-        seed_formula_5,
-        seed_formula_6,
-        seed_formula_7,
-        seed_formula_8,
-        seed_formula_9,
-        seed_formula_10,
-        seed_formula_11,
-        seed_formula_12,
-        seed_formula_13,
-        seed_formula_14,
-        seed_formula_15,
-        seed_formula_16,
-    ]
+        final_1D_tensor = target_mol_emb
+        # Step 1: Squeeze if there's a leading batch-like dimension of 1 from the per-molecule slice
+        # This handles cases where aggregate_embeddings might produce (N, 1, L, D) and indexing gives (1, L, D)
+        if final_1D_tensor.ndim > 1 and final_1D_tensor.shape[0] == 1:
+            final_1D_tensor = final_1D_tensor.squeeze(0)
+        # Step 2: If now 2D (L,D) (sequence), aggregate by mean pooling
+        if final_1D_tensor.ndim == 2:
+            final_1D_tensor = torch.mean(final_1D_tensor, dim=0)
+
+        if final_1D_tensor.ndim == 1:
+            return final_1D_tensor
+        else:
+            logger.error(
+                f"Could not reduce '{primary_spec_key}' (idx {target_idx}) to 1D. Initial shape: {target_mol_emb.shape}, Final shape: {final_1D_tensor.shape}"
+            )
+            return None
+
+    except FileNotFoundError:
+        logger.warning(f"Not found: {raw_embedding_file_path}")
+        return None
+    except Exception as e:
+        logger.error(f"Error processing {raw_embedding_file_path} for idx {target_idx}: {e}", exc_info=True)
+        return None
 
 
-def filter_polars_col_by_molecular_formulas(df, molecular_formulas):
-    return df[df["molecular_formula"].isin(molecular_formulas)]
+class SimpleMoleculeAnalyzer:
+    ALL_SPECTRA_TYPES: ClassVar[list[str]] = ["ir", "cnmr", "hnmr"]
+    RAW_EMBEDDING_PKL_CONFIGS: ClassVar[dict[str, dict]] = {
+        "ir": {"modalities_in_batch_dict": ["smiles", "ir"], "primary_spectral_key": "ir"},
+        "cnmr": {"modalities_in_batch_dict": ["smiles", "c_nmr"], "primary_spectral_key": "c_nmr"},
+        "hnmr": {"modalities_in_batch_dict": ["smiles", "h_nmr"], "primary_spectral_key": "h_nmr"},
+    }
 
+    def __init__(self, models_config_path: str, results_dir: str, cache_dir: str | None, active_spectra: list[str] | None):
+        self.models_config_path = Path(models_config_path)
+        self.results_dir = Path(results_dir)
+        self.results_dir.mkdir(exist_ok=True, parents=True)
+        self.cache_dir = Path(cache_dir) if cache_dir else Path.cwd() / "cache"
+        self.cache_dir.mkdir(exist_ok=True, parents=True)
+        self.user_active_spectra = [s for s in (active_spectra or self.ALL_SPECTRA_TYPES) if s in self.ALL_SPECTRA_TYPES]
 
-def cli(
-    start_index: int,
-    end_index: int,
-    dataset_path: str,
-    cnmr_embeddings_path: str,
-    hnmr_embeddings_path: str,
-    ir_embeddings_path: str,
-    ir_experiment: str,
-    cnmr_experiment: str,
-    hnmr_experiment: str,
-    folder_results: str,
-) -> None:
-    if not Path(folder_results).exists():
-        Path(folder_results).mkdir()
+        self.models: dict[str, ModelType | None] = {}
+        self.raw_embedding_file_paths: dict[str, Path | None] = {}
+        self.dataset_df: pd.DataFrame | None = None
+        self.pubchem_cache: Any | None = None  # Polars DataFrame
+        self.available_modalities: list[str] = []
 
-    cached_data = read_cached_CID_smiles().to_pandas()
-    cached_data = cached_data.dropna()
-    # # save the cache with molecular formula
-    # cached_data.to_csv("CID-SMILES.csv", separator=",", write_header=True)
-    list_of_molecular_formulas = convert_to_molecular_formulas(dataset_path)
-    indexes = list(range(len(list_of_molecular_formulas)))
-    # save the first 30 molecular formulas to file
-    with Path("isomers_multiform/molecular_formulas.txt").open("w") as f:
-        f.write("\n".join(list_of_molecular_formulas[start_index:end_index]))
+    def load_models(self, **kwargs_experiments: str | None) -> None:
+        exp_dict = {s: kwargs_experiments.get(f"{s}_experiment") for s in self.ALL_SPECTRA_TYPES}
+        loaded_models = load_models_dict(str(self.models_config_path), exp_dict)
+        self.models = {s: model for s, model in loaded_models.items() if model}
+        logger.info(f"Analyzer: Models loaded for: {list(self.models.keys())}")
 
-    ir_model, cnmr_model, hnmr_model = load_models(
-        "../../configs",
-        ir_experiment=ir_experiment,
-        cnmr_experiment=cnmr_experiment,
-        hnmr_experiment=hnmr_experiment,
-    )
+    def load_data(self, dataset_path: str, **kwargs_raw_embeddings_paths: str | None) -> None:
+        try:
+            self.dataset_df = pd.read_pickle(dataset_path)
+            logger.info(f"Analyzer: Loaded main dataset ({len(self.dataset_df)} entries) from {dataset_path}")
+        except Exception as e:
+            logger.error(f"Analyzer: Failed to load main dataset from {dataset_path}: {e}")
+            self.dataset_df = None
+            return
 
-    for molecular_formula, i in zip(
-        list_of_molecular_formulas[start_index:end_index],
-        indexes[start_index:end_index],
-    ):
-        get_molformulas = gen_close_molformulas_from_seed(molecular_formula)
-        molecular_formulas = [molecular_formula, *get_molformulas]
-        filter_cached = filter_polars_col_by_molecular_formulas(cached_data, molecular_formulas)
-        # add molecular formula to the cache
-        logger.info(f"Processing {molecular_formula}")
-        run_scripts_pipe(
-            molecular_formula,
-            i,
-            pubchem_cache=filter_cached,
-            ir_model=ir_model,
-            cnmr_model=cnmr_model,
-            hnmr_model=hnmr_model,
-            dataset_path=dataset_path,
-            cnmr_embeddings_path=cnmr_embeddings_path,
-            ir_embeddings_path=ir_embeddings_path,
-            hnmr_embeddings_path=hnmr_embeddings_path,
-            folder_results=folder_results,
+        paths_map = {s: kwargs_raw_embeddings_paths.get(f"{s}_embeddings_path") for s in self.ALL_SPECTRA_TYPES}
+
+        current_available_modalities = []
+        for spec_type in self.user_active_spectra:
+            if spec_type not in self.models:
+                logger.debug(f"Analyzer: Model for active spectrum {spec_type} not loaded. Skipping data for it.")
+                continue
+
+            path_str = paths_map.get(spec_type)
+            if path_str and Path(path_str).exists():
+                self.raw_embedding_file_paths[spec_type] = Path(path_str)
+                current_available_modalities.append(spec_type)
+                logger.info(f"Analyzer: Raw embedding path set for {spec_type}: {path_str}")
+            else:
+                logger.warning(f"Analyzer: No valid raw embedding path for {spec_type} (active spectrum with model).")
+
+        self.available_modalities = current_available_modalities
+        logger.info(f"Analyzer: Modalities with model & data path set: {self.available_modalities}")
+
+        try:
+            logger.debug("Analyzer: Attempting to load PubChem cache...")
+            hf_dataset = load_dataset("jablonkagroup/pubchem-smiles-molecular-formula", trust_remote_code=True)
+            if "train" in hf_dataset:
+                self.pubchem_cache = hf_dataset["train"].to_polars()
+                self.pubchem_cache = self.pubchem_cache.drop_nulls(subset=["smiles", "molecular_formula"])
+                is_polars_df = hasattr(self.pubchem_cache, "is_empty") and hasattr(self.pubchem_cache, "filter")
+                logger.info(
+                    f"Analyzer: Loaded PubChem cache. Type: {type(self.pubchem_cache)}, Is Polars DF: {is_polars_df}, Is Empty: {self.pubchem_cache.is_empty() if is_polars_df else 'N/A'}"
+                )
+                if is_polars_df and not self.pubchem_cache.is_empty():
+                    logger.debug(f"Analyzer: PubChem cache head:\n{self.pubchem_cache.head(3)}")
+                elif not is_polars_df:
+                    self.pubchem_cache = None
+                    logger.error("PubChem cache not a Polars DF.")
+            else:
+                self.pubchem_cache = None
+                logger.error("PubChem 'train' split not found.")
+        except Exception as e:
+            logger.error(f"Analyzer: Failed to load PubChem cache: {e}", exc_info=True)
+            self.pubchem_cache = None
+
+    def _get_all_target_1D_embeddings_for_idx(self, smiles_index: int) -> dict[str, torch.Tensor]:
+        target_1D_embeddings = {}
+        if self.dataset_df is None or self.dataset_df.empty:
+            return {}
+
+        for spec_type in self.available_modalities:
+            raw_file_path = self.raw_embedding_file_paths.get(spec_type)
+            pickle_config = self.RAW_EMBEDDING_PKL_CONFIGS.get(spec_type)
+            model_device = "cuda" if torch.cuda.is_available() else "cpu"
+
+            if raw_file_path and pickle_config:
+                emb_tensor = get_1d_target_embedding_from_raw_batches_pkl(
+                    raw_embedding_file_path=str(raw_file_path),
+                    target_idx=smiles_index,
+                    pickle_content_config=pickle_config,
+                    expected_total_molecules_after_aggregation=len(self.dataset_df),
+                    device=model_device,
+                )
+                if emb_tensor is not None:
+                    target_1D_embeddings[spec_type] = emb_tensor
+        return target_1D_embeddings
+
+    def process_molecular_formula(self, smiles_index: int = 0) -> pd.DataFrame:
+        if self.dataset_df is None or self.dataset_df.empty or not self.available_modalities:
+            logger.error("Analyzer: Not ready (dataset None/empty or no available modalities).")
+            return pd.DataFrame()
+
+        if not (0 <= smiles_index < len(self.dataset_df)):
+            logger.error(f"Analyzer: smiles_index {smiles_index} OOB for dataset (len {len(self.dataset_df)}).")
+            return pd.DataFrame()
+
+        original_smiles = self.dataset_df["smiles"].iloc[smiles_index]
+        mf = smiles_to_molecular_formula(original_smiles)
+        logger.info(f"Analyzer: Proc MF {mf} (idx {smiles_index}) using {self.available_modalities}")
+
+        similar_formulas = [mf] + (gen_close_molformulas_from_seed(mf) if mf else [])
+
+        is_valid_polars_cache = (
+            self.pubchem_cache is not None
+            and hasattr(self.pubchem_cache, "is_empty")
+            and hasattr(self.pubchem_cache, "filter")
+            and hasattr(self.pubchem_cache, "select")
+            and hasattr(self.pubchem_cache, "columns")
+            and bool(self.pubchem_cache.columns)
+            and hasattr(self.pubchem_cache.select(self.pubchem_cache.columns[0]).to_series(), "is_in")
         )
-        logger.info(f"Finished processing {molecular_formula}")
 
+        if not is_valid_polars_cache or self.pubchem_cache.is_empty() or not similar_formulas:
+            logger.warning(
+                f"Analyzer: PubChem cache not valid/empty (Valid: {is_valid_polars_cache}, Empty: {self.pubchem_cache.is_empty() if is_valid_polars_cache else 'N/A'}) or no formulas to search."
+            )
+            return pd.DataFrame()
 
-if __name__ == "__main__":
-    cli(
-        start_index=0,
-        end_index=1001,
-        dataset_path="../3_test_set_multi_spec.pkl",
-        cnmr_embeddings_path="../7_test_set_cnmr_embeddings_large_dataset_20241016_1343.pkl",
-        ir_embeddings_path="../7_test_set_ir_embeddings_large_dataset_20241015_2306.pkl",
-        hnmr_embeddings_path="../7_hnmr_simulated_detailed_cnn_architecture_large_dataset_20241015_2321.pkl",
-        cnmr_experiment="metrics/cnmr_simulated_large_dataset_testset",
-        ir_experiment="metrics/ir_simulated_large_dataset_testset",
-        hnmr_experiment="metrics/hnmr_cnn_detailed_large_dataset",
-        folder_results="results_large_dataset_multiple_molecular_formulas_per_file",
-    )
+        try:
+            if "molecular_formula" not in self.pubchem_cache.columns:
+                logger.error("Analyzer: 'molecular_formula' column missing in PubChem cache.")
+                return pd.DataFrame()
+            filtered_cache = self.pubchem_cache.filter(self.pubchem_cache["molecular_formula"].is_in(similar_formulas))
+            # remove smiles that are contain isotopes or that are positively or negatively charged
+            filtered_cache = filtered_cache.filter(pl.col("smiles").map_elements(is_neutral_no_isotopes, return_dtype=pl.Boolean))
+        except Exception as e_filter:
+            logger.error(f"Analyzer: Error during PubChem cache filtering: {e_filter}", exc_info=True)
+            return pd.DataFrame()
+
+        if filtered_cache is None or filtered_cache.is_empty():
+            logger.warning(f"Analyzer: No PubChem hits for {mf} and variants after filtering.")
+            return pd.DataFrame()
+
+        # ... (Isomer generation, canonicalization to isomer_df as before) ...
+        isomers_dir = self.cache_dir / "isomers_multiform"
+        isomers_dir.mkdir(exist_ok=True, parents=True)
+        isomer_file_name = f"{smiles_index}_{mf.replace(' ', '_') if mf else 'unknown_mf'}_isomers.txt"
+        isomer_file = isomers_dir / isomer_file_name
+        with isomer_file.open("w") as f:
+            smiles_col = filtered_cache["smiles"]
+            for s_str in smiles_col.to_list() if hasattr(smiles_col, "to_list") else list(smiles_col):
+                f.write(s_str + "\n")
+        canonical_file_name = f"{smiles_index}_{mf.replace(' ', '_') if mf else 'unknown_mf'}_canonical.csv"
+        canonical_file = isomers_dir / canonical_file_name
+        try:
+            isomer_to_canonical(str(isomer_file), str(canonical_file))
+            isomer_df = pd.read_csv(canonical_file).drop_duplicates(subset=["canonical_smiles"]).reset_index(drop=True)
+        except Exception as e:
+            logger.error(f"Analyzer: Canonicalization error for {mf}: {e}")
+            return pd.DataFrame()
+        if isomer_df.empty:
+            logger.warning(f"Analyzer: No canonical SMILES for {mf}.")
+            return pd.DataFrame()
+        num_isomers, candidate_smiles = len(isomer_df), isomer_df["canonical_smiles"].tolist()
+
+        target_1D_embs = self._get_all_target_1D_embeddings_for_idx(smiles_index)
+
+        isomer_df["similarity"] = [None] * num_isomers
+        for st_init in self.ALL_SPECTRA_TYPES:
+            isomer_df[f"{st_init}_similarity"] = [None] * num_isomers
+        isomer_df["sum_of_all_individual_similarities"] = [None] * num_isomers
+
+        if target_1D_embs:
+            models_for_scoring = {s: self.models[s] for s in target_1D_embs if self.models.get(s)}
+            if models_for_scoring:
+                combined_sc, individual_sc_dict = embedding_pruning_variable(candidate_smiles, target_1D_embs, models_for_scoring)
+
+                def assign(sc_tensor, num_exp, def_val=0.0):
+                    if sc_tensor is not None and hasattr(sc_tensor, "numel") and sc_tensor.numel() == num_exp:
+                        return sc_tensor.tolist()
+                    if (
+                        sc_tensor is not None and hasattr(sc_tensor, "numel") and sc_tensor.numel() == 1 and num_exp > 0
+                    ):  # Should not happen with current prune_sim
+                        return [sc_tensor.item()] * num_exp
+                    # If sc_tensor is None (e.g. num_isomers was 0) or numel doesn't match, return default list
+                    return [def_val if def_val is not None else None] * num_exp
+
+                isomer_df["similarity"] = assign(combined_sc, num_isomers)
+                current_sum = np.zeros(num_isomers, dtype=float)  # Ensure float for sum
+                for st in self.ALL_SPECTRA_TYPES:
+                    sc_mod = individual_sc_dict.get(st)  # This will be a tensor or None
+                    assigned_scores = assign(sc_mod, num_isomers, None)
+                    isomer_df[f"{st}_similarity"] = assigned_scores
+
+                    # Summing for "sum_of_all_individual_similarities"
+                    # Only sum if the modality was part of target_1D_embs (i.e., it was intended to be scored)
+                    # and its scores were successfully computed (sc_mod is a tensor of correct size)
+                    if st in target_1D_embs and sc_mod is not None and hasattr(sc_mod, "numel") and sc_mod.numel() == num_isomers:
+                        try:
+                            # assigned_scores is already a list of numbers or Nones
+                            # Replace Nones with 0 for summation
+                            scores_for_sum = [s if pd.notna(s) else 0.0 for s in assigned_scores]
+                            current_sum += np.array(scores_for_sum, dtype=float)
+                        except Exception as e_sum:
+                            logger.warning(f"Could not sum scores for {st}: {e_sum}")
+                isomer_df["sum_of_all_individual_similarities"] = current_sum.tolist()
+            else:
+                logger.warning(f"Analyzer: No models for scoring for {list(target_1D_embs.keys())}.")
+        else:
+            logger.error(f"Analyzer: No 1D target embeddings for idx {smiles_index}.")
+
+        tqdm.pandas(desc=f"Analyzer: Tanimoto for {mf}")
+        isomer_df["tanimoto"] = isomer_df["canonical_smiles"].progress_apply(
+            lambda x: tanimoto_similarity(original_smiles, x) if pd.notna(x) and x else 0.0
+        )
+
+        result_path = self.results_dir / f"{smiles_index}_{mf.replace(' ', '_') if mf else 'unknown_mf'}_results.csv"
+        isomer_df.to_csv(result_path, index=False)
+        logger.info(
+            f"Analyzer: Results for {mf} (idx {smiles_index}) saved. Scored with: {list(target_1D_embs.keys()) if target_1D_embs else 'None'}"
+        )
+        return isomer_df
+
+    def get_summary(self) -> dict:
+        return {
+            "user_active_spectra": self.user_active_spectra,
+            "final_available_modalities": self.available_modalities,
+            "models_loaded": list(self.models.keys()),
+            "raw_emb_paths": {s: str(p) if p else "N/A" for s, p in self.raw_embedding_file_paths.items()},
+            "dataset_loaded": self.dataset_df is not None,
+            "dataset_size": len(self.dataset_df) if self.dataset_df is not None else 0,
+            "pubchem_cache_loaded_and_valid": (
+                self.pubchem_cache is not None and hasattr(self.pubchem_cache, "filter") and not self.pubchem_cache.is_empty()
+            ),
+        }

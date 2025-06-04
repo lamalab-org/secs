@@ -1,378 +1,235 @@
-import contextlib
-from functools import cache, partial
-from pathlib import Path
+from functools import cache
 
-import fire
-import numpy as np
-import pandas as pd
-import rootutils
 import torch
+from hydra import compose, initialize
 from loguru import logger
 from rdkit import Chem, DataStructs
-from rdkit.Contrib.SA_Score import sascorer
 from torch import Tensor
 from tqdm import tqdm
 
-from molbind.data.analysis.utils import aggregate_embeddings
 from molbind.data.available import ModalityConstants
 from molbind.models import MolBind
 from molbind.utils import rename_keys_with_prefix
 
 torch.manual_seed(42)
+torch.cuda.manual_seed_all(42)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
+
 tqdm.pandas()
 
-rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 
-
-def read_weights(config):
-    model = MolBind(config).to("cuda")
+# --- Model Loading ---
+def read_weights(config) -> MolBind:
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model = MolBind(config).to(device)
     model.load_state_dict(
-        rename_keys_with_prefix(torch.load(config.ckpt_path, map_location=torch.device("cuda"))["state_dict"]),
+        rename_keys_with_prefix(torch.load(config.ckpt_path, map_location=torch.device(device))["state_dict"]),
         strict=True,
     )
     model.eval()
     return model
 
 
-def tokenize_string(
-    smiles: list[str],
-    modality: str,
-) -> tuple[Tensor, Tensor]:
-    tokenized_data = ModalityConstants[modality].tokenizer(
-        smiles,
-        padding="max_length",
-        truncation=True,
-        return_tensors="pt",
-        max_length=128,
-    )
-    return tokenized_data["input_ids"], tokenized_data["attention_mask"]
+def load_models_dict(configs_path: str, experiments_dict: dict[str, str | None]) -> dict[str, MolBind | None]:
+    models = {}
+    for modality, experiment in experiments_dict.items():
+        if experiment:
+            try:
+                with initialize(version_base="1.3", config_path=str(configs_path)):
+                    config = compose(config_name="molbind_config", overrides=[f"experiment={experiment}"])
+                models[modality] = read_weights(config)
+                logger.info(f"Loaded {modality} model from experiment: {experiment}")
+            except Exception as e:
+                logger.warning(f"Failed to load {modality} model ({experiment}): {e}")
+                models[modality] = None
+        else:
+            models[modality] = None  # Explicitly None if no experiment string
+    return models
 
 
-def encode_smiles(individual, ir_model, cnmr_model, hnmr_model):
-    input_ids, attention_mask = tokenize_string(individual, "smiles")
-    input_ids = input_ids.to("cuda")
-    attention_mask = attention_mask.to("cuda")
-
-    with torch.no_grad():
-        ir_embedding = ir_model.encode_modality((input_ids, attention_mask), modality="smiles")
-        cnmr_embedding = cnmr_model.encode_modality((input_ids, attention_mask), modality="smiles")
-        hnmr_embedding = hnmr_model.encode_modality((input_ids, attention_mask), modality="smiles")
-
-    return ir_embedding, cnmr_embedding, hnmr_embedding
-
-
-def gpu_encode_smiles(individual, ir_model, cnmr_model, hnmr_model):
-    # split into chunks of 128
-    chunk_size = 512
-    ir_embeddings = []
-    cnmr_embeddings = []
-    hnmr_embeddings = []
-    chunk_range = [*list(range(0, len(individual), chunk_size)), len(individual)]
-    for i, j in enumerate(tqdm(chunk_range[:-1])):
-        ir_embedding, cnmr_embedding, hnmr_embedding = encode_smiles(
-            individual[j : chunk_range[i + 1]],
-            ir_model,
-            cnmr_model,
-            hnmr_model,
-        )
-        torch.cuda.empty_cache()
-        ir_embeddings.append(ir_embedding)
-        cnmr_embeddings.append(cnmr_embedding)
-        hnmr_embeddings.append(hnmr_embedding)
-    ir_embeddings = torch.cat(ir_embeddings, dim=0)
-    cnmr_embeddings = torch.cat(cnmr_embeddings, dim=0)
-    hnmr_embeddings = torch.cat(hnmr_embeddings, dim=0)
-    return ir_embeddings, cnmr_embeddings, hnmr_embeddings
-
-
-def load_models(
-    configs_path: str,
-    ir_experiment: str,
-    cnmr_experiment: str,
-    hnmr_experiment: str,
-):
-    from hydra import compose, initialize
-
-    with initialize(version_base="1.3", config_path=configs_path):
-        ir_config = compose(config_name="molbind_config", overrides=[f"experiment={ir_experiment}"])
-    with initialize(version_base="1.3", config_path=configs_path):
-        hnmr_config = compose(
-            config_name="molbind_config",
-            overrides=[f"experiment={hnmr_experiment}"],
-        )
-    with initialize(version_base="1.3", config_path=configs_path):
-        cnmr_config = compose(
-            config_name="molbind_config",
-            overrides=[f"experiment={cnmr_experiment}"],
-        )
-
-    ir_model = read_weights(ir_config)
-    cnmr_model = read_weights(cnmr_config)
-    hnmr_model = read_weights(hnmr_config)
-    return ir_model, cnmr_model, hnmr_model
-
-
-@cache
-def compute_fingerprint(smiles):
-    mol = Chem.MolFromSmiles(smiles)
-    return Chem.RDKFingerprint(mol, maxPath=8, fpSize=2048)
-
-
-@cache
-def tanimoto_similarity(smiles1, smiles2):
-    fp1 = compute_fingerprint(smiles1)
-    fp2 = compute_fingerprint(smiles2)
-    return DataStructs.FingerprintSimilarity(fp1, fp2, metric=DataStructs.TanimotoSimilarity)
-
-
-@cache
-def sascore(smiles):
-    with contextlib.suppress(Exception):
-        m = Chem.MolFromSmiles(smiles)
-        return sascorer.calculateScore(m)
-
-
-@cache
-def get_number_of_topologically_distinct_atoms(smiles: str, atomic_number: int = 1):
-    """Return the number of unique `element` environments based on environmental topology.
-    This corresponds to the number of peaks one could maximally observe in an NMR spectrum.
-    Args:
-        smiles (str): SMILES string
-        atomic_number (int, optional): Atomic number. Defaults to 1.
-
-    Returns:
-        int: Number of unique environments.
-
-    Raises:
-        ValueError: If not a valid SMILES string
-
-    Example:
-        >>> get_number_of_topologically_distinct_atoms("CCO", 1)
-        3
-
-        >>> get_number_of_topologically_distinct_atoms("CCO", 6)
-        2
-    """
-
+# --- SMILES Tokenization and Encoding ---
+def tokenize_string(smiles: list[str] | str, modality_token_type: str = "smiles") -> tuple[Tensor, Tensor]:
+    if isinstance(smiles, str):
+        smiles = [smiles]
+    # Ensure ModalityConstants uses the correct tokenizer for "smiles" type
+    # This might need adjustment if ModalityConstants is not structured as expected
     try:
-        molecule = Chem.MolFromSmiles(smiles)
-        mol = Chem.AddHs(molecule) if atomic_number == 1 else molecule
-        # Get unique canonical atom rankings
-        atom_ranks = list(Chem.rdmolfiles.CanonicalRankAtoms(mol, breakTies=False))
+        tokenizer = ModalityConstants[modality_token_type].tokenizer
+    except KeyError:
+        logger.error(
+            f"Tokenizer for modality type '{modality_token_type}' not found in ModalityConstants. Defaulting to SMILES if possible."
+        )
+        tokenizer = ModalityConstants["smiles"].tokenizer  # Fallback, might not be ideal
 
-        # Select the unique element environments
-        atom_ranks = np.array(atom_ranks)
-
-        # Atom indices
-        atom_indices = np.array([atom.GetIdx() for atom in mol.GetAtoms() if atom.GetAtomicNum() == atomic_number])
-        return len(set(atom_ranks[atom_indices]))
-    except (TypeError, ValueError, AttributeError, IndexError):
-        return len(smiles)
+    tokens = tokenizer(smiles, padding="max_length", truncation=True, return_tensors="pt", max_length=128)
+    return tokens["input_ids"], tokens["attention_mask"]
 
 
-def embedding_pruning(
-    smiles: str,
-    spectra_ir_embedding: Tensor,
-    spectra_cnmr_embedding: Tensor,
-    spectra_hnmr_embedding: Tensor,
-    ir_model: MolBind,
-    cnmr_model: MolBind,
-    hnmr_model: MolBind,
-    ir_ratio: float,
-    cnmr_ratio: float,
-    hnmr_ratio: float,
-) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-    cosine_similarity = torch.nn.CosineSimilarity(dim=1)
-    ir_embedding, cnmr_embedding, hnmr_embedding = gpu_encode_smiles(
-        individual=smiles,
-        ir_model=ir_model,
-        cnmr_model=cnmr_model,
-        hnmr_model=hnmr_model,
-    )
-    # include last chunk
-    chunk_range = [*list(range(0, len(smiles), 256)), len(smiles)]
-    # sum the embeddings
-    cosine_similarities = []
-    ir_similarities = []
-    cnmr_similarities = []
-    hnmr_similarities = []
-    cnmr_ir_similarities = []
-    cnmr_hnmr_similarities = []
-    ir_hnmr_similarities = []
-    sum_embedding = ir_ratio * ir_embedding + cnmr_ratio * cnmr_embedding + hnmr_ratio * hnmr_embedding
-    spectra_embedding_sum = spectra_ir_embedding + spectra_cnmr_embedding + spectra_hnmr_embedding
-    for i, j in enumerate(chunk_range[:-1]):
-        cosine_similarities.append(
-            cosine_similarity(
-                spectra_embedding_sum,
-                sum_embedding[j : chunk_range[i + 1]],
-            )
-            .detach()
-            .cpu()
-        )
-        ir_similarities.append(
-            cosine_similarity(
-                spectra_ir_embedding,
-                ir_embedding[j : chunk_range[i + 1]],
-            )
-            .detach()
-            .cpu()
-        )
-        cnmr_similarities.append(
-            cosine_similarity(
-                spectra_cnmr_embedding,
-                cnmr_embedding[j : chunk_range[i + 1]],
-            )
-            .detach()
-            .cpu()
-        )
-        hnmr_similarities.append(
-            cosine_similarity(
-                spectra_hnmr_embedding,
-                hnmr_embedding[j : chunk_range[i + 1]],
-            )
-            .detach()
-            .cpu()
-        )
-        ir_hnmr_similarities.append(
-            cosine_similarity(
-                spectra_ir_embedding + spectra_hnmr_embedding,
-                ir_embedding[j : chunk_range[i + 1]] + hnmr_embedding[j : chunk_range[i + 1]],
-            )
-            .detach()
-            .cpu()
-        )
-        cnmr_ir_similarities.append(
-            cosine_similarity(
-                spectra_cnmr_embedding + spectra_ir_embedding,
-                cnmr_embedding[j : chunk_range[i + 1]] + ir_embedding[j : chunk_range[i + 1]],
-            )
-            .detach()
-            .cpu()
-        )
-        cnmr_hnmr_similarities.append(
-            cosine_similarity(
-                spectra_cnmr_embedding + spectra_hnmr_embedding,
-                cnmr_embedding[j : chunk_range[i + 1]] + hnmr_embedding[j : chunk_range[i + 1]],
-            )
-            .detach()
-            .cpu()
-        )
-
-    return (
-        torch.cat(cosine_similarities, dim=0),
-        torch.cat(ir_similarities, dim=0),
-        torch.cat(cnmr_similarities, dim=0),
-        torch.cat(hnmr_similarities, dim=0),
-        torch.cat(cnmr_ir_similarities, dim=0),
-        torch.cat(ir_hnmr_similarities, dim=0),
-        torch.cat(cnmr_hnmr_similarities, dim=0),
-    )
+def encode_smiles_variable(individuals: list[str] | str, models_dict: dict[str, MolBind | None]) -> dict[str, Tensor]:
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    input_ids, attention_mask = tokenize_string(individuals, "smiles")
+    input_ids, attention_mask = input_ids.to(device), attention_mask.to(device)
+    embeddings = {}
+    with torch.inference_mode():
+        for mod, model in models_dict.items():
+            if model:
+                try:
+                    embeddings[mod] = model.encode_modality((input_ids, attention_mask), modality="smiles")
+                except Exception as e_enc:
+                    logger.error(f"Error encoding SMILES with model for modality {mod}: {e_enc}")
+                    embeddings[mod] = torch.empty(0, device=device)  # Return empty on error
+    return embeddings
 
 
-def main(
-    file_with_isomers: str,
-    pruned_file: str,
-    index_of_smiles_to_test: int,
-    dataset_path: str,
-    ir_embeddings_path: str,
-    cnmr_embeddings_path: str,
-    hnmr_embeddings_path: str,
-    ir_model: MolBind,
-    cnmr_model: MolBind,
-    hnmr_model: MolBind,
-    folder_results: str,
-    ir_ratio: float = 1,
-    cnmr_ratio: float = 1,
-    hnmr_ratio: float = 1,
-    synthetic_access_quantile: float | None = None,
-) -> None:
-    index_of_smiles_to_test = int(index_of_smiles_to_test)
-    ir_embeddings = pd.read_pickle(ir_embeddings_path)
-    c_nmr_embeddings = pd.read_pickle(cnmr_embeddings_path)
-    h_nmr_embeddings = pd.read_pickle(hnmr_embeddings_path)
-    # sum up spectra embeddings
-    list_of_smiles = pd.read_pickle(dataset_path).smiles.to_list()
-    original_smiles = list_of_smiles[index_of_smiles_to_test]
-    # print molecular formula of the original smiles
-    # print the original smilesa
-    logger.debug(f"Original smiles: {original_smiles}")
-    ir_embeddings = aggregate_embeddings(embeddings=ir_embeddings, modalities=["smiles", "ir"], central_modality="smiles")
-    c_nmr_embeddings = aggregate_embeddings(
-        embeddings=c_nmr_embeddings,
-        modalities=["smiles", "c_nmr"],
-        central_modality="smiles",
-    )
-    h_nmr_embeddings = aggregate_embeddings(
-        embeddings=h_nmr_embeddings,
-        modalities=["smiles", "h_nmr_cnn"],
-        central_modality="smiles",
+def gpu_encode_smiles_variable(
+    individuals: list[str], models_dict: dict[str, MolBind | None], chunk_size: int = 8192
+) -> dict[str, Tensor]:
+    active_models = {m: model for m, model in models_dict.items() if model}
+    # Determine a default device, even if no active models (for returning empty tensors)
+    default_device = "cuda" if torch.cuda.is_available() else "cpu"
+    if active_models:
+        # This line was problematic if active_models was empty.
+        # It's better to get the device from an actual model if available.
+        # However, next(iter(active_models.values())) would fail if active_models is empty.
+        # Instead, we can get the device from the first model, or default to cpu/cuda check.
+        # A simpler way is to just use the default_device determined above.
+        # If there are active models, one of their devices will be used for encoding.
+        # If not, the default_device is fine for empty tensors.
+        pass
+
+    if not active_models or not individuals:
+        return {m: torch.empty(0, device=default_device) for m in models_dict}
+
+    all_parts = {mod: [] for mod in active_models}
+    for i in tqdm(range(0, len(individuals), chunk_size), desc="Encoding SMILES (Batch)", leave=False):
+        batch = individuals[i : i + chunk_size]
+        if not batch:
+            continue
+        chunk_embs = encode_smiles_variable(batch, active_models)
+        for mod, emb in chunk_embs.items():
+            if emb.nelement() > 0:  # Only append non-empty embeddings
+                all_parts[mod].append(emb.cpu())
+
+    final_embeddings = {}
+    for mod in models_dict:  # Iterate over original keys
+        if all_parts.get(mod):
+            final_embeddings[mod] = torch.cat(all_parts[mod], dim=0)
+        else:
+            final_embeddings[mod] = torch.empty(0, device=default_device)
+    return final_embeddings
+
+
+# --- Fingerprint and Similarity ---
+@cache
+def compute_fingerprint(smiles: str):
+    mol = Chem.MolFromSmiles(smiles)
+    return Chem.RDKFingerprint(mol, maxPath=8, fpSize=2048) if mol else None
+
+
+@cache
+def tanimoto_similarity(smiles1: str, smiles2: str) -> float:
+    if not smiles1 or not smiles2:
+        return 0.0
+    fp1, fp2 = compute_fingerprint(smiles1), compute_fingerprint(smiles2)
+    return DataStructs.FingerprintSimilarity(fp1, fp2) if fp1 and fp2 else 0.0
+
+
+# --- Embedding Pruning (Core Comparison Logic) ---
+def embedding_pruning_variable(
+    smiles_to_score: list[str],
+    target_1D_spectral_embeddings: dict[str, Tensor],  # Key: mod, Val: 1D Tensor (D,) for target
+    models_for_scoring: dict[str, MolBind | None],  # Models to encode candidate SMILES
+    modality_ratios: dict[str, float] | None = None,
+    chunk_size: int = 8192,
+) -> tuple[Tensor | None, dict[str, Tensor | None]]:
+    if not smiles_to_score:
+        return None, {}
+
+    scoreable_modalities = [
+        mod
+        for mod, target_emb in target_1D_spectral_embeddings.items()
+        if models_for_scoring.get(mod)
+        and target_emb is not None
+        and target_emb.ndim == 1
+        and target_emb.nelement() > 0  # Target must be 1D and non-empty
+    ]
+
+    num_smiles = len(smiles_to_score)
+    # Initialize return structures with correct device (CPU for scores)
+    all_individual_scores_cpu = {
+        mod: torch.zeros(num_smiles, device="cpu") if num_smiles > 0 else torch.empty(0, device="cpu")
+        for mod in models_for_scoring  # Initialize for all models passed, not just scoreable
+    }
+    combined_scores_cpu = torch.zeros(num_smiles, device="cpu") if num_smiles > 0 else None  # Will be None if num_smiles is 0
+
+    if not scoreable_modalities:
+        logger.warning("Pruning: No scoreable modalities (need 1D target & model). Returning zeros/empty.")
+        # Ensure all_individual_scores_cpu is returned for all original models_for_scoring keys
+        # combined_scores_cpu is already correctly initialized
+        return combined_scores_cpu, all_individual_scores_cpu
+
+    # If modality_ratios is None, default to 1.0 for all scoreable_modalities.
+    # If modality_ratios is provided, use it, with a fallback of 1.0 for any scoreable_modalities
+    # not explicitly in the provided dict.
+    ratios = modality_ratios or {mod: 1.0 for mod in scoreable_modalities}
+
+    candidate_smiles_embs_dict_gpu = gpu_encode_smiles_variable(
+        smiles_to_score, {mod: models_for_scoring[mod] for mod in scoreable_modalities}, chunk_size
     )
 
-    spectra_ir_embedding = ir_embeddings["ir"][index_of_smiles_to_test].to("cuda")
-    spectra_cnmr_embedding = c_nmr_embeddings["c_nmr"][index_of_smiles_to_test].to("cuda")
-    spectra_hnmr_embedding = h_nmr_embeddings["h_nmr_cnn"][index_of_smiles_to_test].to("cuda")
-    isomer_df = pd.read_csv(file_with_isomers)
-    # drop duplicates
-    isomer_df = isomer_df.drop_duplicates(subset=["canonical_smiles"])
-    isomer_df["unique_hydrogens"] = isomer_df["canonical_smiles"].progress_apply(
-        lambda x: get_number_of_topologically_distinct_atoms(x, atomic_number=1)
-    )
-    isomer_df["unique_carbons"] = isomer_df["canonical_smiles"].progress_apply(
-        lambda x: get_number_of_topologically_distinct_atoms(x, atomic_number=6)
-    )
-    isomer_df["sascore"] = isomer_df["canonical_smiles"].progress_apply(sascore)
-    if synthetic_access_quantile:
-        logger.info("You requested to filter based on synthetic accessibility")
-        isomer_df = isomer_df[isomer_df["synthetic_access"] < isomer_df["synthetic_access"].quantile(synthetic_access_quantile)]
-        logger.debug(f"Length of isomer_df after synthetic access filtering: {len(isomer_df)}")
+    cos_sim = torch.nn.CosineSimilarity(dim=1)
 
-    logger.debug(f"Length of isomer_df: {len(isomer_df)}")
-    (
-        cosine_similarities,
-        ir_similarities,
-        cnmr_similarities,
-        hnmr_similarities,
-        cnmr_ir_similarities,
-        ir_hnmr_similarities,
-        cnmr_hnmr_similarities,
-    ) = embedding_pruning(
-        spectra_ir_embedding=spectra_ir_embedding,
-        spectra_cnmr_embedding=spectra_cnmr_embedding,
-        spectra_hnmr_embedding=spectra_hnmr_embedding,
-        ir_model=ir_model,
-        cnmr_model=cnmr_model,
-        hnmr_model=hnmr_model,
-        smiles=isomer_df["canonical_smiles"].to_list(),
-        ir_ratio=ir_ratio,
-        cnmr_ratio=cnmr_ratio,
-        hnmr_ratio=hnmr_ratio,
-    )
-    cosine_similarities = cosine_similarities.tolist()
-    ir_similarities = ir_similarities.tolist()
-    cnmr_similarities = cnmr_similarities.tolist()
-    hnmr_similarities = hnmr_similarities.tolist()
-    cnmr_ir_similarities = cnmr_ir_similarities.tolist()
-    ir_hnmr_similarities = ir_hnmr_similarities.tolist()
-    cnmr_hnmr_similarities = cnmr_hnmr_similarities.tolist()
-    isomer_df["ir_similarity"] = ir_similarities
-    isomer_df["cnmr_similarity"] = cnmr_similarities
-    isomer_df["hnmr_similarity"] = hnmr_similarities
-    isomer_df["similarity"] = cosine_similarities
-    isomer_df["sum_of_similarities"] = isomer_df["ir_similarity"] + isomer_df["cnmr_similarity"] + isomer_df["hnmr_similarity"]
-    isomer_df["cnmr_ir_similarity"] = cnmr_ir_similarities
-    isomer_df["ir_hnmr_similarity"] = ir_hnmr_similarities
-    isomer_df["cnmr_hnmr_similarity"] = cnmr_hnmr_similarities
-    # tanimoto similarity with the original smiles
-    tanimoto = partial(tanimoto_similarity, original_smiles)
-    isomer_df["tanimoto"] = isomer_df["canonical_smiles"].progress_apply(lambda x: tanimoto(x))
-    # save backup
-    csv_path = Path(folder_results) / Path(
-        str(index_of_smiles_to_test) + "_" + str(Path(pruned_file).with_suffix("")) + "_sim"
-    ).with_suffix(".csv")
+    # --- Calculate individual modality scores ---
+    for mod in scoreable_modalities:
+        cand_embs_gpu = candidate_smiles_embs_dict_gpu.get(mod)
+        # Ensure target_1D_emb_gpu is on the same device as cand_embs_gpu for cosine_similarity
+        target_emb_device = cand_embs_gpu.device if cand_embs_gpu is not None and cand_embs_gpu.nelement() > 0 else "cpu"
+        target_1D_emb_gpu = target_1D_spectral_embeddings[mod].to(target_emb_device)
 
-    isomer_df.to_csv(csv_path, index=False)
+        if (
+            cand_embs_gpu is None  # Candidate embeddings for this modality might be missing
+            or cand_embs_gpu.nelement() == 0  # Or empty
+            or cand_embs_gpu.shape[0] != num_smiles  # Mismatch in number of SMILES
+            or cand_embs_gpu.shape[1] != target_1D_emb_gpu.shape[0]  # Mismatch in embedding dimension
+        ):
+            logger.warning(
+                f"Pruning: Skipping {mod} due to missing/mismatched candidate embeddings or target dim. Cand shape: {cand_embs_gpu.shape if cand_embs_gpu is not None else 'None'}, Target shape: {target_1D_emb_gpu.shape}"
+            )
+            # all_individual_scores_cpu[mod] is already zeros
+            continue
 
+        scores = cos_sim(target_1D_emb_gpu.unsqueeze(0), cand_embs_gpu)
+        all_individual_scores_cpu[mod] = scores.cpu()
 
-if __name__ == "__main__":
-    fire.Fire(main)
+    # --- Calculate combined score from individual scores ---
+    if num_smiles > 0:  # combined_scores_cpu is torch.zeros(num_smiles)
+        any_modality_contributed_to_combined = False
+        for mod in scoreable_modalities:
+            # Check if this modality's individual scores were successfully computed and should be included.
+            # This re-checks the conditions under which scores would have been validly computed.
+            cand_embs_gpu = candidate_smiles_embs_dict_gpu.get(mod)  # From GPU encoding
+            target_emb_for_mod = target_1D_spectral_embeddings[mod]  # Original target embedding
+
+            if (
+                cand_embs_gpu is not None
+                and cand_embs_gpu.nelement() > 0
+                and cand_embs_gpu.shape[0] == num_smiles
+                and cand_embs_gpu.shape[1] == target_emb_for_mod.shape[0]  # Check dimension against original target
+            ):
+                # This modality's scores in all_individual_scores_cpu[mod] are valid (not just initial zeros from skip)
+                # Add its weighted contribution to the combined_scores_cpu.
+                # Ensure ratio is applied correctly, defaulting to 1.0 if not in ratios dict (though it should be)
+                mod_ratio = ratios.get(mod, 1.0)
+                combined_scores_cpu += mod_ratio * all_individual_scores_cpu[mod]
+                any_modality_contributed_to_combined = True
+            # Else, this modality was skipped, or its candidate embeddings were invalid.
+            # all_individual_scores_cpu[mod] would be zeros, so adding ratio * zeros has no effect.
+
+        if not any_modality_contributed_to_combined and scoreable_modalities:
+            logger.warning(
+                "Pruning: None of the scoreable modalities had valid candidate embeddings to contribute to the combined score. Combined score will remain zeros."
+            )
+    # If num_smiles == 0, combined_scores_cpu is None, which is correct.
+
+    return combined_scores_cpu, all_individual_scores_cpu

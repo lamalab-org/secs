@@ -14,7 +14,7 @@ data:
     - c_nmr
   valid_frac: 1
   batch_size: 128
-  dataset_path: "${paths.data_dir}/test_set_short_hnmr.parquet"
+  dataset_path: "${paths.data_dir}/simulated_spectra_test_set.parquet"
 
 ckpt_path: "${paths.checkpoints_dir}/cnmr_simulated_large_dataset_20241016_1008/best_model.ckpt"
 

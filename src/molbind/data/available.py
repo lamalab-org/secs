@@ -1,10 +1,8 @@
 from enum import Enum, StrEnum
 
-from molbind.data.components.datasets import (
-    FingerprintMolBindDataset,
+from molbind.data import (
+    HSQCDataset,
     IrDataset,
-    MassSpecNegativeDataset,
-    MassSpecPositiveDataset,
     StringDataset,
     cNmrDataset,
     hNmrDataset,
@@ -12,37 +10,19 @@ from molbind.data.components.datasets import (
 from molbind.data.components.mb_tokenizers import (
     SMILES_TOKENIZER,
 )
-from molbind.models.components.custom_encoders import (
-    CustomFingerprintEncoder,
-    IrCNNEncoder,
-    MassSpecNegativeEncoder,
-    MassSpecPositiveEncoder,
-    SmilesEncoder,
-    cNmrEncoder,
-    hNmrCNNEncoder,
-    hNmrEncoder,
-)
+from molbind.models import HSQCEncoder, IrCNNEncoder, SmilesEncoder, cNmrEncoder, hNmrCNNEncoder
 
 
 class StringModalities(StrEnum):
     SMILES = "smiles"
-    SELFIES = "selfies"
-    IUPAC_NAME = "iupac_name"
-    DESCRIPTION = "description"
 
 
 class NonStringModalities(StrEnum):
     C_NMR = "c_nmr"
-    FINGERPRINT = "fingerprint"
-    IMAGE = "image"
-    GRAPH = "graph"
     H_NMR = "h_nmr"
     IR = "ir"
-    MASS_SPEC_POSITIVE = "mass_spec_positive"
-    MASS_SPEC_NEGATIVE = "mass_spec_negative"
+    GRAPH = "graph"
     STRUCTURE = "structure"
-    MULTI_SPEC = "multi_spec"
-    H_NMR_CNN = "h_nmr_cnn"
 
 
 class ModalityConstants(Enum):
@@ -51,12 +31,8 @@ class ModalityConstants(Enum):
     """
 
     c_nmr = (list, cNmrDataset, cNmrEncoder, None)
-    fingerprint = (list, FingerprintMolBindDataset, CustomFingerprintEncoder, None)
-    h_nmr = (list, hNmrDataset, hNmrEncoder, None)
-    h_nmr_cnn = (list, hNmrDataset, hNmrCNNEncoder, None)
+    h_nmr = (list, hNmrDataset, hNmrCNNEncoder, None)
     ir = (list, IrDataset, IrCNNEncoder, None)
-    mass_spec_negative = (list, MassSpecNegativeDataset, MassSpecNegativeEncoder, None)
-    mass_spec_positive = (list, MassSpecPositiveDataset, MassSpecPositiveEncoder, None)
     smiles = (str, StringDataset, SmilesEncoder, SMILES_TOKENIZER)
 
     @property

@@ -91,7 +91,7 @@ class MolBindDataModule(LightningDataModule):
         #     val_dataloader.sampler = DistributedSampler(val_dataloader.dataset)
         val_dataloaders = self.build_multimodal_dataloader(
             batch_size=self.dataloader_arguments["batch_size"],
-            drop_last=True,
+            drop_last=False,
             shuffle=False,
             num_workers=self.dataloader_arguments["num_workers"],
             mode="val",
@@ -102,7 +102,6 @@ class MolBindDataModule(LightningDataModule):
         # iter through test data loaders
         test_dataloaders = self.build_predict_dataloader(
             batch_size=self.dataloader_arguments["batch_size"],
-            drop_last=False,
             shuffle=False,
             num_workers=self.dataloader_arguments["num_workers"],
             mode="predict",

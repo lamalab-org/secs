@@ -27,7 +27,7 @@ classifiers = [
 
 requires-python = ">=3.11, <3.13"
 dependencies = [
-  "chromadb",
+  "faiss-cpu",
   "torch",
   "torchvision",
   "torch_geometric",

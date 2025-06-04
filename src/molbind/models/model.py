@@ -3,7 +3,7 @@ from loguru import logger
 from omegaconf import DictConfig
 from torch import Tensor
 
-from molbind.models.components.head import ProjectionHead
+from molbind.models import ProjectionHead
 
 
 class MolBind(nn.Module):
