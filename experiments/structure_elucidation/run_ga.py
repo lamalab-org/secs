@@ -151,26 +151,26 @@ def run_ga_instance(
 def cli(
     start_range: int,
     end_range: int,
-    seed: int,
+    seed: int = 42,
     configs_path: str = "../../configs",
-    dataset_path: str = "../valid_dataset_20250522_1801.pkl",
+    dataset_path: str = "../valid_dataset_20250604_0454.pkl",
     # GA: model experiments & RAW target embedding file paths (List[BATCH Dict])
     ga_ir_exp: str | None = None,
-    ga_cnmr_exp: str | None = None,
-    ga_hnmr_exp: str | None = "experimental/hnmr",
+    ga_cnmr_exp: str | None = "test/cnmr_finetune",
+    ga_hnmr_exp: str | None = "test/hnmr_augment_finetune",
     ga_ir_raw_emb_path: str | None = None,
-    ga_cnmr_raw_emb_path: str | None = None,
-    ga_hnmr_raw_emb_path: str | None = "../luc_nmrium_hnmr_10_simple_20250522_1919.pkl",
+    ga_cnmr_raw_emb_path: str | None = "../cnmr_finetune_20250602_1348.pkl",
+    ga_hnmr_raw_emb_path: str | None = "../hnmr_augment_finetune_20250604_0454.pkl",
     # Analyzer: model experiments & RAW embedding file paths
     analyzer_ir_exp: str | None = None,
-    analyzer_cnmr_exp: str | None = None,
-    analyzer_hnmr_exp: str | None = "experimental/hnmr",
+    analyzer_cnmr_exp: str | None = "test/cnmr_finetune",
+    analyzer_hnmr_exp: str | None = "test/hnmr_augment_finetune",
     # GA parameters
     init_pop_ga: int = 512,
     gens_ga: int = 20,
     offspring_ga: int = 2048,
     pop_ga: int = 256,
-    base_cache_dir: str = "GA_RESULTS_V7_POLARS_DEBUG",  # Updated version
+    base_cache_dir: str = "max_augment",
 ):
     ga_model_exps = {"ir": ga_ir_exp, "cnmr": ga_cnmr_exp, "hnmr": ga_hnmr_exp}
     ga_models_for_scoring = load_models_dict(configs_path, ga_model_exps)

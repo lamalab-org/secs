@@ -89,7 +89,14 @@ def gpu_encode_smiles_variable(
     # Determine a default device, even if no active models (for returning empty tensors)
     default_device = "cuda" if torch.cuda.is_available() else "cpu"
     if active_models:
-        default_device = next(iter(active_models.values()))
+        # This line was problematic if active_models was empty.
+        # It's better to get the device from an actual model if available.
+        # However, next(iter(active_models.values())) would fail if active_models is empty.
+        # Instead, we can get the device from the first model, or default to cpu/cuda check.
+        # A simpler way is to just use the default_device determined above.
+        # If there are active models, one of their devices will be used for encoding.
+        # If not, the default_device is fine for empty tensors.
+        pass
 
     if not active_models or not individuals:
         return {m: torch.empty(0, device=default_device) for m in models_dict}
@@ -152,34 +159,39 @@ def embedding_pruning_variable(
     # Initialize return structures with correct device (CPU for scores)
     all_individual_scores_cpu = {
         mod: torch.zeros(num_smiles, device="cpu") if num_smiles > 0 else torch.empty(0, device="cpu")
-        for mod in models_for_scoring
+        for mod in models_for_scoring  # Initialize for all models passed, not just scoreable
     }
-    combined_scores_cpu = torch.zeros(num_smiles, device="cpu") if num_smiles > 0 else None
+    combined_scores_cpu = torch.zeros(num_smiles, device="cpu") if num_smiles > 0 else None  # Will be None if num_smiles is 0
 
     if not scoreable_modalities:
-        logger.warning("Pruning: No scoreable modalities (need 1D target & model). Returning zeros.")
+        logger.warning("Pruning: No scoreable modalities (need 1D target & model). Returning zeros/empty.")
+        # Ensure all_individual_scores_cpu is returned for all original models_for_scoring keys
+        # combined_scores_cpu is already correctly initialized
         return combined_scores_cpu, all_individual_scores_cpu
 
-    ratios = modality_ratios or dict.fromkeys(scoreable_modalities, 1.0)
+    # If modality_ratios is None, default to 1.0 for all scoreable_modalities.
+    # If modality_ratios is provided, use it, with a fallback of 1.0 for any scoreable_modalities
+    # not explicitly in the provided dict.
+    ratios = modality_ratios or {mod: 1.0 for mod in scoreable_modalities}
 
     candidate_smiles_embs_dict_gpu = gpu_encode_smiles_variable(
         smiles_to_score, {mod: models_for_scoring[mod] for mod in scoreable_modalities}, chunk_size
     )
 
     cos_sim = torch.nn.CosineSimilarity(dim=1)
-    combined_cand_parts_gpu = []
 
+    # --- Calculate individual modality scores ---
     for mod in scoreable_modalities:
         cand_embs_gpu = candidate_smiles_embs_dict_gpu.get(mod)
         # Ensure target_1D_emb_gpu is on the same device as cand_embs_gpu for cosine_similarity
-        target_emb_device = cand_embs_gpu.device if cand_embs_gpu is not None else "cpu"
+        target_emb_device = cand_embs_gpu.device if cand_embs_gpu is not None and cand_embs_gpu.nelement() > 0 else "cpu"
         target_1D_emb_gpu = target_1D_spectral_embeddings[mod].to(target_emb_device)
 
         if (
-            cand_embs_gpu is None
-            or cand_embs_gpu.nelement() == 0
-            or cand_embs_gpu.shape[0] != num_smiles
-            or cand_embs_gpu.shape[1] != target_1D_emb_gpu.shape[0]
+            cand_embs_gpu is None  # Candidate embeddings for this modality might be missing
+            or cand_embs_gpu.nelement() == 0  # Or empty
+            or cand_embs_gpu.shape[0] != num_smiles  # Mismatch in number of SMILES
+            or cand_embs_gpu.shape[1] != target_1D_emb_gpu.shape[0]  # Mismatch in embedding dimension
         ):
             logger.warning(
                 f"Pruning: Skipping {mod} due to missing/mismatched candidate embeddings or target dim. Cand shape: {cand_embs_gpu.shape if cand_embs_gpu is not None else 'None'}, Target shape: {target_1D_emb_gpu.shape}"
@@ -189,37 +201,35 @@ def embedding_pruning_variable(
 
         scores = cos_sim(target_1D_emb_gpu.unsqueeze(0), cand_embs_gpu)
         all_individual_scores_cpu[mod] = scores.cpu()
-        combined_cand_parts_gpu.append(ratios.get(mod, 1.0) * cand_embs_gpu)
 
-    if combined_cand_parts_gpu:
-        summed_cand_embs_gpu = torch.sum(torch.stack(combined_cand_parts_gpu, dim=0), dim=0)
+    # --- Calculate combined score from individual scores ---
+    if num_smiles > 0:  # combined_scores_cpu is torch.zeros(num_smiles)
+        any_modality_contributed_to_combined = False
+        for mod in scoreable_modalities:
+            # Check if this modality's individual scores were successfully computed and should be included.
+            # This re-checks the conditions under which scores would have been validly computed.
+            cand_embs_gpu = candidate_smiles_embs_dict_gpu.get(mod)  # From GPU encoding
+            target_emb_for_mod = target_1D_spectral_embeddings[mod]  # Original target embedding
 
-        summed_target_parts_gpu = []
-        # Check if modality was actually used for candidate embeddings before adding its target part
-        valid_modalities_for_sum = [
-            m
-            for m in scoreable_modalities
-            if m in candidate_smiles_embs_dict_gpu
-            and candidate_smiles_embs_dict_gpu[m] is not None
-            and candidate_smiles_embs_dict_gpu[m].nelement() > 0
-        ]
+            if (
+                cand_embs_gpu is not None
+                and cand_embs_gpu.nelement() > 0
+                and cand_embs_gpu.shape[0] == num_smiles
+                and cand_embs_gpu.shape[1] == target_emb_for_mod.shape[0]  # Check dimension against original target
+            ):
+                # This modality's scores in all_individual_scores_cpu[mod] are valid (not just initial zeros from skip)
+                # Add its weighted contribution to the combined_scores_cpu.
+                # Ensure ratio is applied correctly, defaulting to 1.0 if not in ratios dict (though it should be)
+                mod_ratio = ratios.get(mod, 1.0)
+                combined_scores_cpu += mod_ratio * all_individual_scores_cpu[mod]
+                any_modality_contributed_to_combined = True
+            # Else, this modality was skipped, or its candidate embeddings were invalid.
+            # all_individual_scores_cpu[mod] would be zeros, so adding ratio * zeros has no effect.
 
-        for mod in valid_modalities_for_sum:
-            summed_target_parts_gpu.append(
-                ratios.get(mod, 1.0) * target_1D_spectral_embeddings[mod].to(summed_cand_embs_gpu.device)
+        if not any_modality_contributed_to_combined and scoreable_modalities:
+            logger.warning(
+                "Pruning: None of the scoreable modalities had valid candidate embeddings to contribute to the combined score. Combined score will remain zeros."
             )
-
-        if summed_target_parts_gpu:
-            summed_target_emb_gpu = torch.sum(torch.stack(summed_target_parts_gpu, dim=0), dim=0)
-            if summed_cand_embs_gpu.shape[1] == summed_target_emb_gpu.shape[0]:
-                combined_scores_cpu = cos_sim(summed_target_emb_gpu.unsqueeze(0), summed_cand_embs_gpu).cpu()
-            else:
-                logger.error(
-                    f"Pruning: Dim mismatch for combined score sum. Target sum: {summed_target_emb_gpu.shape}, Cand sum: {summed_cand_embs_gpu.shape}"
-                )
-        else:
-            logger.warning("Pruning: No valid target parts for combined score sum.")
-    else:
-        logger.warning("Pruning: No valid candidate parts for combined score sum.")
+    # If num_smiles == 0, combined_scores_cpu is None, which is correct.
 
     return combined_scores_cpu, all_individual_scores_cpu

@@ -73,7 +73,7 @@ def embed(config: DictConfig):
         model=MolBindModule(config),
         datamodule=datamodule,
     )
-    with open(f"{config.embeddings_path}_{RETRIEVAL_TIME}.pkl", "wb") as f:  # noqa: PTH123
+    with open(f"{config.embeddings_path}_{RETRIEVAL_TIME}.pkl", "wb") as f:
         pkl.dump(predictions, f, protocol=pkl.HIGHEST_PROTOCOL)
 
     aggregated_embeddings = aggregate_embeddings(

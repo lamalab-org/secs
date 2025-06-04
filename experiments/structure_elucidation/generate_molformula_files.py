@@ -4,6 +4,7 @@ from typing import Any, ClassVar
 
 import numpy as np
 import pandas as pd
+import polars as pl
 import torch
 from datasets import load_dataset
 from loguru import logger
@@ -12,7 +13,7 @@ from prune_sim import embedding_pruning_variable, load_models_dict, tanimoto_sim
 from tqdm.auto import tqdm
 
 from molbind.models import MolBind
-from molbind.utils.spec2struct import gen_close_molformulas_from_seed, smiles_to_molecular_formula
+from molbind.utils.spec2struct import gen_close_molformulas_from_seed, is_neutral_no_isotopes, smiles_to_molecular_formula
 
 ModelType = MolBind
 
@@ -21,7 +22,6 @@ ModelType = MolBind
 def aggregate_embeddings_user_provided(
     embeddings: list[dict[str, torch.Tensor]],
     modalities: list[str],
-    central_modality: str,  # Not strictly used in this simplified version but part of signature
 ) -> dict[str, torch.Tensor]:
     device = "cuda" if torch.cuda.is_available() else "cpu"
     collected_tensors_for_modality = {mod: [] for mod in modalities}
@@ -71,9 +71,7 @@ def get_1d_target_embedding_from_raw_batches_pkl(
         # This assumes 'smiles' or a similar common key is listed first if it's the intended central one.
         ref_central_modality = modalities_in_batch_dict[0] if modalities_in_batch_dict else "smiles"
 
-        aggregated_data = aggregate_embeddings_user_provided(
-            embeddings=list_of_batch_dicts, modalities=modalities_in_batch_dict, central_modality=ref_central_modality
-        )
+        aggregated_data = aggregate_embeddings_user_provided(embeddings=list_of_batch_dicts, modalities=modalities_in_batch_dict)
 
         all_spectral_embs = aggregated_data.get(primary_spec_key)
         if all_spectral_embs is None or all_spectral_embs.nelement() == 0:
@@ -253,6 +251,8 @@ class SimpleMoleculeAnalyzer:
                 logger.error("Analyzer: 'molecular_formula' column missing in PubChem cache.")
                 return pd.DataFrame()
             filtered_cache = self.pubchem_cache.filter(self.pubchem_cache["molecular_formula"].is_in(similar_formulas))
+            # remove smiles that are contain isotopes or that are positively or negatively charged
+            filtered_cache = filtered_cache.filter(pl.col("smiles").map_elements(is_neutral_no_isotopes, return_dtype=pl.Boolean))
         except Exception as e_filter:
             logger.error(f"Analyzer: Error during PubChem cache filtering: {e_filter}", exc_info=True)
             return pd.DataFrame()
@@ -298,20 +298,29 @@ class SimpleMoleculeAnalyzer:
                 def assign(sc_tensor, num_exp, def_val=0.0):
                     if sc_tensor is not None and hasattr(sc_tensor, "numel") and sc_tensor.numel() == num_exp:
                         return sc_tensor.tolist()
-                    if sc_tensor is not None and hasattr(sc_tensor, "numel") and sc_tensor.numel() == 1 and num_exp > 0:
+                    if (
+                        sc_tensor is not None and hasattr(sc_tensor, "numel") and sc_tensor.numel() == 1 and num_exp > 0
+                    ):  # Should not happen with current prune_sim
                         return [sc_tensor.item()] * num_exp
+                    # If sc_tensor is None (e.g. num_isomers was 0) or numel doesn't match, return default list
                     return [def_val if def_val is not None else None] * num_exp
 
                 isomer_df["similarity"] = assign(combined_sc, num_isomers)
-                current_sum = np.zeros(num_isomers)
+                current_sum = np.zeros(num_isomers, dtype=float)  # Ensure float for sum
                 for st in self.ALL_SPECTRA_TYPES:
-                    sc_mod = individual_sc_dict.get(st)
-                    isomer_df[f"{st}_similarity"] = assign(sc_mod, num_isomers, None)
+                    sc_mod = individual_sc_dict.get(st)  # This will be a tensor or None
+                    assigned_scores = assign(sc_mod, num_isomers, None)
+                    isomer_df[f"{st}_similarity"] = assigned_scores
+
+                    # Summing for "sum_of_all_individual_similarities"
+                    # Only sum if the modality was part of target_1D_embs (i.e., it was intended to be scored)
+                    # and its scores were successfully computed (sc_mod is a tensor of correct size)
                     if st in target_1D_embs and sc_mod is not None and hasattr(sc_mod, "numel") and sc_mod.numel() == num_isomers:
                         try:
-                            score_list = sc_mod.tolist() if isinstance(sc_mod, torch.Tensor) else sc_mod
-                            if isinstance(score_list, list):
-                                current_sum += np.array([s if pd.notna(s) else 0.0 for s in score_list], dtype=float)
+                            # assigned_scores is already a list of numbers or Nones
+                            # Replace Nones with 0 for summation
+                            scores_for_sum = [s if pd.notna(s) else 0.0 for s in assigned_scores]
+                            current_sum += np.array(scores_for_sum, dtype=float)
                         except Exception as e_sum:
                             logger.warning(f"Could not sum scores for {st}: {e_sum}")
                 isomer_df["sum_of_all_individual_similarities"] = current_sum.tolist()

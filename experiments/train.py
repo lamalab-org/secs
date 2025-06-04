@@ -31,8 +31,8 @@ def train_molbind(config: DictConfig):
     # define the run_id based on the config name and the date
     run_id = config.run_id + "_" + TRAIN_DATE if hasattr(config, "run_id") else TRAIN_DATE
     # set wandb mode to offline if no WANDB_API_KEY is set
-    if not os.getenv("WANDB_API_KEY"):
-        os.environ["WANDB_MODE"] = "offline"
+    # if not os.getenv("WANDB_API_KEY"):
+    # os.environ["WANDB_MODE"] = "online"
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     try:
         # set PYTORCH_ALLOC_CONF to avoid memory fragmentation
