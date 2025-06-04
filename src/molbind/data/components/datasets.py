@@ -3,6 +3,9 @@ import torch
 from torch import Tensor
 from torch.utils.data import Dataset
 
+from molbind.data.components.hnmr import augment
+from molbind.utils.spec2struct import downsample_spectrum
+
 
 class StringDataset(Dataset):
     def __init__(
@@ -213,16 +216,17 @@ class hNmrDataset(Dataset):
     def __init__(
         self,
         data: list[list[float]],
-        vec_len: int = 512,
-        architecture: str = "cnn",
+        augment: bool = False,
+        vec_size: int = 10_000,
         **kwargs,
     ) -> None:
         self.h_nmr = data
-        self.vec_len = vec_len
-        self.central_modality = kwargs["central_modality"]
+        # For multi-modal setups, if provided
+        self.central_modality = kwargs.get("central_modality")
         self.other_modality = "h_nmr"
-        self.central_modality_data = kwargs["central_modality_data"]
-        self.architecture = architecture
+        self.central_modality_data = kwargs.get("central_modality_data")
+        self.augment = augment
+        self.vec_size = vec_size
 
     def __len__(self):
         return len(self.h_nmr)
@@ -234,31 +238,14 @@ class hNmrDataset(Dataset):
         }
 
     def hnmr_to_vec(self, nmr_shifts: list[list[float]]) -> Tensor:
-        if len(nmr_shifts) == 10000:
-            # normalize the data
-            nmr_shifts = nmr_shifts / np.max(nmr_shifts)
-            if self.architecture == "cnn":
-                # add 1 channel if using CNN
-                return torch.tensor(nmr_shifts, dtype=torch.float32).unsqueeze(0)
-            return torch.tensor(nmr_shifts, dtype=torch.float32)
-        init_vec = torch.zeros(self.vec_len, dtype=torch.float32)
-        if isinstance(nmr_shifts[0], list | np.ndarray):
-            for shift, _ in nmr_shifts:
-                index = int(shift / 18 * self.vec_len)
-                init_vec[index] = 1
-        else:
-            for _shift in nmr_shifts:
-                shift = np.round(_shift, 2)
-                index = int(shift / 18 * self.vec_len)
-                if index >= self.vec_len:
-                    index = self.vec_len - 1
-                if index < 0:
-                    index = 0
-                if init_vec[index] != 0:
-                    index = index + 1
-                elif init_vec[index] == 0:
-                    init_vec[index] = 1
-        return init_vec
+        # interpolate to vec_size nr of points
+        nmr_array = np.array(nmr_shifts) / np.max(nmr_shifts)
+        if self.augment:
+            nmr_array = augment(nmr_array)
+        return torch.tensor(
+            nmr_array,
+            dtype=torch.float32,
+        ).unsqueeze(0)
 
 
 class StringDatasetEmbedding(Dataset):

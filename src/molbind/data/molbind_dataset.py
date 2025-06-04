@@ -27,13 +27,14 @@ class MolBindDataset:
         data: pl.DataFrame,
         central_modality: StringModalities | NonStringModalities,
         other_modalities: list[str],
+        config: dict | None = None,
         **kwargs,
     ) -> None:
         """Dataset for multimodal data."""
         self.data = data
         self.central_modality = central_modality
         self.central_modality_data_type = ModalityConstants[central_modality].data_type
-
+        self.config = config
         # if self.central_modality_data_type == str:
         init_str_fn = partial(
             self._tokenize_strings,
@@ -127,9 +128,10 @@ class MolBindDataset:
         h_nmr_cnn_data = self.data[[self.central_modality, modality]].dropna()
         return hNmrDataset(
             data=h_nmr_cnn_data[modality].to_list(),
+            augment=self.config.data.h_nmr.augment if self.config else False,
+            vec_size=self.config.data.h_nmr.vec_size if self.config else 10_000,
             central_modality=self.central_modality,
             central_modality_data=self._handle_central_modality_data(h_nmr_cnn_data),
-            architecture="cnn",
         )
 
     def build_datasets_for_modalities(self) -> dict[str, Dataset]:

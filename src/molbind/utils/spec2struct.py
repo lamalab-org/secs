@@ -1,9 +1,11 @@
 import re
-from collections import Counter, defaultdict
+from collections import defaultdict
 
+import numpy as np
 import polars as pl
 from rdkit import Chem
 from rdkit.Chem import rdMolDescriptors
+from scipy import interpolate
 
 
 def get_atom_counts_from_formula(formula_string: str) -> dict:
@@ -236,3 +238,43 @@ def convert_to_molecular_formulas(datafile: str) -> list[str]:
 
     # Convert to list and return
     return data["molecular_formula"].to_list()
+
+
+def is_neutral_no_isotopes(smiles):
+    """Check if molecule is neutral and contains no isotopes"""
+    try:
+        mol = Chem.MolFromSmiles(smiles)
+        if mol is None:
+            return False
+
+        # Check for formal charges
+        total_charge = sum(atom.GetFormalCharge() for atom in mol.GetAtoms())
+        if total_charge != 0:
+            return False
+
+        # Check for isotopes
+        has_isotopes = any(atom.GetIsotope() != 0 for atom in mol.GetAtoms())
+        return not has_isotopes
+    except Exception:
+        return False
+
+
+def downsample_spectrum(spectrum, original_points, target_points):
+    """
+    Downsample NMR spectrum from original_points to target_points using cubic interpolation
+
+    Parameters:
+    - spectrum: 1D array of spectrum intensities (length = original_points)
+    - original_points: number of points in original spectrum
+    - target_points: desired number of points
+
+    Returns:
+    - downsampled_spectrum: 1D array of length target_points
+    """
+    # Create index arrays
+    original_indices = np.linspace(0, 1, original_points)
+    target_indices = np.linspace(0, 1, target_points)
+
+    # Use cubic interpolation
+    cubic_interp = interpolate.interp1d(original_indices, spectrum, kind="linear")
+    return cubic_interp(target_indices)

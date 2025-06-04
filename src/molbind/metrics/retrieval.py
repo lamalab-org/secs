@@ -54,16 +54,6 @@ def full_database_retrieval(
             if modality_2 == modality_1:
                 continue
 
-            # Original condition - kept for consistency, though its utility might be debatable
-            # as filtering below determines actual sizes.
-            # Note: .size() for PyTorch tensor is total elements, .shape[0] is number of embeddings
-            if embeddings[modality_1].shape[0] < embeddings[modality_2].shape[0]:
-                logger.info(
-                    f"Skipping {modality_1} (DB) vs {modality_2} (Query) due to raw size: "
-                    f"{embeddings[modality_1].shape[0]} < {embeddings[modality_2].shape[0]}"
-                )
-                continue
-
             logger.info(f"Processing: Index with {modality_1}, Query with {modality_2}")
 
             # --- Data Preparation ---
@@ -76,12 +66,9 @@ def full_database_retrieval(
             # This ensures we are working with a consistent set of items across modalities being compared.
             common_item_original_indices = indices[[modality_1, modality_2, central_modality]].dropna().index
 
-            if len(common_item_original_indices) == 0:
-                logger.warning(f"No common items found for {modality_1}, {modality_2}, and {central_modality}. Skipping.")
-                continue
-
             # Get the actual embeddings for these common items
             # These are the vectors that will go into the Faiss index
+
             db_vectors_np = embeddings[modality_1].detach().cpu().numpy()[common_item_original_indices]
             # These are the vectors that will be used for querying
             query_vectors_np = embeddings[modality_2].detach().cpu().numpy()[common_item_original_indices]

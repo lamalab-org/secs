@@ -5,7 +5,7 @@ defaults:
   - override /trainer: gpu
 
 model:
-  embedding_size: 512
+  embedding_size: 1024
   encoders:
     smiles:
       freeze_encoder: False
@@ -14,7 +14,7 @@ model:
 
   projection_heads:
     h_nmr:
-      dims: [512, "${model.embedding_size}"]
+      dims: [1024, "${model.embedding_size}"]
       activation: LeakyReLU
     h_nmr_freeze: False
     h_nmr_is_on: True
@@ -25,9 +25,9 @@ data:
     - h_nmr
   valid_frac: 1
   batch_size: 1024
-  dataset_path: "${paths.data_dir}/h_nmr_luc_10_simple.parquet"
+  dataset_path: "${paths.data_dir}/val.parquet"
 
-ckpt_path: "${paths.checkpoints_dir}/hnmr_20250522_1121/best_model.ckpt"
+ckpt_path: "${paths.checkpoints_dir}/hnmr_20250602_1227/best_model.ckpt"
 
 trainer:
   num_nodes: 1
@@ -39,5 +39,5 @@ top_k:
   - 5
   - 20
 
-run_id: "luc_nmrium_hnmr_10_simple"
-embeddings_path: luc_nmrium_hnmr_10_simple
+run_id: "hnmr_pretrain_val_exp"
+embeddings_path: ${run_id}
