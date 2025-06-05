@@ -109,8 +109,8 @@ def full_database_retrieval(
             # efSearch is the depth of exploration during search
             M = 32  # A common value for HNSW, can be tuned
             index = faiss.IndexHNSWFlat(dimension, M, faiss.METRIC_INNER_PRODUCT)
-            index.hnsw.efConstruction = 200  # Chroma default is 512, can adjust
-            index.hnsw.efSearch = 128  # Chroma default is 1000, can adjust
+            index.hnsw.efConstruction = 200
+            index.hnsw.efSearch = 128
 
             # For exact search (slower, especially for large datasets):
             # index = faiss.IndexFlatIP(dimension)

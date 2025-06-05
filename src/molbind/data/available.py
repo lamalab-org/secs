@@ -21,6 +21,7 @@ class NonStringModalities(StrEnum):
     C_NMR = "c_nmr"
     H_NMR = "h_nmr"
     IR = "ir"
+    HSQC = "hsqc"
     GRAPH = "graph"
     STRUCTURE = "structure"
 
@@ -34,6 +35,7 @@ class ModalityConstants(Enum):
     h_nmr = (list, hNmrDataset, hNmrCNNEncoder, None)
     ir = (list, IrDataset, IrCNNEncoder, None)
     smiles = (str, StringDataset, SmilesEncoder, SMILES_TOKENIZER)
+    hsqc = (list, HSQCDataset, HSQCEncoder, None)
 
     @property
     def data_type(self):

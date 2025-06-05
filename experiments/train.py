@@ -48,7 +48,9 @@ def train_molbind(config: DictConfig):
     # define the number of GPUs available for the dataloaders
     world_size = torch.cuda.device_count()
     # load and handle the data
-    data = load_dataset(config.data.dataset_path)
+    data = load_dataset(
+        config.data.dataset_path, config.data.dataset_config if hasattr(config.data, "dataset_config") else "default"
+    )
     features = [*config.data.modalities, config.data.central_modality]
     train_data = data["train"].to_pandas()[features]
     logger.info(f"Train data shape: {train_data.shape}")

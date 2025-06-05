@@ -9,28 +9,34 @@ model:
   encoders:
     smiles:
       freeze_encoder: False
-    hsqc:
+    h_nmr:
       freeze_encoder: False
-
   projection_heads:
-    hsqc:
+    h_nmr:
       dims: [1024, "${model.embedding_size}"]
       activation: LeakyReLU
-    hsqc_freeze: False
-    hsqc_is_on: True
+    h_nmr_freeze: False
+    h_nmr_is_on: True
     smiles_freeze: False
 
 data:
   modalities:
-    - hsqc
-  modalities_to_read:
-    - hsqc
-  batch_size: 128
-  dataset_path: jablonkagroup/spectral-dataset
-  dataset_config: hsqc
+    - h_nmr
+  valid_frac: 1
+  batch_size: 1024
+  dataset_path: "${paths.data_dir}/nmrshiftdb/hnmr_cnmr_validation_set.parquet"
+
+ckpt_path: "${paths.checkpoints_dir}/hnmr_20250602_1227/best_model.ckpt"
 
 trainer:
   num_nodes: 1
-  gpus_per_node: 6
+  gpus_per_node: 1
 
-run_id: "hsqc"
+top_k:
+  - 1
+  - 2
+  - 5
+  - 20
+
+run_id: "hnmr_pretrain"
+embeddings_path: ${run_id}

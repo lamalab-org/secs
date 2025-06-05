@@ -12,6 +12,7 @@ from molbind.data.available import (
 )
 from molbind.data.components.datasets import (
     FingerprintMolBindDataset,
+    HSQCDataset,
     IrDataset,
     MassSpecNegativeDataset,
     MassSpecPositiveDataset,
@@ -56,6 +57,7 @@ class MolBindDataset:
             # NonStringModalities.MASS_SPEC_POSITIVE: self.build_mass_spec_positive_dataset,
             # NonStringModalities.MASS_SPEC_NEGATIVE: self.build_mass_spec_negative_dataset,
             NonStringModalities.H_NMR: self.build_hnmr_cnn_dataset,
+            NonStringModalities.HSQC: self.build_hsqc_dataset,
         }
         self.data = data.reset_index(drop=True)
         # central modality data
@@ -132,6 +134,15 @@ class MolBindDataset:
             vec_size=self.config.data.h_nmr.vec_size if self.config else 10_000,
             central_modality=self.central_modality,
             central_modality_data=self._handle_central_modality_data(h_nmr_cnn_data),
+        )
+
+    def build_hsqc_dataset(self) -> HSQCDataset:
+        modality = "hsqc"
+        hsqc_data = self.data[[self.central_modality, modality]].dropna()
+        return HSQCDataset(
+            data=hsqc_data[modality].to_list(),
+            central_modality=self.central_modality,
+            central_modality_data=self._handle_central_modality_data(hsqc_data),
         )
 
     def build_datasets_for_modalities(self) -> dict[str, Dataset]:

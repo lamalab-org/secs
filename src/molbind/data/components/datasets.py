@@ -269,15 +269,9 @@ class HSQCDataset(Dataset):
     def __init__(
         self,
         data: list[list[float]],
-        vec_len: int = 512,
-        min_value: float = 0,
-        max_value: float = 300,
         **kwargs,
     ) -> None:
         self.hsqc = data
-        self.vec_len = vec_len
-        self.min_value = min_value
-        self.max_value = max_value
         self.central_modality = kwargs["central_modality"]
         self.other_modality = "hsqc"
         self.central_modality_data = kwargs["central_modality_data"]
@@ -287,5 +281,8 @@ class HSQCDataset(Dataset):
 
     def __getitem__(self, index: int) -> dict:
         # input shape (512, 512) with 1 channel
-        # convert to tensor
-        return torch.tensor(self.hsqc[index], dtype=torch.float32).unsqueeze(0)
+        image = np.vstack(self.hsqc[index])
+        return {
+            self.central_modality: [i[index] for i in self.central_modality_data],
+            self.other_modality: torch.tensor(image, dtype=torch.float32).unsqueeze(0),
+        }
