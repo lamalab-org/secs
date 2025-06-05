@@ -427,7 +427,7 @@ class HSQCEncoder(nn.Module):
     def __init__(self, ckpt_path: str | None = None, freeze_encoder: bool = False):
         super().__init__()
         self.encoder = get_scaled_model_2d(
-            scale="xlarge",
+            scale="large",
             input_height=512,
             input_width=512,
             input_channels=1,  # For a single-channel 512x512 image
@@ -449,3 +449,14 @@ class HSQCEncoder(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # Expected input x: (Batch, 1, 512, 512)
         return self.encoder(x)
+
+
+# test the forward pass
+if __name__ == "__main__":
+    model = HSQCEncoder()
+    test_input = torch.randn(2, 1, 512, 512)  # Batch of 2, single-channel images
+    output = model(test_input)
+    print("Output shape:", output.shape)  # Should be (2, latent_dim), e.g., (2, 1024)
+    # print nr of parameters
+    num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print("Number of trainable parameters:", num_params)

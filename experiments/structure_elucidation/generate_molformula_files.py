@@ -116,11 +116,12 @@ def get_1d_target_embedding_from_raw_batches_pkl(
 
 
 class SimpleMoleculeAnalyzer:
-    ALL_SPECTRA_TYPES: ClassVar[list[str]] = ["ir", "cnmr", "hnmr"]
+    ALL_SPECTRA_TYPES: ClassVar[list[str]] = ["ir", "cnmr", "hnmr", "hsqc"]
     RAW_EMBEDDING_PKL_CONFIGS: ClassVar[dict[str, dict]] = {
         "ir": {"modalities_in_batch_dict": ["smiles", "ir"], "primary_spectral_key": "ir"},
         "cnmr": {"modalities_in_batch_dict": ["smiles", "c_nmr"], "primary_spectral_key": "c_nmr"},
         "hnmr": {"modalities_in_batch_dict": ["smiles", "h_nmr"], "primary_spectral_key": "h_nmr"},
+        "hsqc": {"modalities_in_batch_dict": ["smiles", "hsqc"], "primary_spectral_key": "hsqc"},
     }
 
     def __init__(self, models_config_path: str, results_dir: str, cache_dir: str | None, active_spectra: list[str] | None):

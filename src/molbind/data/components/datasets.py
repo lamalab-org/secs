@@ -4,7 +4,7 @@ from torch import Tensor
 from torch.utils.data import Dataset
 
 from molbind.data.components.hnmr import augment
-from molbind.utils.spec2struct import downsample_spectrum
+from molbind.utils import generate_hsqc_matrix
 
 
 class StringDataset(Dataset):
@@ -281,7 +281,7 @@ class HSQCDataset(Dataset):
 
     def __getitem__(self, index: int) -> dict:
         # input shape (512, 512) with 1 channel
-        image = np.vstack(self.hsqc[index])
+        image = generate_hsqc_matrix(self.hsqc[index])
         return {
             self.central_modality: [i[index] for i in self.central_modality_data],
             self.other_modality: torch.tensor(image, dtype=torch.float32).unsqueeze(0),

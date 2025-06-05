@@ -158,13 +158,12 @@ def cli(
     ga_ir_exp: str | None = None,
     ga_cnmr_exp: str | None = "test/cnmr_finetune",
     ga_hnmr_exp: str | None = "test/hnmr_augment_finetune",
+    ga_hsqc_exp: str | None = None,
+    # GA: RAW embedding file paths
     ga_ir_raw_emb_path: str | None = None,
     ga_cnmr_raw_emb_path: str | None = "../cnmr_finetune_20250602_1348.pkl",
     ga_hnmr_raw_emb_path: str | None = "../hnmr_augment_finetune_20250604_0454.pkl",
-    # Analyzer: model experiments & RAW embedding file paths
-    analyzer_ir_exp: str | None = None,
-    analyzer_cnmr_exp: str | None = "test/cnmr_finetune",
-    analyzer_hnmr_exp: str | None = "test/hnmr_augment_finetune",
+    ga_hsqc_raw_emb_path: str | None = None,
     # GA parameters
     init_pop_ga: int = 512,
     gens_ga: int = 20,
@@ -172,7 +171,7 @@ def cli(
     pop_ga: int = 256,
     base_cache_dir: str = "max_augment",
 ):
-    ga_model_exps = {"ir": ga_ir_exp, "cnmr": ga_cnmr_exp, "hnmr": ga_hnmr_exp}
+    ga_model_exps = {"ir": ga_ir_exp, "cnmr": ga_cnmr_exp, "hnmr": ga_hnmr_exp, "hsqc": ga_hsqc_exp}
     ga_models_for_scoring = load_models_dict(configs_path, ga_model_exps)
     active_ga_model_modalities = [m for m, model in ga_models_for_scoring.items() if model]
     if not active_ga_model_modalities:
@@ -187,12 +186,15 @@ def cli(
         cache_dir=str(Path(base_cache_dir) / "analyzer_process_cache"),
         active_spectra=analyzer_user_active_spectra,
     )
-    analyzer.load_models(ir_experiment=analyzer_ir_exp, cnmr_experiment=analyzer_cnmr_exp, hnmr_experiment=analyzer_hnmr_exp)
+    analyzer.load_models(
+        ir_experiment=ga_ir_exp, cnmr_experiment=ga_cnmr_exp, hnmr_experiment=ga_hnmr_exp, hsqc_experiment=ga_hsqc_exp
+    )
     analyzer.load_data(
         dataset_path,
         ir_embeddings_path=ga_ir_raw_emb_path,
         cnmr_embeddings_path=ga_cnmr_raw_emb_path,
         hnmr_embeddings_path=ga_hnmr_raw_emb_path,
+        hsqc_embeddings_path=ga_hsqc_raw_emb_path,
     )
     if not analyzer.available_modalities:
         logger.error("Analyzer not ready (no available modalities after loading models/data). Exiting.")
