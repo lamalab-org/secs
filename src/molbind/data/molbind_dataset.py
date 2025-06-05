@@ -25,7 +25,7 @@ from molbind.data.components.datasets import (
 class MolBindDataset:
     def __init__(
         self,
-        data: pl.DataFrame,
+        data: pd.DataFrame,
         central_modality: StringModalities | NonStringModalities,
         other_modalities: list[str],
         config: dict | None = None,

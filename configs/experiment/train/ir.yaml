@@ -25,4 +25,4 @@ trainer:
   num_nodes: 1
   gpus_per_node: 4
 
-run_id: "ir_simulated_large_dataset"
+run_id: "ir"

@@ -5,6 +5,7 @@ from torch.utils.data import Dataset
 
 from molbind.data.components.hnmr import augment
 from molbind.utils import generate_hsqc_matrix
+from molbind.utils.spec2struct import downsample_spectrum
 
 
 class StringDataset(Dataset):
@@ -238,8 +239,10 @@ class hNmrDataset(Dataset):
         }
 
     def hnmr_to_vec(self, nmr_shifts: list[list[float]]) -> Tensor:
-        # interpolate to vec_size nr of points
         nmr_array = np.array(nmr_shifts) / np.max(nmr_shifts)
+        # interpolate to vec_size nr of points
+        if self.vec_size != 10_000:
+            nmr_array = downsample_spectrum(nmr_array, self.vec_size)
         if self.augment:
             nmr_array = augment(nmr_array)
         return torch.tensor(

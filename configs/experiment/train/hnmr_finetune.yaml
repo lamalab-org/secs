@@ -27,6 +27,7 @@ data:
     - h_nmr
   batch_size: 128
   dataset_path: AdrianM0/luc-dataset
+  augment: False
 
 ckpt_path: "${paths.checkpoints_dir}/hnmr_finetune_20250602_1322/best_model.ckpt"
 trainer:
