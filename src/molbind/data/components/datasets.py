@@ -226,7 +226,7 @@ class hNmrDataset(Dataset):
         self.central_modality = kwargs.get("central_modality")
         self.other_modality = "h_nmr"
         self.central_modality_data = kwargs.get("central_modality_data")
-        self.augment = augment
+        self.augment = bool(augment)
         self.vec_size = vec_size
 
     def __len__(self):

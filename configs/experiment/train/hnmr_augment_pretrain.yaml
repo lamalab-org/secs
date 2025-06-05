@@ -28,7 +28,7 @@ data:
   batch_size: 128
   dataset_path: jablonkagroup/spectral-dataset
   h_nmr:
-    augment: true
+    augment: True
 
 trainer:
   num_nodes: 1

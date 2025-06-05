@@ -67,12 +67,14 @@ def train_molbind(config: DictConfig):
             other_modalities=config.data.modalities,
             data=train_shuffled_data,
             context_length=config.data.context_length,
+            config=config,
         ).build_datasets_for_modalities(),
         MolBindDataset(
             central_modality=config.data.central_modality,
             other_modalities=config.data.modalities,
             data=valid_shuffled_data,
             context_length=config.data.context_length,
+            config=config,
         ).build_datasets_for_modalities(),
     )
     # set up the data module

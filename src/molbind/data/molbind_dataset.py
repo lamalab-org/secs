@@ -131,7 +131,7 @@ class MolBindDataset:
         return hNmrDataset(
             data=h_nmr_cnn_data[modality].to_list(),
             augment=self.config.data.h_nmr.augment if self.config else False,
-            vec_size=self.config.data.h_nmr.vec_size if self.config else 10_000,
+            vec_size=self.config.data.h_nmr.vec_size if hasattr(self.config.data.h_nmr, "vec_size") else 10_000,
             central_modality=self.central_modality,
             central_modality_data=self._handle_central_modality_data(h_nmr_cnn_data),
         )

@@ -15,6 +15,9 @@ from molbind.models import HSQCEncoder, IrCNNEncoder, SmilesEncoder, cNmrEncoder
 
 class StringModalities(StrEnum):
     SMILES = "smiles"
+    BIGSMILES = "bigsmiles"
+    POLYMER_NAME = "polymer_name"
+    PSMILES = "psmiles"
 
 
 class NonStringModalities(StrEnum):
@@ -24,6 +27,9 @@ class NonStringModalities(StrEnum):
     HSQC = "hsqc"
     GRAPH = "graph"
     STRUCTURE = "structure"
+    BIGSMILES = "bigsmiles"
+    POLYMER_NAME = "polymer_name"
+    PSMILES = "psmiles"
 
 
 class ModalityConstants(Enum):
