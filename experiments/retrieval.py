@@ -59,7 +59,6 @@ def embed(config: DictConfig):
         ).build_datasets_for_modalities(),
     )
 
-    valid_shuffled_data.to_pickle(f"valid_dataset_{RETRIEVAL_TIME}.pkl")
     datamodule = MolBindDataModule(
         data={
             "predict": valid_datasets,
@@ -82,10 +81,9 @@ def embed(config: DictConfig):
         modalities=config.data.modalities,
         central_modality=config.data.central_modality,
     )
-
-    # concatenate predictions outside of this script and save predictions
-    with open(f"{config.embeddings_path}.pkl", "wb") as f:  # noqa: PTH123
-        pkl.dump(aggregated_embeddings, f, protocol=pkl.HIGHEST_PROTOCOL)
+    # # concatenate predictions outside of this script and save predictions
+    # with open(f"{config.embeddings_path}.pkl", "wb") as f:
+    #     pkl.dump(aggregated_embeddings, f, protocol=pkl.HIGHEST_PROTOCOL)
 
     logger.info(f"Saved embeddings to {config.embeddings_path}.pkl")
     retrieval_metrics = full_database_retrieval(

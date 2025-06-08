@@ -30,7 +30,7 @@ data:
   h_nmr:
     augment: false
 
-ckpt_path: "${paths.checkpoints_dir}/hnmr_augment_pretrain_20250603_2046/best_model.ckpt"
+ckpt_path: "${paths.checkpoints_dir}/hnmr_augment_pretrain_20250605_1523/best_model.ckpt"
 
 trainer:
   num_nodes: 1

@@ -45,6 +45,7 @@ def full_database_retrieval(
     central_modality: str,
     top_k: list[int],
 ) -> dict[str, dict[str, float]]:
+    indices = indices.reset_index(drop=True)  # Ensure indices are reset for consistency
     all_modalities = [central_modality, *other_modalities]
     retrieval_metrics = {}
     max_k = max(top_k)
@@ -68,7 +69,6 @@ def full_database_retrieval(
 
             # Get the actual embeddings for these common items
             # These are the vectors that will go into the Faiss index
-
             db_vectors_np = embeddings[modality_1].detach().cpu().numpy()[common_item_original_indices]
             # These are the vectors that will be used for querying
             query_vectors_np = embeddings[modality_2].detach().cpu().numpy()[common_item_original_indices]
@@ -107,10 +107,10 @@ def full_database_retrieval(
             # M is the number of connections per layer in HNSW
             # efConstruction is the depth of exploration during index construction
             # efSearch is the depth of exploration during search
-            M = 32  # A common value for HNSW, can be tuned
-            index = faiss.IndexHNSWFlat(dimension, M, faiss.METRIC_INNER_PRODUCT)
-            index.hnsw.efConstruction = 200
-            index.hnsw.efSearch = 128
+            # M = 32  # A common value for HNSW, can be tuned
+            index = faiss.IndexFlatIP(dimension)
+            # index.hnsw.efConstruction = 2000
+            # index.hnsw.efSearch = 128
 
             # For exact search (slower, especially for large datasets):
             # index = faiss.IndexFlatIP(dimension)

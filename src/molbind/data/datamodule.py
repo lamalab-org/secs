@@ -56,6 +56,7 @@ class MolBindDataModule(LightningDataModule):
                     sampler=distributed_sampler,
                     shuffle=shuffle,
                     prefetch_factor=num_workers,
+                    persistent_workers=True,
                 )
             else:
                 dataloaders[modality] = DataLoader(
@@ -66,6 +67,7 @@ class MolBindDataModule(LightningDataModule):
                     sampler=distributed_sampler,
                     shuffle=shuffle,
                     prefetch_factor=num_workers,
+                    persistent_workers=True,
                 )
         # CombinedLoader does not work with DDPSampler directly
         # So each dataloader has a DistributedSampler

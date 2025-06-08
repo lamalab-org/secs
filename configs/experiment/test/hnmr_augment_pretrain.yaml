@@ -23,12 +23,12 @@ data:
   modalities:
     - h_nmr
   valid_frac: 1
-  batch_size: 1024
-  dataset_path: "${paths.data_dir}/nmrshiftdb/hnmr_cnmr_validation_set.parquet"
+  batch_size: 256
+  dataset_path: "${paths.data_dir}/test_split.parquet"
   h_nmr:
     augment: True
 
-ckpt_path: "${paths.checkpoints_dir}/hnmr_augment_pretrain_20250605_1304/best_model.ckpt"
+ckpt_path: "${paths.checkpoints_dir}/hnmr_augment_pretrain_20250605_1523/best_model.ckpt"
 
 trainer:
   num_nodes: 1

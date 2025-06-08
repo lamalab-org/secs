@@ -1,5 +1,3 @@
-# run_ga.py
-
 import json
 import pickle as pkl
 import random
@@ -37,23 +35,26 @@ def compute_individual_atom_counts(individual: str) -> dict | None:
     return counts
 
 
+def calculate_mf_penalty(smi: str, atom_counts_orig: dict) -> float:
+    """Calculates the molecular formula penalty for a single SMILES string."""
+    counts_i = compute_individual_atom_counts(smi)
+    if not counts_i:
+        return -1000.0  # Heavy penalty for invalid SMILES
+
+    total_orig_atoms = sum(atom_counts_orig.values()) if atom_counts_orig else 1.0
+    if total_orig_atoms == 0:
+        total_orig_atoms = 1.0
+
+    penalty = sum(abs(counts_i.get(s, 0) - atom_counts_orig.get(s, 0)) for s in set(counts_i) | set(atom_counts_orig))
+    return -penalty / total_orig_atoms
+
+
 def reward_function_ga(individuals: list[str], ga_models: dict, target_1D_embs: dict, atom_counts_orig: dict):
     if not individuals:
         return np.array([])
     cand_smiles_embs = gpu_encode_smiles_variable(individuals, ga_models)  # Dict: mod -> (N,D)
 
-    mf_loss = np.zeros(len(individuals))
-    total_orig_atoms = sum(atom_counts_orig.values()) if atom_counts_orig else 1.0
-    if total_orig_atoms == 0:
-        total_orig_atoms = 1.0
-
-    for idx, smi in enumerate(individuals):
-        counts_i = compute_individual_atom_counts(smi)
-        if not counts_i:
-            mf_loss[idx] = -1000.0
-            continue
-        penalty = sum(abs(counts_i.get(s, 0) - atom_counts_orig.get(s, 0)) for s in set(counts_i) | set(atom_counts_orig))
-        mf_loss[idx] = -penalty / total_orig_atoms
+    mf_loss = np.array([calculate_mf_penalty(smi, atom_counts_orig) for smi in individuals])
 
     scores_all_mods_np, num_ok_mods = [], 0
     for spec, target_emb_1D_gpu in target_1D_embs.items():  # target_emb is 1D (D,)
@@ -78,29 +79,58 @@ def reward_function_ga(individuals: list[str], ga_models: dict, target_1D_embs: 
         return mf_loss  # Only MF penalty if no spectral scores
 
     avg_cosine_sim = np.mean(np.array(scores_all_mods_np), axis=0)
-    final_rewards = avg_cosine_sim + mf_loss
-    return final_rewards
+    return avg_cosine_sim + mf_loss
+
+
+def calculate_detailed_scores(smi: str, models: dict, target_1D_embs: dict, atom_counts_orig: dict) -> dict:
+    """Calculates and returns a dictionary of detailed scores for a single SMILES."""
+    if smi == "N/A" or not smi:
+        return {"mf_penalty": -1000.0}
+
+    scores = {}
+    # 1. Calculate Molecular Formula Penalty
+    scores["mf_penalty"] = calculate_mf_penalty(smi, atom_counts_orig)
+
+    # 2. Calculate Modality-specific Cosine Similarities
+    smi_emb_dict = gpu_encode_smiles_variable([smi], models)
+    for spec, target_emb in target_1D_embs.items():
+        score_key = f"{spec}_cosine_sim"
+        if spec not in smi_emb_dict or smi_emb_dict[spec] is None or smi_emb_dict[spec].nelement() == 0:
+            scores[score_key] = 0.0
+            continue
+
+        cand_emb = smi_emb_dict[spec].to("cuda")  # (1, D)
+        target_emb = target_emb.to("cuda")  # (D,)
+
+        sim = torch_cosine_similarity(target_emb.unsqueeze(0), cand_emb, dim=1)
+        scores[score_key] = sim.item()
+
+    return scores
 
 
 def run_ga_instance(
     initial_df: pd.DataFrame,
     models: dict,
-    seed_val: int,
     idx: int,
     orig_smi: str,
     atom_counts_orig: dict,
     target_1D_embs: dict,
     out_dir: Path,
-    init_pop: int,
-    gens: int,
-    offspring: int,
-    pop_ga: int,
+    ga_params: dict,
 ):
+    # Unpack GA parameters
+    init_pop = ga_params["initial_population_size_from_pruning"]
+    gens = ga_params["generations"]
+    offspring = ga_params["offspring_size"]
+    pop_ga = ga_params["population_size"]
+    seed_val = ga_params["seed"]
+    frac_mutate = ga_params["frac_graph_ga_mutate"]
+
     sort_key = next(
         (
             k
             for k in ["sum_of_all_individual_similarities", "similarity"]
-            if k in initial_df.columns and not initial_df[k].isnull().all()
+            if k in initial_df.columns and not initial_df[k].isna().all()
         ),
         None,
     )
@@ -109,13 +139,9 @@ def run_ga_instance(
         if sort_key
         else initial_df["canonical_smiles"].head(init_pop).tolist()
     )
-    if not top_n_smiles:
-        logger.warning(f"GA: No initial population for idx {idx}.")
-        return
 
     reward_f = partial(reward_function_ga, ga_models=models, target_1D_embs=target_1D_embs, atom_counts_orig=atom_counts_orig)
 
-    # Ensure logger for mol-ga is the global loguru logger or a compatible one
     ga_logger = logger
 
     ga_res = default_ga(
@@ -126,11 +152,14 @@ def run_ga_instance(
         population_size=pop_ga,
         logger=ga_logger,
         rng=random.Random(seed_val),
-        offspring_gen_func=partial(graph_ga_blended_generation, frac_graph_ga_mutate=0.1),
+        offspring_gen_func=partial(graph_ga_blended_generation, frac_graph_ga_mutate=frac_mutate),
     )
 
     best_sc, best_smi = max(ga_res.population, key=lambda x: x[0]) if ga_res.population else (-float("inf"), "N/A")
     logger.info(f"GA Best for idx {idx}: {best_smi} (score {best_sc:.4f})")
+
+    # Calculate detailed scores for the best individual
+    detailed_scores = calculate_detailed_scores(best_smi, models, target_1D_embs, atom_counts_orig)
 
     summary_data = {
         "target_idx": idx,
@@ -138,13 +167,21 @@ def run_ga_instance(
         "best_ga_smiles": best_smi,
         "best_ga_score": float(best_sc),
         "tanimoto_to_original": tanimoto_similarity(best_smi, orig_smi) if best_smi != "N/A" else 0.0,
+        "best_ga_detailed_scores": detailed_scores,
         "ga_modalities_scored": list(target_1D_embs.keys()),
         "initial_population_size": len(top_n_smiles),
+        "ga_parameters": ga_params,  # Store all GA parameters for reproducibility
     }
     with (out_dir / f"{idx}_ga_summary.json").open("w") as f:
         json.dump(summary_data, f, indent=2)
+
+    # The `ga_res` object contains the full history of the run.
+    # You can access it via `ga_res.history`, which is a list of tuples:
+    # [(generation_0, population_0), (generation_1, population_1), ...]
+    # where population is a list of (score, smiles) tuples.
+    # Saving the whole object with pickle preserves this history.
     with (out_dir / f"{idx}_ga_details.pkl").open("wb") as f:
-        pkl.dump(ga_res, f)  # Save full GA results object
+        pkl.dump(ga_res, f)
     return ga_res
 
 
@@ -153,25 +190,46 @@ def cli(
     end_range: int,
     seed: int = 42,
     configs_path: str = "../../configs",
-    dataset_path: str = "../valid_dataset_20250604_0454.pkl",
+    dataset_path: str = "../../data/test_split.parquet",
     # GA: model experiments & RAW target embedding file paths (List[BATCH Dict])
-    ga_ir_exp: str | None = None,
-    ga_cnmr_exp: str | None = "test/cnmr_finetune",
-    ga_hnmr_exp: str | None = "test/hnmr_augment_finetune",
-    ga_hsqc_exp: str | None = None,
+    ga_ir_exp: str | None = "test/ir",
+    ga_cnmr_exp: str | None = "test/cnmr_pretrain",
+    ga_hnmr_exp: str | None = "test/hnmr_augment_pretrain",
+    ga_hsqc_exp: str | None = "test/hsqc",
     # GA: RAW embedding file paths
     ga_ir_raw_emb_path: str | None = None,
-    ga_cnmr_raw_emb_path: str | None = "../cnmr_finetune_20250602_1348.pkl",
-    ga_hnmr_raw_emb_path: str | None = "../hnmr_augment_finetune_20250604_0454.pkl",
+    ga_cnmr_raw_emb_path: str | None = None,
+    ga_hnmr_raw_emb_path: str | None = None,
     ga_hsqc_raw_emb_path: str | None = None,
     # GA parameters
     init_pop_ga: int = 512,
-    gens_ga: int = 20,
+    gens_ga: int = 50,
     offspring_ga: int = 2048,
     pop_ga: int = 256,
-    base_cache_dir: str = "max_augment",
+    base_cache_dir: str = "four_modalities_ga_cache",
 ):
     ga_model_exps = {"ir": ga_ir_exp, "cnmr": ga_cnmr_exp, "hnmr": ga_hnmr_exp, "hsqc": ga_hsqc_exp}
+    ga_raw_emb_paths_map = {
+        "ir": ga_ir_raw_emb_path,
+        "cnmr": ga_cnmr_raw_emb_path,
+        "hnmr": ga_hnmr_raw_emb_path,
+        "hsqc": ga_hsqc_raw_emb_path,
+    }
+
+    # --- Collect all GA parameters for logging ---
+    ga_params = {
+        "seed": seed,
+        "initial_population_size_from_pruning": init_pop_ga,
+        "generations": gens_ga,
+        "offspring_size": offspring_ga,
+        "population_size": pop_ga,
+        "frac_graph_ga_mutate": 0.1,  # Hardcoded in the original script
+        "model_experiments": {k: v for k, v in ga_model_exps.items() if v},
+        "raw_embedding_paths": {k: v for k, v in ga_raw_emb_paths_map.items() if v},
+        "dataset_path": dataset_path,
+        "base_cache_dir": base_cache_dir,
+    }
+
     ga_models_for_scoring = load_models_dict(configs_path, ga_model_exps)
     active_ga_model_modalities = [m for m, model in ga_models_for_scoring.items() if model]
     if not active_ga_model_modalities:
@@ -202,7 +260,7 @@ def cli(
     logger.info(f"Analyzer ready with modalities: {analyzer.available_modalities}. Summary: {analyzer.get_summary()}")
 
     try:
-        main_dataset_df = pd.read_pickle(dataset_path)
+        main_dataset_df = pd.read_parquet(dataset_path)
     except Exception as e:
         logger.error(f"Cannot load main dataset: {dataset_path} - {e}")
         return
@@ -226,8 +284,6 @@ def cli(
             continue
 
         ga_target_1D_embs = {}
-        ga_raw_emb_paths_map = {"ir": ga_ir_raw_emb_path, "cnmr": ga_cnmr_raw_emb_path, "hnmr": ga_hnmr_raw_emb_path}
-
         for spec_type in active_ga_model_modalities:  # Only prepare targets for which GA has a scoring model
             raw_path = ga_raw_emb_paths_map.get(spec_type)
             pickle_config = SimpleMoleculeAnalyzer.RAW_EMBEDDING_PKL_CONFIGS.get(spec_type)
@@ -245,7 +301,6 @@ def cli(
             logger.error(f"No 1D target embeddings prepared for GA reward (idx {target_idx}). Skipping GA for this index.")
             continue
 
-        # Ensure GA models only include those for which we have a target embedding
         final_ga_models_to_use = {m: ga_models_for_scoring[m] for m in ga_target_1D_embs if m in ga_models_for_scoring}
         if not final_ga_models_to_use:
             logger.error(f"No GA models align with prepared target embeddings for idx {target_idx}. Skipping GA.")
@@ -256,16 +311,12 @@ def cli(
         run_ga_instance(
             initial_df=initial_candidates_df,
             models=final_ga_models_to_use,
-            seed_val=seed,
             idx=target_idx,
             orig_smi=original_smiles,
             atom_counts_orig=atom_counts_orig,
             target_1D_embs=ga_target_1D_embs,
             out_dir=ga_run_dir,
-            init_pop=init_pop_ga,
-            gens=gens_ga,
-            offspring=offspring_ga,
-            pop_ga=pop_ga,
+            ga_params=ga_params,  # Pass the comprehensive params dictionary
         )
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
@@ -275,6 +326,6 @@ def cli(
 if __name__ == "__main__":
     import fire
 
-    logger.remove()  # Remove default handler to avoid duplicate logs if any
-    logger.add(lambda msg: tqdm.write(msg, end=""), colorize=True, level="INFO")  # Log INFO and above with tqdm
+    logger.remove()
+    logger.add(lambda msg: tqdm.write(msg, end=""), colorize=True, level="INFO")
     fire.Fire(cli)

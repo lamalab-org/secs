@@ -145,13 +145,8 @@ class SimpleMoleculeAnalyzer:
         logger.info(f"Analyzer: Models loaded for: {list(self.models.keys())}")
 
     def load_data(self, dataset_path: str, **kwargs_raw_embeddings_paths: str | None) -> None:
-        try:
-            self.dataset_df = pd.read_pickle(dataset_path)
-            logger.info(f"Analyzer: Loaded main dataset ({len(self.dataset_df)} entries) from {dataset_path}")
-        except Exception as e:
-            logger.error(f"Analyzer: Failed to load main dataset from {dataset_path}: {e}")
-            self.dataset_df = None
-            return
+        self.dataset_df = pd.read_parquet(dataset_path)
+        logger.info(f"Analyzer: Loaded main dataset ({len(self.dataset_df)} entries) from {dataset_path}")
 
         paths_map = {s: kwargs_raw_embeddings_paths.get(f"{s}_embeddings_path") for s in self.ALL_SPECTRA_TYPES}
 
@@ -334,7 +329,8 @@ class SimpleMoleculeAnalyzer:
         isomer_df["tanimoto"] = isomer_df["canonical_smiles"].progress_apply(
             lambda x: tanimoto_similarity(original_smiles, x) if pd.notna(x) and x else 0.0
         )
-
+        # remove all different from 1
+        isomer_df = isomer_df[isomer_df["tanimoto"] != 1.0].reset_index(drop=True)
         result_path = self.results_dir / f"{smiles_index}_{mf.replace(' ', '_') if mf else 'unknown_mf'}_results.csv"
         isomer_df.to_csv(result_path, index=False)
         logger.info(
