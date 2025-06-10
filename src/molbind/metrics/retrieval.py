@@ -47,7 +47,6 @@ def full_database_retrieval(
 ) -> dict[str, dict[str, float]]:
     indices = indices.reset_index(drop=True)  # Ensure indices are reset for consistency
     all_modalities = [central_modality, *other_modalities]
-    retrieval_metrics = {}
     max_k = max(top_k)
 
     for _, modality_1 in enumerate(all_modalities):  # Modality to build the Faiss index from

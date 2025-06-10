@@ -79,6 +79,7 @@ def reward_function_ga(individuals: list[str], ga_models: dict, target_1D_embs: 
         return mf_loss  # Only MF penalty if no spectral scores
 
     avg_cosine_sim = np.mean(np.array(scores_all_mods_np), axis=0)
+    # compute molecule charge
     return avg_cosine_sim + mf_loss
 
 
@@ -204,8 +205,8 @@ def cli(
     # GA parameters
     init_pop_ga: int = 512,
     gens_ga: int = 50,
-    offspring_ga: int = 2048,
-    pop_ga: int = 256,
+    offspring_ga: int = 1024,
+    pop_ga: int = 512,
     base_cache_dir: str = "four_modalities_ga_cache",
 ):
     ga_model_exps = {"ir": ga_ir_exp, "cnmr": ga_cnmr_exp, "hnmr": ga_hnmr_exp, "hsqc": ga_hsqc_exp}
@@ -223,7 +224,7 @@ def cli(
         "generations": gens_ga,
         "offspring_size": offspring_ga,
         "population_size": pop_ga,
-        "frac_graph_ga_mutate": 0.1,  # Hardcoded in the original script
+        "frac_graph_ga_mutate": 0.3,
         "model_experiments": {k: v for k, v in ga_model_exps.items() if v},
         "raw_embedding_paths": {k: v for k, v in ga_raw_emb_paths_map.items() if v},
         "dataset_path": dataset_path,

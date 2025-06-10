@@ -222,6 +222,17 @@ class SimpleMoleculeAnalyzer:
 
         original_smiles = self.dataset_df["smiles"].iloc[smiles_index]
         mf = smiles_to_molecular_formula(original_smiles)
+
+        # --- ADDED LOGIC: Check for existing results file ---
+        result_path = self.results_dir / f"{smiles_index}_{mf.replace(' ', '_') if mf else 'unknown_mf'}_results.csv"
+        if result_path.exists():
+            logger.info(f"Analyzer: Result file already exists for index {smiles_index}. Loading from cache: {result_path}")
+            try:
+                return pd.read_csv(result_path)
+            except Exception as e:
+                logger.warning(f"Analyzer: Could not read cached file {result_path}. Reprocessing. Error: {e}")
+        # --- END ADDED LOGIC ---
+
         logger.info(f"Analyzer: Proc MF {mf} (idx {smiles_index}) using {self.available_modalities}")
 
         similar_formulas = [mf] + (gen_close_molformulas_from_seed(mf) if mf else [])
@@ -329,10 +340,10 @@ class SimpleMoleculeAnalyzer:
         isomer_df["tanimoto"] = isomer_df["canonical_smiles"].progress_apply(
             lambda x: tanimoto_similarity(original_smiles, x) if pd.notna(x) and x else 0.0
         )
+        # The result_path is already defined at the top of the function
+        isomer_df.to_csv(result_path, index=False)
         # remove all different from 1
         isomer_df = isomer_df[isomer_df["tanimoto"] != 1.0].reset_index(drop=True)
-        result_path = self.results_dir / f"{smiles_index}_{mf.replace(' ', '_') if mf else 'unknown_mf'}_results.csv"
-        isomer_df.to_csv(result_path, index=False)
         logger.info(
             f"Analyzer: Results for {mf} (idx {smiles_index}) saved. Scored with: {list(target_1D_embs.keys()) if target_1D_embs else 'None'}"
         )

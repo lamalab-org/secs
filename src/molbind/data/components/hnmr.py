@@ -28,8 +28,8 @@ FINAL_GLOBAL_BROADENING_SIGMA_PPM_MIN = 0.0003
 FINAL_GLOBAL_BROADENING_SIGMA_PPM_MAX = 0.0015
 
 # Chemical shift perturbation
-MAX_GLOBAL_SHIFT_PPM = 0.10
-MAX_LOCAL_SHIFT_PPM = 0.02
+MAX_GLOBAL_SHIFT_PPM = 0.12
+MAX_LOCAL_SHIFT_PPM = 0.05
 
 # Intensity variation parameters
 INTENSITY_NOISE_FACTOR = 0.0001
@@ -38,7 +38,7 @@ BASELINE_DRIFT_AMPLITUDE = 0.003
 
 # Coupling simulation parameters
 J_COUPLING_RANGE_HZ = (1.0, 18.0)  # Hz
-COUPLING_PROBABILITY = 0.35
+COUPLING_PROBABILITY = 1.0
 MAX_COUPLING_PARTNERS = 6  # Max n for (n+1) multiplicity (e.g., 6 for a septet)
 
 # Solvent peak parameters
@@ -49,21 +49,21 @@ SOLVENT_PEAKS = {
     "CD3OD": {"ppm": 3.31, "intensity_factor": 0.09, "width_factor": 1.1, "lorentz_factor": 1.3},
     "TMS": {"ppm": 0.0, "intensity_factor": 0.05, "width_factor": 0.8, "lorentz_factor": 0.8},
 }
-SOLVENT_PROBABILITY = 0.6
+SOLVENT_PROBABILITY = 1.0
 
 # 13C satellite parameters
 C13_SATELLITE_INTENSITY_FACTOR = 0.0055  # Per satellite (total ~1.1%)
 C13_COUPLING_1JCH_HZ_RANGE = (115.0, 160.0)
-C13_SATELLITE_PROBABILITY = 0.4
+C13_SATELLITE_PROBABILITY = 1.0
 
 # Impurity peak parameters
-IMPURITY_PROBABILITY = 0.25
+IMPURITY_PROBABILITY = 0.5
 NUM_IMPURITY_PEAKS_MAX = 3
 IMPURITY_INTENSITY_MAX_FRAC = 0.05
 IMPURITY_WIDTH_FACTOR_RANGE = (0.8, 1.5)
 
 # Phase error parameters
-PHASE_ERROR_PROBABILITY = 0.5
+PHASE_ERROR_PROBABILITY = 1.0
 MAX_ZERO_ORDER_PHASE_DEG = 15.0
 MAX_FIRST_ORDER_PHASE_DEG_PER_PPM = 2.0
 

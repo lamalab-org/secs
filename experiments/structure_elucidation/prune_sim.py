@@ -172,7 +172,7 @@ def embedding_pruning_variable(
     # If modality_ratios is None, default to 1.0 for all scoreable_modalities.
     # If modality_ratios is provided, use it, with a fallback of 1.0 for any scoreable_modalities
     # not explicitly in the provided dict.
-    ratios = modality_ratios or {mod: 1.0 for mod in scoreable_modalities}
+    ratios = modality_ratios or dict.fromkeys(scoreable_modalities, 1.0)
 
     candidate_smiles_embs_dict_gpu = gpu_encode_smiles_variable(
         smiles_to_score, {mod: models_for_scoring[mod] for mod in scoreable_modalities}, chunk_size
