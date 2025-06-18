@@ -204,6 +204,7 @@ def cli(
     ga_hsqc_raw_emb_path: str | None = None,
     # GA parameters
     init_pop_ga: int = 512,
+    frac_graph_ga_mutate: float = 0.3,
     gens_ga: int = 50,
     offspring_ga: int = 1024,
     pop_ga: int = 512,
@@ -224,7 +225,7 @@ def cli(
         "generations": gens_ga,
         "offspring_size": offspring_ga,
         "population_size": pop_ga,
-        "frac_graph_ga_mutate": 0.3,
+        "frac_graph_ga_mutate": frac_graph_ga_mutate,
         "model_experiments": {k: v for k, v in ga_model_exps.items() if v},
         "raw_embedding_paths": {k: v for k, v in ga_raw_emb_paths_map.items() if v},
         "dataset_path": dataset_path,
