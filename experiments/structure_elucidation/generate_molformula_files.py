@@ -228,7 +228,9 @@ class SimpleMoleculeAnalyzer:
         if result_path.exists():
             logger.info(f"Analyzer: Result file already exists for index {smiles_index}. Loading from cache: {result_path}")
             try:
-                return pd.read_csv(result_path)
+                data = pd.read_csv(result_path)
+                # filter out the tanimoto = 1.0 rows
+                return data[data.tanimoto != 1.0].reset_index(drop=True)
             except Exception as e:
                 logger.warning(f"Analyzer: Could not read cached file {result_path}. Reprocessing. Error: {e}")
         # --- END ADDED LOGIC ---

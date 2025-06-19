@@ -48,7 +48,7 @@ def full_database_retrieval(
     indices = indices.reset_index(drop=True)  # Ensure indices are reset for consistency
     all_modalities = [central_modality, *other_modalities]
     max_k = max(top_k)
-
+    retrieval_metrics = {}
     for _, modality_1 in enumerate(all_modalities):  # Modality to build the Faiss index from
         for _, modality_2 in enumerate(all_modalities):  # Modality to query with
             if modality_2 == modality_1:
@@ -144,6 +144,6 @@ def full_database_retrieval(
             retrieval_metrics[metric_key] = current_metrics
             logger.info(f"Retrieval metrics for {metric_key}: {retrieval_metrics[metric_key]}")
             # Faiss index is in memory, will be garbage collected or overwritten in next loop
-            del index
+        del index
 
     return retrieval_metrics
