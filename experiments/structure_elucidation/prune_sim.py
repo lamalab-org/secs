@@ -141,7 +141,7 @@ def embedding_pruning_variable(
     target_1D_spectral_embeddings: dict[str, Tensor],  # Key: mod, Val: 1D Tensor (D,) for target
     models_for_scoring: dict[str, MolBind | None],  # Models to encode candidate SMILES
     modality_ratios: dict[str, float] | None = None,
-    chunk_size: int = 8192,
+    chunk_size: int = 2048,
 ) -> tuple[Tensor | None, dict[str, Tensor | None]]:
     if not smiles_to_score:
         return None, {}

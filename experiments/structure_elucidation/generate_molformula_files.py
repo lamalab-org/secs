@@ -18,7 +18,6 @@ from molbind.utils.spec2struct import gen_close_molformulas_from_seed, is_neutra
 ModelType = MolBind
 
 
-# --- User-provided aggregate_embeddings function ---
 def aggregate_embeddings_user_provided(
     embeddings: list[dict[str, torch.Tensor]],
     modalities: list[str],
@@ -66,10 +65,6 @@ def get_1d_target_embedding_from_raw_batches_pkl(
         if not isinstance(list_of_batch_dicts, list) or not list_of_batch_dicts:
             logger.error(f"{raw_embedding_file_path} not a valid list of batch dicts.")
             return None
-
-        # Use the first modality in modalities_in_batch_dict as a reference for central_modality
-        # This assumes 'smiles' or a similar common key is listed first if it's the intended central one.
-        ref_central_modality = modalities_in_batch_dict[0] if modalities_in_batch_dict else "smiles"
 
         aggregated_data = aggregate_embeddings_user_provided(embeddings=list_of_batch_dicts, modalities=modalities_in_batch_dict)
 
