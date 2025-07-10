@@ -1,0 +1,28 @@
+# @package _global_
+defaults:
+  - override /data: molbind
+  - override /model: molbind
+  - override /trainer: gpu
+
+model:
+  embedding_size: 512
+  encoders:
+    smiles:
+      freeze_encoder: False
+  projection_heads:
+    ir_freeze: False
+    smiles_freeze: False
+
+data:
+  modalities:
+    - ir
+  modalities_to_read:
+    - ir
+  batch_size: 128
+  dataset_path: jablonkagroup/spectral-dataset
+
+trainer:
+  num_nodes: 1
+  gpus_per_node: 4
+
+run_id: "ir"

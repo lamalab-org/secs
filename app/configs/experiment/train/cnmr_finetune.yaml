@@ -1,0 +1,31 @@
+# @package _global_
+defaults:
+  - override /data: molbind
+  - override /model: molbind
+  - override /trainer: gpu
+
+model:
+  embedding_size: 512
+  encoders:
+    smiles:
+      freeze_encoder: False
+  projection_heads:
+    c_nmr_freeze: False
+    smiles_freeze: False
+
+data:
+  modalities:
+    - c_nmr
+  modalities_to_read:
+    - c_nmr
+  batch_size: 128
+  dataset_path: AdrianM0/cnmr-nmrshiftdb
+
+
+ckpt_path: "${paths.checkpoints_dir}/cnmr_pretrain_20250605_1020/best_model.ckpt"
+
+trainer:
+  num_nodes: 1
+  gpus_per_node: 6
+
+run_id: "cnmr_finetune"

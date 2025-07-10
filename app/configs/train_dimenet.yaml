@@ -1,0 +1,7 @@
+defaults:
+  - _self_
+  - data: dimenet
+  - model: dimenet
+  - logger: wandb
+  - paths: default
+  - trainer: gpu

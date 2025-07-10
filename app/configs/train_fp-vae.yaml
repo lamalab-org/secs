@@ -1,0 +1,7 @@
+defaults:
+  - _self_
+  - data: fp_vae
+  - model: fp_vae
+  - logger: wandb
+  - paths: default
+  - trainer: gpu

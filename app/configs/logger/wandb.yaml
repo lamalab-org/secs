@@ -1,0 +1,4 @@
+wandb:
+  offline: False
+  project: "${oc.env.WANDB_PROJECT}"
+  entity: "${oc.env.WANDB_ENTITY}"

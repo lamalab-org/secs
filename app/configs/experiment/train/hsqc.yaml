@@ -1,0 +1,36 @@
+# @package _global_
+defaults:
+  - override /data: molbind
+  - override /model: molbind
+  - override /trainer: gpu
+
+model:
+  embedding_size: 1024
+  encoders:
+    smiles:
+      freeze_encoder: False
+    hsqc:
+      freeze_encoder: False
+
+  projection_heads:
+    hsqc:
+      dims: [1024, "${model.embedding_size}"]
+      activation: LeakyReLU
+    hsqc_freeze: False
+    hsqc_is_on: True
+    smiles_freeze: False
+
+data:
+  modalities:
+    - hsqc
+  modalities_to_read:
+    - hsqc
+  batch_size: 128
+  dataset_path: jablonkagroup/spectral-dataset
+  dataset_config: hsqc
+
+trainer:
+  num_nodes: 1
+  gpus_per_node: 6
+
+run_id: "hsqc"

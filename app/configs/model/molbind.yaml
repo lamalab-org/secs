@@ -1,0 +1,70 @@
+# model architecture
+encoders:
+  smiles:
+    pretrained: True
+    freeze_encoder: True
+  c_nmr:
+    # ckpt_path: null
+    input_dims: [512, 256, 256]
+    output_dims: [256, 256, 512]
+    latent_dim: 256
+    freeze_encoder: False
+  ir:
+    freeze_encoder: False
+  mass_spec_negative:
+    input_dims: [1024, 512, 256]
+    output_dims: [256, 512, 1024]
+    latent_dim: 256
+    freeze_encoder: False
+  mass_spec_positive:
+    input_dims: [1024, 512, 256]
+    output_dims: [256, 512, 1024]
+    latent_dim: 256
+    freeze_encoder: False
+
+embedding_size: 512
+projection_heads:
+  # this determines whether the projection head is added to the model
+  smiles_is_on: True
+  c_nmr_is_on: True
+  ir_is_on: True
+  h_nmr_is_on: True
+  # freeze projection heads
+  c_nmr_freeze: True
+  ir_freeze: True
+  smiles_freeze: True
+  h_nmr_freeze: False
+  # default projection heads for each modality
+  smiles:
+    dims: [768, "${model.embedding_size}"]
+    activation: LeakyReLU
+  c_nmr:
+    dims: [256, "${model.embedding_size}"]
+    activation: LeakyReLU
+  ir:
+    dims: [512, "${model.embedding_size}"]
+    activation: LeakyReLU
+  mass_spec_negative:
+    dims: [256, "${model.embedding_size}"]
+    activation: LeakyReLU
+  mass_spec_positive:
+    dims: [256, "${model.embedding_size}"]
+    activation: LeakyReLU
+  h_nmr:
+    dims: [128, "${model.embedding_size}"]
+    activation: LeakyReLU
+  multi_spec:
+    dims: [512, "${model.embedding_size}"]
+    activation: LeakyReLU
+
+optimizer:
+  lr: 0.0001
+  weight_decay: 0.0001
+
+loss:
+  temperature: 0.07
+  symmetric: True
+  sparse: False
+
+# compile model for faster training with pytorch 2.0
+compile: false

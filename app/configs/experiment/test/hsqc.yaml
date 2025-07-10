@@ -1,0 +1,46 @@
+# @package _global_
+defaults:
+  - override /data: molbind
+  - override /model: molbind
+  - override /trainer: gpu
+
+model:
+  embedding_size: 1024
+  encoders:
+    smiles:
+      freeze_encoder: False
+    hsqc:
+      freeze_encoder: False
+
+  projection_heads:
+    hsqc:
+      dims: [1024, "${model.embedding_size}"]
+      activation: LeakyReLU
+    hsqc_freeze: False
+    hsqc_is_on: True
+    smiles_freeze: False
+
+data:
+  modalities:
+    - hsqc
+  modalities_to_read:
+    - hsqc
+  batch_size: 128
+  valid_frac: 1.0
+  dataset_path: "${paths.data_dir}/test_split.parquet"
+  # dataset_config: hsqc
+
+ckpt_path: "${paths.checkpoints_dir}/hsqc_20250606_0715/best_model.ckpt"
+
+trainer:
+  num_nodes: 1
+  gpus_per_node: 1
+
+top_k:
+  - 1
+  - 2
+  - 5
+  - 20
+
+run_id: "hsqc"
+embeddings_path: ${run_id}

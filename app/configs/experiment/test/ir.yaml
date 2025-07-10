@@ -1,0 +1,39 @@
+# @package _global_
+defaults:
+  - override /data: molbind
+  - override /model: molbind
+  - override /trainer: gpu
+
+model:
+  embedding_size: 512
+  encoders:
+    smiles:
+      freeze_encoder: False
+  projection_heads:
+    ir_freeze: False
+    smiles_freeze: False
+
+data:
+  modalities:
+    - ir
+  modalities_to_read:
+    - ir
+  batch_size: 8192
+  valid_frac: 1.0
+  dataset_path: "${paths.data_dir}/test_split.parquet"
+
+
+ckpt_path: "${paths.checkpoints_dir}/ir_20250606_1550/best_model.ckpt"
+
+trainer:
+  num_nodes: 1
+  gpus_per_node: 1
+
+top_k:
+  - 1
+  - 2
+  - 5
+  - 20
+
+run_id: "ir"
+embeddings_path: ${run_id}

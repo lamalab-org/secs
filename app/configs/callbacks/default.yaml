@@ -1,0 +1,13 @@
+model_checkpoint:
+  dirpath: "${paths.checkpoints_dir}"
+  # filename: "{epoch:03d}_{valid_loss:.3f}"
+  filename: best_model
+  monitor: "valid_loss"
+  mode: "min"
+  save_top_k: 1
+  save_last: False
+
+early_stopping:
+  monitor: "valid_loss"
+  patience: 3
+  mode: "min"

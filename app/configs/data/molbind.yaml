@@ -1,0 +1,17 @@
+central_modality: smiles
+context_length: 128
+modalities:
+  - ir
+modalities_to_read:
+  - ir
+train_frac : 0.8
+valid_frac : 0.2
+drop_last: true
+num_workers: 4
+seed: 42
+fraction_data: 1
+dataset_path: jablonkagroup/spectral-dataset
+batch_size: 128
+
+h_nmr:
+  augment: false
