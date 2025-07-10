@@ -44,6 +44,7 @@ class MolBindModule(LightningModule):
 
         logger.info(f"Per device batch size: {self.per_device_batch_size}")
         logger.info(f"Loss batch size: {self.batch_size}")
+        logger.info(f"World size: {self.world_size}")
 
     def forward(self, batch: tuple[Data] | dict) -> dict:
         if isinstance(batch, tuple) and isinstance(batch[0], Data):
@@ -80,12 +81,15 @@ class MolBindModule(LightningModule):
         #  check if loss is nan
         if torch.isnan(loss):
             logger.error(f"Loss is nan for {prefix} batch.")
+
+        # Use per_device_batch_size for logging
         self.log(
             f"{prefix}_loss",
             loss,
-            batch_size=self.batch_size,
+            batch_size=self.per_device_batch_size,
             sync_dist=self.world_size > 1,
         )
+
         # compute retrieval metrics
         k_list = [1, 5]
         if prefix in ["valid", "test", "predict"]:
@@ -128,77 +132,46 @@ class MolBindModule(LightningModule):
         prefix: str,
     ) -> None:
         """
-        Example:
-
-        .unsqueeze(1) modality 1 embeddings of shape (Batch_Size, Embedding_Size) is equivalent
-        to Tensor[:, None, :].
-        .unsqueeze(0) modality 2 embeddings of shape (Batch_Size, Embedding_Size) is equivalent
-        to Tensor[None, :, :].
-
-        This allows to compute the matrix of cosine similarities between all pairs of embeddings
-        across two tensors containing embeddings for different modalities.
-
-        preds, targets, indexes are tensors of shape (Batch_Size*Batch_size)
-
-        Example on a 2x2 matrix
-
-        >>> metric = RetrievalMRR(top_k=1)
-        >>> preds = torch.tensor([0.56, 0.3, 0.2, 0.7])
-        >>> preds = torch.tensor([[0.56, 0.3], [0.2, 0.7]]).flatten()
-        >>> # preds shape change: (Batch_Size, Batch_Size) -> (Batch_Size*Batch_Size)
-        # True corresponds to diagonal elements in our case
-        # for larger examples we can use torch.eye(Batch_Size).flatten()
-        >>> target = torch.tensor([True, False, False, True])
-        # These are query ids. Metrics are computed after grouping by query id and then averaging.
-        # For large matrices we can use torch.repeat_interleave(torch.arange(Batch_Size))
-        >>> indexes = torch.tensor([0, 0, 1, 1], dtype=torch.long)
-        >>> metric.update(preds, target, indexes)
-        >>> metric.compute()
-        # tensor(1.) output: since the cosine similarity on the diagonals is the highest in their corresponding row
+        Computes retrieval metrics like MRR and Recall for the given embeddings.
         """
-
         metrics = [
             RetrievalMRR,
             RetrievalRecall,
         ]
         metric_names = [metric.__name__ for metric in metrics]
-        if self.world_size > 1:
-            # both all gather calls return tensors of shape (World_Size, Batch_Size, Embedding_Size)
-            all_embeddings_central_mod = self.all_gather(embeddings_central_mod, sync_grads=True)
-            all_embeddings_other_mod = self.all_gather(embeddings_other_mod, sync_grads=True)
-            all_embeddings_central_mod = all_embeddings_central_mod.flatten(0, 1)
-            all_embeddings_other_mod = all_embeddings_other_mod.flatten(0, 1)
-        else:
-            all_embeddings_central_mod = embeddings_central_mod.detach().clone()
-            all_embeddings_other_mod = embeddings_other_mod.detach().clone()
+
+        # Work with local embeddings only - don't gather across GPUs for metrics
+        local_embeddings_central_mod = embeddings_central_mod.detach().clone()
+        local_embeddings_other_mod = embeddings_other_mod.detach().clone()
+
         device = select_device()
 
-        # reference: https://medium.com/@dhruvbird/all-pairs-cosine-similarity-in-pytorch-867e722c8572
-        # adding a third dim allows to compute pairwise cosine sim.
+        # Compute cosine similarity matrix on local batch
         cos_sim = cosine_similarity(
-            all_embeddings_central_mod.unsqueeze(1),
-            all_embeddings_other_mod.unsqueeze(0),
+            local_embeddings_central_mod.unsqueeze(1),
+            local_embeddings_other_mod.unsqueeze(0),
             dim=2,
         ).to(device)
-        # preds, target, indexes
-        flatten_cos_sim = cos_sim.flatten().to(device)  # (Batch Size*Batch Size)
 
-        # the metric calculations are grouped by indexes and then averaged
-        # repeat interleave creates tensors of the form [0, 0, 1, 1, 2, 2]
-        indexes = (
-            torch.arange(all_embeddings_central_mod.shape[0]).repeat_interleave(all_embeddings_other_mod.shape[0]).to(device)
-        )
-        # Diagonal elements are the true querries, the rest are false querries
-        target = torch.eye(all_embeddings_central_mod.shape[0], dtype=torch.long).flatten().to(device)
-        assert target.sum() == all_embeddings_central_mod.shape[0]
+        flatten_cos_sim = cos_sim.flatten().to(device)
+
+        # Create indexes and targets for metric computation
+        batch_size = local_embeddings_central_mod.shape[0]
+        indexes = torch.arange(batch_size).repeat_interleave(batch_size).to(device)
+        target = torch.eye(batch_size, dtype=torch.long).flatten().to(device)
+
+        assert target.sum() == batch_size
+
         for k_val in k_list:
             for metric, metric_name in zip(metrics, metric_names):
                 metric_to_log = metric(top_k=k_val)
                 metric_to_log.update(flatten_cos_sim, target, indexes=indexes)
+
+                # Let PyTorch Lightning handle the distributed aggregation
                 self.log(
                     f"{prefix}_{central_modality}_{other_modality}_{metric_name}_top_{k_val}",
                     metric_to_log.compute(),
-                    batch_size=self.per_device_batch_size * self.world_size,
+                    batch_size=self.per_device_batch_size,
                     sync_dist=self.world_size > 1,
                 )
 
@@ -240,7 +213,7 @@ class MolBindModuleCustomSamples(MolBindModule):
         else:
             if negative_samples is not None:
                 return self.loss(z1, z2, negative_samples)
-            return self.loss(z1, z2, negative_samples)
+            return self.loss(z1, z2)
 
     def forward(self, batch) -> dict:
         if not isinstance(batch, tuple) or not isinstance(batch[0], Data):
@@ -262,7 +235,7 @@ class MolBindModuleCustomSamples(MolBindModule):
                     ),
                     self.central_modality,
                 )
-                for i in range(self.batch_size)
+                for i in range(self.per_device_batch_size)
             ]
             # shape (Batch_Size, Num_Negative_Samples, Embedding_Size)
             negative_samples_embeddings = torch.stack(negative_samples_embeddings)
@@ -270,35 +243,49 @@ class MolBindModuleCustomSamples(MolBindModule):
         return self._multimodal_loss(embeddings_dict, "train")
 
     def _multimodal_loss(self, embeddings_dict: dict[str, Tensor], prefix: str) -> float:
-        modality_pair = [*embeddings_dict]
-        """
-        SMILES is the key and the other modality is the query.
-        1. The loss is computed between the query and the key.
-        2. The negative samples are used to compute the loss.
-        """
+        modality_pair = [self.central_modality] + [
+            k for k in embeddings_dict if k not in {self.central_modality, "negative_samples"}
+        ]
+
         if prefix == "train":
             central_to_modality_loss = self._info_nce_loss(
                 embeddings_dict[modality_pair[1]],
                 embeddings_dict[modality_pair[0]],
-                embeddings_dict["negative_samples"],
+                embeddings_dict.get("negative_samples"),
             )
         else:
-            central_to_modality_loss = self._info_nce_loss(embeddings_dict[modality_pair[0]], embeddings_dict[modality_pair[1]])
+            central_to_modality_loss = self._info_nce_loss(
+                embeddings_dict[modality_pair[0]],
+                embeddings_dict[modality_pair[1]],
+            )
+
         loss = central_to_modality_loss
+
         if self.config.model.loss.sparse:
             loss = loss + self.config.model.loss.l1_loss_weight * self.l1_loss(
-                embeddings_dict[modality_pair[0]], embeddings_dict[modality_pair[1]]
+                embeddings_dict[modality_pair[0]],
+                embeddings_dict[modality_pair[1]],
             )
+
         if torch.isnan(loss):
             logger.error(f"Loss is nan for {prefix} batch.")
-        # compute retrieval metrics
-        k_list = [1, 5]
+
+        # Use per_device_batch_size for logging
+        self.log(
+            f"{prefix}_loss",
+            loss,
+            batch_size=self.per_device_batch_size,
+            sync_dist=self.world_size > 1,
+        )
+
         if prefix in {"valid", "test", "predict"}:
             self.retrieval_metrics(
                 embeddings_dict[modality_pair[0]],
                 embeddings_dict[modality_pair[1]],
-                *modality_pair,
-                k_list,
+                modality_pair[0],
+                modality_pair[1],
+                k_list=[1, 5],
                 prefix=prefix,
             )
+
         return loss

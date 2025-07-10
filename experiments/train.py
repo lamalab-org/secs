@@ -2,6 +2,7 @@ import datetime
 import os
 import re
 from pathlib import Path
+import gc
 
 import hydra
 import pandas as pd
@@ -35,19 +36,27 @@ def train_molbind(config: DictConfig):
     if not os.getenv("WANDB_API_KEY"):
         os.environ["WANDB_MODE"] = "offline"
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
+    # Memory optimization environment variables
     try:
         # set PYTORCH_ALLOC_CONF to avoid memory fragmentation
         os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
     except Exception:
         logger.warning("Your PyTorch version does not support PYTORCH_CUDA_ALLOC_CONF")
 
+    # Additional memory optimization settings
+    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
+
     wandb_logger = L.loggers.WandbLogger(
         project=os.getenv("WANDB_PROJECT"),
         entity=os.getenv("WANDB_ENTITY"),
         id=run_id,
     )
+    wandb_logger.log_hyperparams(config)
+
     # define the number of GPUs available for the dataloaders
     world_size = torch.cuda.device_count()
+
     # extract format of dataset file
     data_format = Path(config.data.dataset_path).suffix
     handlers = {
@@ -56,36 +65,66 @@ def train_molbind(config: DictConfig):
         ".pkl": pd.read_pickle,
         ".parquet": pd.read_parquet,
     }
-    # load and handle the data
+
+    # load and handle the data with memory optimization
     try:
+        logger.info(f"Loading data from {config.data.dataset_path}")
         data = handlers[data_format](config.data.dataset_path)
+        logger.info(f"Data loaded successfully. Shape: {data.shape}")
     except KeyError:
         logger.error(f"Format {data_format} not supported")
+        raise
+
     # Shuffling the data with a specified fraction and seed
-    shuffled_data = data.sample(frac=config.data.fraction_data, random_state=config.data.seed).head(1000)
-    # # copy h_nmr to h_nmr_cnn column
-    # shuffled_data["h_nmr_cnn"] = shuffled_data["h_nmr"]
+    shuffled_data = data.sample(frac=config.data.fraction_data, random_state=config.data.seed)
+
+    # Clear original data from memory
+    del data
+    gc.collect()
+
     # Get the total length of the dataset
     dataset_length = len(shuffled_data)
 
     # Split the data into validation and training datasets
-    valid_shuffled_data = shuffled_data.tail(int(config.data.valid_frac * dataset_length))
-    train_shuffled_data = shuffled_data.head(int(config.data.train_frac * dataset_length))
-    # set up the dataloaders
-    train_dataloader, valid_dataloader = (
-        MolBindDataset(
-            central_modality=config.data.central_modality,
-            other_modalities=config.data.modalities,
-            data=train_shuffled_data,
-            context_length=config.data.context_length,
-        ).build_datasets_for_modalities(),
-        MolBindDataset(
-            central_modality=config.data.central_modality,
-            other_modalities=config.data.modalities,
-            data=valid_shuffled_data,
-            context_length=config.data.context_length,
-        ).build_datasets_for_modalities(),
+    valid_shuffled_data = shuffled_data.tail(int(config.data.valid_frac * dataset_length)).copy()
+    train_shuffled_data = shuffled_data.head(int(config.data.train_frac * dataset_length)).copy()
+
+    # Clear shuffled_data from memory
+    del shuffled_data
+    gc.collect()
+
+    # Log dataset sizes
+    logger.info(f"Total samples after shuffling: {dataset_length}")
+    logger.info(f"Training samples: {len(train_shuffled_data)}")
+    logger.info(f"Validation samples: {len(valid_shuffled_data)}")
+
+    # set up the dataloaders with memory optimization
+    logger.info("Creating training dataset...")
+    train_dataset = MolBindDataset(
+        central_modality=config.data.central_modality,
+        other_modalities=config.data.modalities,
+        data=train_shuffled_data,
+        context_length=config.data.context_length,
     )
+    train_dataloader = train_dataset.build_datasets_for_modalities()
+
+    # Clear training data from memory after processing
+    del train_shuffled_data, train_dataset
+    gc.collect()
+
+    logger.info("Creating validation dataset...")
+    valid_dataset = MolBindDataset(
+        central_modality=config.data.central_modality,
+        other_modalities=config.data.modalities,
+        data=valid_shuffled_data,
+        context_length=config.data.context_length,
+    )
+    valid_dataloader = valid_dataset.build_datasets_for_modalities()
+
+    # Clear validation data from memory after processing
+    del valid_shuffled_data, valid_dataset
+    gc.collect()
+
     # set up the data module
     datamodule = MolBindDataModule(
         data={
@@ -97,6 +136,7 @@ def train_molbind(config: DictConfig):
             },
         },
     )
+
     # set up callbacks for the model
     callbacks = [
         ModelCheckpoint(
@@ -114,29 +154,74 @@ def train_molbind(config: DictConfig):
         ),
     ]
 
+    # Memory-optimized trainer configuration
+    trainer_config = {
+        "max_epochs": config.trainer.max_epochs,
+        "accelerator": config.trainer.accelerator,
+        "log_every_n_steps": config.trainer.log_every_n_steps,
+        "logger": wandb_logger,
+        "callbacks": callbacks,
+        "num_nodes": config.trainer.num_nodes,
+        "gradient_clip_val": 0.5,
+        "precision": config.trainer.precision,
+        "deterministic": True,
+    }
+
+    # Configure distributed training with memory optimizations
+    if world_size > 1:
+        trainer_config.update(
+            {
+                "devices": world_size,
+                "strategy": DDPStrategy(
+                    find_unused_parameters=True,  # Set to True for multimodal models with changing graphs
+                    gradient_as_bucket_view=True,  # Memory optimization
+                    static_graph=False,  # Set to False for multimodal models with dynamic graphs
+                ),
+            }
+        )
+        logger.info(f"Using distributed training with {world_size} GPUs")
+    else:
+        trainer_config.update(
+            {
+                "devices": "auto",
+                "strategy": "auto",
+            }
+        )
+        logger.info("Using single GPU training")
+
     # set up the trainer
-    trainer = L.Trainer(
-        max_epochs=config.trainer.max_epochs,
-        accelerator=config.trainer.accelerator,
-        log_every_n_steps=config.trainer.log_every_n_steps,
-        logger=wandb_logger,
-        callbacks=callbacks,
-        num_nodes=config.trainer.num_nodes,
-        devices=world_size if world_size > 1 else "auto",
-        strategy=DDPStrategy(find_unused_parameters=True) if world_size > 1 else "auto",
-        gradient_clip_val=0.5,
-        precision=config.trainer.precision,
-        deterministic=True,
-    )
+    trainer = L.Trainer(**trainer_config)
+
+    # Initialize model with memory optimization
+    logger.info("Initializing model...")
+    model = MolBindModule(config)
+
     # train the model
+    logger.info("Starting training...")
     trainer.fit(
-        model=MolBindModule(config),
+        model=model,
         datamodule=datamodule,
     )
+
     # copy the best model under the name "best_model"
     best_model_path = Path(config.callbacks.model_checkpoint.dirpath) / Path(run_id) / "best_model.ckpt"
-    os.system(f"cp {best_model_path} {Path(config.callbacks.model_checkpoint.dirpath) / Path(run_id) / 'best_model.ckpt'}")
-    logger.info(f"Best model saved at {best_model_path}")
+    try:
+        # Find the actual best checkpoint
+        checkpoint_dir = Path(config.callbacks.model_checkpoint.dirpath) / Path(run_id)
+        if checkpoint_dir.exists():
+            checkpoint_files = list(checkpoint_dir.glob("*.ckpt"))
+            if checkpoint_files:
+                # Get the most recent checkpoint (or implement your own logic)
+                best_checkpoint = max(checkpoint_files, key=lambda x: x.stat().st_mtime)
+                os.system(f"cp {best_checkpoint} {best_model_path}")
+                logger.info(f"Best model saved at {best_model_path}")
+            else:
+                logger.warning("No checkpoint files found")
+        else:
+            logger.warning("Checkpoint directory does not exist")
+    except Exception as e:
+        logger.error(f"Error copying best model: {e}")
+
     logger.info("Training complete")
     logger.info("Exiting")
 
@@ -201,7 +286,7 @@ def init_distributed_mode(port=12354):
 
 @hydra.main(version_base="1.3", config_path="../configs", config_name="molbind_config.yaml")
 def main(config: DictConfig):
-    init_distributed_mode(12354)
+    # init_distributed_mode(12354)
     train_molbind(config)
 
 
@@ -225,6 +310,6 @@ def patch_lightning_slurm_master_addr():
 
 
 if __name__ == "__main__":
-    patch_lightning_slurm_master_addr()
+    # patch_lightning_slurm_master_addr()
     seed_everything(42)
     main()

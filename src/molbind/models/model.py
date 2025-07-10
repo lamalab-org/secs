@@ -22,14 +22,10 @@ class MolBind(nn.Module):
         for modality in [*modalities, central_modality]:
             if modality not in [*vars(ModalityConstants)]:
                 raise ValueError(f"Modality {modality} not supported yet.")
-            dict_encoders[modality] = ModalityConstants[modality].encoder(
-                **cfg.model.encoders[modality]
-            )
+            dict_encoders[modality] = ModalityConstants[modality].encoder(**cfg.model.encoders[modality])
 
             if cfg.model.projection_heads[f"{modality}_is_on"]:
-                dict_projection_heads[modality] = ProjectionHead(
-                    **cfg.model.projection_heads[modality]
-                )
+                dict_projection_heads[modality] = ProjectionHead(**cfg.model.projection_heads[modality])
 
         # convert dicts to nn.Moduledict
         self.dict_encoders = nn.ModuleDict(dict_encoders)
@@ -55,33 +51,23 @@ class MolBind(nn.Module):
         # Input data is a dictionary with (central_modality, modality) pairs (where the central modality is at index 0)
         # Store embeddings as store_embeddings[modality] = (central_modality_embedding, modality_embedding)
         # Forward through respective encoder and projection head
-        central_modality_embedding = self.dict_encoders[self.central_modality].forward(
-            input_data[self.central_modality]
-        )
+        central_modality_embedding = self.dict_encoders[self.central_modality].forward(input_data[self.central_modality])
         modality_embedding = self.dict_encoders[modality].forward(input_data[modality])
 
         if self.central_modality in self.dict_projection_heads:
-            central_modality_embedding_projected = self.dict_projection_heads[
-                self.central_modality
-            ](central_modality_embedding)
-            store_embeddings[self.central_modality] = (
-                central_modality_embedding_projected
-            )
+            central_modality_embedding_projected = self.dict_projection_heads[self.central_modality](central_modality_embedding)
+            store_embeddings[self.central_modality] = central_modality_embedding_projected
         else:
             store_embeddings[self.central_modality] = central_modality_embedding
         if modality in self.dict_projection_heads:
-            modality_embedding_projected = self.dict_projection_heads[modality](
-                modality_embedding
-            )
+            modality_embedding_projected = self.dict_projection_heads[modality](modality_embedding)
             # Projection heads
             store_embeddings[modality] = modality_embedding_projected
         else:
             store_embeddings[modality] = modality_embedding
         return store_embeddings
 
-    def encode_modality(
-        self, input_data: Tensor | tuple[Tensor, Tensor], modality: str
-    ) -> Tensor:
+    def encode_modality(self, input_data: Tensor | tuple[Tensor, Tensor], modality: str) -> Tensor:
         # forward pass through modality encoder
         embedding = self.dict_encoders[modality].forward(input_data)
         if modality in self.dict_projection_heads:

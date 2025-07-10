@@ -5,9 +5,7 @@ from lightning.pytorch.utilities.combined_loader import CombinedLoader
 from loguru import logger
 from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader, DistributedSampler
-from torch_geometric.loader import DataLoader as GeometricDataLoader
 
-from molbind.data.available import NonStringModalities
 from molbind.data.components.datasets import StringDatasetEmbedding
 
 
@@ -43,32 +41,37 @@ class MolBindDataModule(LightningDataModule):
                 distributed_sampler = DistributedSampler(
                     self.datasets[mode][modality],
                     shuffle=shuffle,
+                    drop_last=drop_last,
                 )
-                shuffle = None
+                shuffle = False
             else:
                 distributed_sampler = None
-            if modality == NonStringModalities.GRAPH or modality == NonStringModalities.STRUCTURE:
-                dataloaders[modality] = GeometricDataLoader(
-                    self.datasets[mode][modality],
-                    batch_size=batch_size,
-                    num_workers=num_workers,
-                    drop_last=drop_last,
-                    sampler=distributed_sampler,
-                    shuffle=shuffle,
-                    prefetch_factor=num_workers,
-                )
+
+            # Optimize memory usage for distributed training
+            if self.distributed:
+                prefetch_factor = 1
+                actual_num_workers = min(num_workers, 2)
+                # Disable persistent workers in distributed training to save memory
+                persistent_workers = False
+                # Disable pin_memory in distributed training to save GPU memory
+                pin_memory = False
             else:
-                dataloaders[modality] = DataLoader(
-                    self.datasets[mode][modality],
-                    batch_size=batch_size,
-                    num_workers=num_workers,
-                    drop_last=drop_last,
-                    sampler=distributed_sampler,
-                    shuffle=shuffle,
-                    prefetch_factor=num_workers,
-                )
-        # CombinedLoader does not work with DDPSampler directly
-        # So each dataloader has a DistributedSampler
+                prefetch_factor = min(2, num_workers) if num_workers > 0 else 2
+                actual_num_workers = num_workers
+                persistent_workers = num_workers > 0
+                pin_memory = True
+
+            dataloaders[modality] = DataLoader(
+                self.datasets[mode][modality],
+                batch_size=batch_size,
+                num_workers=actual_num_workers,
+                drop_last=drop_last,
+                sampler=distributed_sampler,
+                shuffle=shuffle,
+                prefetch_factor=prefetch_factor,
+                pin_memory=pin_memory,
+                persistent_workers=persistent_workers,
+            )
         logger.info(f"Nr of dataloaders: {len(dataloaders)}")
         return dataloaders
 
@@ -87,8 +90,6 @@ class MolBindDataModule(LightningDataModule):
     def val_dataloader(self) -> CombinedLoader:
         # iter through val data loaders
         # add DDPSampler to val_dataloader
-        # for val_dataloader in [*self.val_dataloaders.values()]:
-        #     val_dataloader.sampler = DistributedSampler(val_dataloader.dataset)
         val_dataloaders = self.build_multimodal_dataloader(
             batch_size=self.dataloader_arguments["batch_size"],
             drop_last=True,
@@ -125,36 +126,36 @@ class MolBindDataModule(LightningDataModule):
         After, in the `retrieval.py` script the predictions are concatenated.
         """
         dataloaders = {}
+        # Use minimal prefetch for prediction to save memory
+        prefetch_factor = 1
+        # Reduce workers for prediction
+        actual_num_workers = min(num_workers, 2)
+
         for modality in self.datasets[mode][0]:
-            if modality == NonStringModalities.GRAPH or modality == NonStringModalities.STRUCTURE:
-                dataloaders[modality] = GeometricDataLoader(
-                    self.datasets[mode][0][modality],
-                    batch_size=batch_size,
-                    num_workers=num_workers,
-                    drop_last=False,
-                    shuffle=shuffle,
-                    prefetch_factor=num_workers,
-                )
-            else:
-                dataloaders[modality] = DataLoader(
-                    self.datasets[mode][0][modality],
-                    batch_size=batch_size,
-                    num_workers=num_workers,
-                    drop_last=False,
-                    shuffle=shuffle,
-                    prefetch_factor=num_workers,
-                )
-        # CombinedLoader does not work with DDPSampler directly
-        # So each dataloader has a DistributedSampler
+            dataloaders[modality] = DataLoader(
+                self.datasets[mode][0][modality],
+                batch_size=batch_size,
+                num_workers=actual_num_workers,
+                drop_last=False,
+                shuffle=shuffle,
+                prefetch_factor=prefetch_factor,
+                pin_memory=False,
+                persistent_workers=False,
+            )
         return dataloaders
 
     def embed_dataloader(self, tokenized_data: list[list[int]]) -> StringDatasetEmbedding:
         dataset = StringDatasetEmbedding(tokenized_data)
+
+        embedding_num_workers = min(self.dataloader_arguments["num_workers"], 2)
+
         return DataLoader(
             dataset,
             batch_size=self.dataloader_arguments["batch_size"],
-            num_workers=self.dataloader_arguments["num_workers"],
+            num_workers=embedding_num_workers,
             drop_last=False,
             shuffle=False,
-            prefetch_factor=self.dataloader_arguments["num_workers"],
+            prefetch_factor=1,  # Minimal prefetch
+            pin_memory=False,
+            persistent_workers=False,
         )

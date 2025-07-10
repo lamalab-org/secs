@@ -62,59 +62,11 @@ class BaseModalityEncoder(nn.Module):
 
         return self._non_pad_token_embed_averaging(last_hidden_state, attention_mask)
 
-    def _non_pad_token_embed_averaging(
-        self, last_hidden_state: Tensor, attention_mask: Tensor
-    ) -> Tensor:
+    def _non_pad_token_embed_averaging(self, last_hidden_state: Tensor, attention_mask: Tensor) -> Tensor:
         attention_mask = attention_mask.float().unsqueeze(-1)
         sum_ = (last_hidden_state * attention_mask).sum(dim=1)
         norm = attention_mask.squeeze(-1).sum(dim=1).unsqueeze(1)
         return sum_ / norm
-
-
-class FingerprintEncoder(nn.Module):
-    def __init__(
-        self,
-        input_dims: list[int],
-        output_dims: list[int],
-        latent_dim: int,
-    ) -> None:
-        super().__init__()
-        self.encoder = ProjectionHead(dims=input_dims, activation="leakyrelu")
-        # Output layers for mu and log_var
-        self.fc_mu = nn.Linear(input_dims[-1], latent_dim)
-        self.fc_log_var = nn.Linear(input_dims[-1], latent_dim)
-        # decoder
-        self.decoder = ProjectionHead(dims=output_dims, activation="leakyrelu")
-
-    def encode(self, x: Tensor):
-        return self.encoder(x)
-
-    def decode(self, x: Tensor):
-        return self.decoder(x)
-
-    def forward(self, x: Tensor) -> tuple[Tensor, Tensor, Tensor]:
-        latent_state = self.encode(x)
-        mu = self.fc_mu(latent_state)
-        log_var = self.fc_log_var(latent_state)
-        output = self.decode(latent_state)
-        return mu, log_var, output
-
-
-def gcn_norm(
-    edge_index: Tensor | tuple[Tensor, Tensor] | SparseTensor,
-    num_nodes: int | None = None,
-):
-    num_nodes = maybe_num_nodes(edge_index, num_nodes)
-
-    edge_weight = torch.ones((edge_index.size(1),), device=edge_index.device)
-
-    row, col = edge_index[0], edge_index[1]
-    # deg = torch.scatter_add(edge_weight, col, dim=0, dim_size=num_nodes)
-    deg = torch.zeros(num_nodes, device=edge_index.device, dtype=edge_weight.dtype)
-    deg.scatter_add_(0, col, edge_weight)
-    deg_inv_sqrt = deg.pow_(-0.5)
-    deg_inv_sqrt.masked_fill_(deg_inv_sqrt == float("inf"), 0)
-    return edge_index, deg_inv_sqrt[row] * edge_weight * deg_inv_sqrt[col]
 
 
 class GCNConv(MessagePassing):
@@ -152,9 +104,7 @@ class GCNConv(MessagePassing):
         self_loop_attr = self_loop_attr.to(edge_attr.device).to(edge_attr.dtype)
         edge_attr = torch.cat((edge_attr, self_loop_attr), dim=0)
 
-        edge_embeddings = self.edge_embedding1(edge_attr[:, 0]) + self.edge_embedding2(
-            edge_attr[:, 1]
-        )
+        edge_embeddings = self.edge_embedding1(edge_attr[:, 0]) + self.edge_embedding2(edge_attr[:, 1])
 
         edge_index, __ = gcn_norm(edge_index)
 
@@ -174,77 +124,3 @@ class GCNConv(MessagePassing):
 
     def message_and_aggregate(self, adj_t, x):
         return torch.sparse.mm(adj_t, x, reduce=self.aggr)
-
-
-class GraphEncoder(nn.Module):
-    def __init__(
-        self,
-        num_layer: int = 5,
-        emb_dim: int = 300,
-        feat_dim: int = 256,
-        drop_ratio: float = 0,
-        pool: str = Literal["mean", "add", "max"],
-    ) -> None:
-        super().__init__()
-        self.num_layer = num_layer
-        self.emb_dim = emb_dim
-        self.feat_dim = feat_dim
-        self.drop_ratio = drop_ratio
-
-        if self.num_layer < 2:
-            raise ValueError("Number of GNN layers must be greater than 1.")
-
-        num_atom_type = 119  # including the extra mask tokens
-        num_chirality_tag = 3
-        self.x_embedding1 = nn.Embedding(num_atom_type, emb_dim)
-        self.x_embedding2 = nn.Embedding(num_chirality_tag, emb_dim)
-
-        nn.init.xavier_uniform_(self.x_embedding1.weight.data)
-        nn.init.xavier_uniform_(self.x_embedding2.weight.data)
-
-        # List of MLPs
-        self.gnns = nn.ModuleList()
-        for _ in range(num_layer):
-            self.gnns.append(GCNConv(emb_dim, aggr="add"))
-
-        # List of batchnorms
-        self.batch_norms = nn.ModuleList()
-        for _ in range(num_layer):
-            self.batch_norms.append(nn.BatchNorm1d(emb_dim))
-
-        if pool == "mean":
-            self.pool = global_mean_pool
-        elif pool == "add":
-            self.pool = global_add_pool
-        elif pool == "max":
-            self.pool = global_max_pool
-        else:
-            raise ValueError("Not defined pooling!")
-
-        self.feat_lin = nn.Linear(self.emb_dim, self.feat_dim)
-
-        self.out_lin = nn.Sequential(
-            nn.Linear(self.feat_dim, self.feat_dim),
-            nn.ReLU(inplace=True),
-            nn.Linear(self.feat_dim, self.feat_dim // 2),
-        )
-
-    def forward(self, data):
-        x = data.x
-        edge_index = data.edge_index
-        edge_attr = data.edge_attr
-
-        h = self.x_embedding1(x[:, 0]) + self.x_embedding2(x[:, 1])
-
-        for layer in range(self.num_layer):
-            h = self.gnns[layer](h, edge_index, edge_attr)
-            h = self.batch_norms[layer](h)
-            if layer == self.num_layer - 1:
-                h = F.dropout(h, self.drop_ratio, training=self.training)
-            else:
-                h = F.dropout(F.relu(h), self.drop_ratio, training=self.training)
-        # global pooling
-        h = self.pool(h, data.batch)
-        h = self.feat_lin(h)
-        out = self.out_lin(h)
-        return h, out
