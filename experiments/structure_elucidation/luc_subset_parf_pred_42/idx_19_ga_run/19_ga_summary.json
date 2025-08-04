@@ -1,0 +1,33 @@
+{
+  "target_idx": 19,
+  "original_smiles": "Cc1ccc2nccnc2c1",
+  "best_ga_smiles": "Cc1cnc(O)c2cnccc12",
+  "best_ga_score": 0.8313622851120799,
+  "tanimoto_to_original": 0.19751381215469613,
+  "best_ga_detailed_scores": {
+    "mf_penalty": -0.05263157894736842,
+    "hnmr_cosine_sim": 0.8805884122848511
+  },
+  "ga_modalities_scored": [
+    "hnmr"
+  ],
+  "initial_population_size": 8192,
+  "ga_parameters": {
+    "seed": 42,
+    "initial_population_size_from_pruning": 8192,
+    "generations": 15,
+    "offspring_size": 2048,
+    "population_size": 20000,
+    "frac_graph_ga_mutate": 0.3,
+    "model_experiments": {
+      "ir": "test/ir",
+      "hnmr": "lucs_subset/parf",
+      "hsqc": "test/hsqc"
+    },
+    "raw_embedding_paths": {
+      "hnmr": "../pretrain_augment_finetune_predicted_maybridge_luc_20250711_0843.pkl"
+    },
+    "dataset_path": "../../data/maybridge_simulations/filtered_predicted.parquet",
+    "base_cache_dir": "luc_subset_parf_pred_42"
+  }
+}
