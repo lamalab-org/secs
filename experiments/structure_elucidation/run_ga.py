@@ -8,15 +8,15 @@ import numpy as np
 import pandas as pd
 import rootutils
 import torch
-from gafuncs import CachedBatchFunction  # Assuming this custom module is available
-
-# Use the SAME helper and SimpleMoleculeAnalyzer's PKL config definition
-from generate_molformula_files import SimpleMoleculeAnalyzer, get_1d_target_embedding_from_raw_batches_pkl
+from gafuncs import CachedBatchFunction, smiles_is_radical_or_is_charged_or_has_wrong_valence
 from loguru import logger
 from mol_ga.graph_ga.gen_candidates import graph_ga_blended_generation
 from mol_ga.preconfigured_gas import default_ga
 from prune_sim import gpu_encode_smiles_variable, load_models_dict, tanimoto_similarity
 from rdkit import Chem  # For atom counts
+
+# Use the SAME helper and SimpleMoleculeAnalyzer's PKL config definition
+from retrieval import SimpleMoleculeAnalyzer, get_1d_target_embedding_from_raw_batches_pkl
 from torch.nn.functional import cosine_similarity as torch_cosine_similarity
 from tqdm import tqdm
 
@@ -79,8 +79,9 @@ def reward_function_ga(individuals: list[str], ga_models: dict, target_1D_embs: 
         return mf_loss  # Only MF penalty if no spectral scores
 
     avg_cosine_sim = np.mean(np.array(scores_all_mods_np), axis=0)
+    is_radical_or_charged = np.array([smiles_is_radical_or_is_charged_or_has_wrong_valence(smi) for smi in individuals])
     # compute molecule charge
-    return avg_cosine_sim + mf_loss
+    return avg_cosine_sim + mf_loss - is_radical_or_charged
 
 
 def calculate_detailed_scores(smi: str, models: dict, target_1D_embs: dict, atom_counts_orig: dict) -> dict:
@@ -191,12 +192,12 @@ def cli(
     end_range: int,
     seed: int = 42,
     configs_path: str = "../../configs",
-    dataset_path: str = "../../data/test_split.parquet",
+    dataset_path: str | None = None,
     # GA: model experiments & RAW target embedding file paths (List[BATCH Dict])
-    ga_ir_exp: str | None = "test/ir",
-    ga_cnmr_exp: str | None = "test/cnmr_pretrain",
-    ga_hnmr_exp: str | None = "test/hnmr_augment_pretrain",
-    ga_hsqc_exp: str | None = "test/hsqc",
+    ga_ir_exp: str | None = None,
+    ga_cnmr_exp: str | None = None,
+    ga_hnmr_exp: str | None = None,
+    ga_hsqc_exp: str | None = None,
     # GA: RAW embedding file paths
     ga_ir_raw_emb_path: str | None = None,
     ga_cnmr_raw_emb_path: str | None = None,
