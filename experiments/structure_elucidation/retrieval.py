@@ -6,9 +6,9 @@ import numpy as np
 import pandas as pd
 import polars as pl
 import torch
+from canonicalize_isomers import isomer_to_canonical
 from datasets import load_dataset
 from loguru import logger
-from maygen_out_to_canonical import isomer_to_canonical
 from prune_sim import embedding_pruning_variable, load_models_dict, tanimoto_similarity
 from tqdm.auto import tqdm
 
