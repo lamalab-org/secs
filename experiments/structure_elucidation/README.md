@@ -5,7 +5,7 @@
 </div>
 
 The results for all individual runs for a specific model and molecules are provided in `luc_subset_parf_pred_42`.
-This represents an example based on the PARF model and the molecules from the Maybridge dataset (34 molecules).
+This represents an example based on the PARF model and the molecules from the in-house dataset (34 molecules).
 To process the results, one needs to run the following:
 
 ```bash
