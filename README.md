@@ -1,6 +1,6 @@
 <div align="center">
 
-# MoleculeBind
+# Structure Elucidation from Chemical Spectra (SECS)
 
 </div>
 
@@ -17,8 +17,6 @@ uv pip install -e .
 ## :file_folder: Data availability
 
 The simulated spectra data have been compiled from [IBM's Multimodal Spectroscopic Dataset](https://zenodo.org/records/11611178).
-
-(WIP :building_construction:) Run `molbind-get-datasets` from the command line to download the data.
 
 
 ## :clipboard: Environment file
