@@ -4,9 +4,11 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import rootutils
 import torch
-from gafuncs import CachedBatchFunction, smiles_is_radical_or_is_charged_or_has_wrong_valence
+from gafuncs import (
+    CachedBatchFunction,
+    smiles_is_radical_or_is_charged_or_has_wrong_valence,
+)
 from loguru import logger
 from mol_ga.graph_ga.gen_candidates import graph_ga_blended_generation
 from mol_ga.preconfigured_gas import default_ga
@@ -44,9 +46,15 @@ def calculate_mf_penalty(smi: str, atom_counts_orig: dict) -> float:
     return -penalty / total_orig_atoms
 
 
-def reward_function_ga(individuals: list[str], ga_models: dict, target_1D_embs: dict, atom_counts_orig: dict):
+def reward_function_ga(
+    individuals: list[str],
+    ga_models: dict,
+    target_1D_embs: dict,
+    atom_counts_orig: dict,
+) -> np.array:
     if not individuals:
         return np.array([])
+
     cand_smiles_embs = gpu_encode_smiles_variable(individuals, ga_models)  # Dict: mod -> (N,D)
 
     mf_loss = np.array([calculate_mf_penalty(smi, atom_counts_orig) for smi in individuals])
@@ -58,26 +66,18 @@ def reward_function_ga(individuals: list[str], ga_models: dict, target_1D_embs: 
 
         cand_embs_mod_gpu = cand_smiles_embs[spec]  # (N, D_mod)
 
-        if target_emb_1D_gpu.ndim != 1 or cand_embs_mod_gpu.shape[1] != target_emb_1D_gpu.shape[0]:
-            logger.warning(
-                f"Reward: Dim mismatch for {spec}. Target: {target_emb_1D_gpu.shape}, Cand: {cand_embs_mod_gpu.shape}. Skipping."
-            )
-            continue
-
-        sims_gpu = torch_cosine_similarity(target_emb_1D_gpu.unsqueeze(0), cand_embs_mod_gpu, dim=1)  # (1,D) vs (N,D) -> (N,)
-        scores_all_mods_np.append(sims_gpu.numpy())
+        sims_gpu = torch_cosine_similarity(
+            target_emb_1D_gpu.unsqueeze(0).to("cuda"), cand_embs_mod_gpu.to("cuda"), dim=1
+        )  # (1,D) vs (N,D) -> (N,)
+        scores_all_mods_np.append(sims_gpu.cpu().numpy())
         num_ok_mods += 1
 
     if num_ok_mods == 0:
         return mf_loss  # Only MF penalty if no spectral scores
 
     avg_cosine_sim = np.mean(np.array(scores_all_mods_np), axis=0)
-    # check if has "."
-    has_dot = np.array([smi.count(".") for smi in individuals])
-    # penalize unstable molecules
-    stability = [int(smiles_is_radical_or_is_charged_or_has_wrong_valence(smi)) for smi in individuals]
-    # compute molecule charge
-    return avg_cosine_sim + mf_loss - has_dot - np.array(stability)
+    is_radical_or_charged = np.array([smiles_is_radical_or_is_charged_or_has_wrong_valence(smi) for smi in individuals])
+    return avg_cosine_sim + mf_loss - is_radical_or_charged
 
 
 def calculate_detailed_scores(smi: str, models: dict, target_1D_embs: dict, atom_counts_orig: dict) -> dict:
@@ -91,13 +91,15 @@ def calculate_detailed_scores(smi: str, models: dict, target_1D_embs: dict, atom
 
     # 2. Calculate Modality-specific Cosine Similarities
     smi_emb_dict = gpu_encode_smiles_variable([smi], models)
-    for spec, target_emb in target_1D_embs.items():
+    for spec, target_embedding in target_1D_embs.items():
         score_key = f"{spec}_cosine_sim"
         if spec not in smi_emb_dict or smi_emb_dict[spec] is None or smi_emb_dict[spec].nelement() == 0:
             scores[score_key] = 0.0
             continue
 
-        cand_emb = smi_emb_dict[spec]
+        cand_emb = smi_emb_dict[spec].to("cuda")  # (1, D)
+        target_emb = target_embedding.to("cuda")  # (D,)
+
         sim = torch_cosine_similarity(target_emb.unsqueeze(0), cand_emb, dim=1)
         scores[score_key] = sim.item()
 
@@ -134,7 +136,12 @@ def run_ga_instance(
         else initial_df["canonical_smiles"].head(init_pop).tolist()
     )
 
-    reward_f = partial(reward_function_ga, ga_models=models, target_1D_embs=target_1D_embs, atom_counts_orig=atom_counts_orig)
+    reward_f = partial(
+        reward_function_ga,
+        ga_models=models,
+        target_1D_embs=target_1D_embs,
+        atom_counts_orig=atom_counts_orig,
+    )
 
     ga_logger = logger
 
@@ -170,7 +177,7 @@ def spec2struct(
     frac_graph_ga_mutate: float = 0.3,
     gens_ga: int = 10,
     offspring_ga: int = 1024,
-    pop_ga: int = 512,
+    pop_ga: int = 1024,
     base_cache_dir: str = "four_modalities_ga_cache",
 ):
     dict_models = {
@@ -213,10 +220,6 @@ def spec2struct(
     active_ga_model_modalities = [m for m, model in ga_models_for_scoring.items() if model]
     final_ga_models_to_use = {m: ga_models_for_scoring[m] for m in active_ga_model_modalities if m in ga_models_for_scoring}
     logger.info(f"GA models loaded: {final_ga_models_to_use.keys()}")
-    # if not active_ga_model_modalities:
-    #     logger.error("No GA models loaded. Exiting.")
-    #     return
-    # logger.info(f"GA scoring models: {active_ga_model_modalities}")
 
     analyzer_user_active_spectra = [m for m in SimpleMoleculeAnalyzer.ALL_SPECTRA_TYPES if locals().get(f"analyzer_{m}_exp")]
     analyzer = SimpleMoleculeAnalyzer(
@@ -233,7 +236,8 @@ def spec2struct(
     if spectrum["x"][0] < 9:
         spectrum["y"] = spectrum["y"][::-1]
 
-    spectrum_as_tensor = torch.tensor(spectrum["y"], dtype=torch.float32).unsqueeze(0).unsqueeze(0)
+    spectrum_as_tensor = torch.tensor(spectrum["y"], dtype=torch.float32).unsqueeze(0).unsqueeze(0).to("cuda")
+
     spectrum_as_tensor.requires_grad = False
     spectrum_as_tensor = spectrum_as_tensor / spectrum_as_tensor.max()
     output_hnmr_embedding = analyzer.models["hnmr"].encode_modality(spectrum_as_tensor.detach(), "h_nmr")
@@ -243,6 +247,7 @@ def spec2struct(
     initial_candidates_df = analyzer.process_from_molecular_formula(mf, target_embeddings)
 
     initial_candidates_df_smiles = initial_candidates_df["smiles"].tolist()
+
     results = run_ga_instance(
         initial_df=initial_candidates_df,
         models=final_ga_models_to_use,
@@ -261,43 +266,3 @@ def spec2struct(
         }
         for k, v in results_dict.items()
     ]
-
-
-if __name__ == "__main__":
-    # rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
-
-    # Replace with your actual URL
-    data = pd.read_parquet("../data/nmrshiftdb/hnmr_cnmr_validation_set.parquet")
-    idx = 103
-    spectrum = {"y": data.h_nmr.iloc[idx]}
-
-    spectrum["x"] = np.linspace(10, -2, len(spectrum["y"]))
-
-    mf = "C6H3NClF3"
-
-    r = spec2struct(
-        mf=mf,
-        spectrum=spectrum,
-        model="residual",
-        configs_path="configs",
-        init_pop_ga=8192,
-        offspring_ga=2048,
-        pop_ga=20000,
-        gens_ga=15,
-    )
-
-# python run_ga.py $2 $3 \
-#     --ga_ir_raw_emb_path None \
-#     --ga_hnmr_raw_emb_path "../hnmr_finetune_luc_20250623_1959.pkl" \
-#     --ga_cnmr_raw_emb_path None \
-#     --ga_hsqc_raw_emb_path None \
-#     --ga_cnmr_exp "test/cnmr_finetune" \
-#     --ga_hnmr_exp "test/hnmr_augment_finetune" \
-#     --dataset_path "../../data/luc_dataset_9_10_11_18.parquet" \
-#     --gens_ga 15 \
-#     --seed $4 \
-#     --frac_graph_ga_mutate 0.3 \
-#     --pop_ga 20000 \
-#     --init_pop_ga 8192 \
-#     --offspring_ga 2048 \
-#     --base_cache_dir "hnmr_experimental_luc_seed_$4"

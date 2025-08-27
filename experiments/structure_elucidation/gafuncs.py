@@ -1,5 +1,5 @@
+from collections.abc import Callable
 from functools import cache
-from typing import Callable
 
 import numpy as np
 from loguru import logger
@@ -103,3 +103,52 @@ def sascore(smiles):
         return sascorer.calculateScore(m)
     except:
         return 10
+
+
+def smiles_is_radical_or_is_charged_or_has_wrong_valence(smiles: str) -> bool:
+    """
+    Determines if a SMILES string represents a radical, charged molecule, or has wrong valence.
+
+    Args:
+        smiles (str): SMILES string representation of a molecule
+
+    Returns:
+        bool: True if the molecule is a radical OR charged OR has wrong valence, False otherwise
+    """
+    try:
+        # Parse the SMILES string into a molecule object - without sanitization first
+        mol = Chem.MolFromSmiles(smiles, sanitize=False)
+
+        # Return False if SMILES is invalid
+        if mol is None:
+            return False
+
+        # Check 1: Overall charge neutrality (before adding hydrogens)
+        total_charge = sum(atom.GetFormalCharge() for atom in mol.GetAtoms())
+        if total_charge != 0:
+            return True  # Molecule is charged
+
+        # Check 2: Valence validity - try to sanitize
+        try:
+            # This will raise an exception if valence is invalid
+            Chem.SanitizeMol(mol)
+        except Exception as e:
+            return True  # Molecule has wrong valence
+
+        # Add hydrogens after sanitization succeeds
+        mol = Chem.AddHs(mol)
+
+        # Check 3: Unpaired electrons (radicals)
+        for atom in mol.GetAtoms():
+            # Get the number of radical electrons (unpaired electrons)
+            num_radical_electrons = atom.GetNumRadicalElectrons()
+
+            # If any atom has unpaired electrons, it's a radical
+            if num_radical_electrons > 0:
+                return True  # Molecule is a radical
+
+        return False  # Molecule is neutral, has valid valence, and no radicals
+
+    except Exception:
+        # Return True for any parsing errors (likely invalid structures)
+        return True

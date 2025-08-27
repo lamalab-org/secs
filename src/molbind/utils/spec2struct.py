@@ -8,19 +8,13 @@ from rdkit.Chem import rdMolDescriptors
 from scipy.interpolate import interp1d
 
 
-def get_atom_counts_from_formula(formula_string: str) -> dict:
+def get_atom_counts_from_formula(formula_string: str) -> dict[str, int]:
     """
     Parses a simple molecular formula string into a dictionary of atom counts.
     Example: "C6H12O6" -> {'C': 6, 'H': 12, 'O': 6}
     Handles elements with one or two letters and optional counts.
     Assumes "flat" formulas (e.g., no parentheses or complex structures).
     """
-    if not isinstance(formula_string, str):
-        # Depending on desired strictness, could raise TypeError or return empty.
-        # Matching original behavior of not erroring out for non-strings if it implicitly fails.
-        return {}
-    if not formula_string:
-        return {}
 
     counts = defaultdict(int)
     # Regex: ([A-Z][a-z]?) matches an element symbol (e.g., C, Cl)
@@ -42,12 +36,6 @@ def get_atom_counts_from_formula(formula_string: str) -> dict:
         count = int(count_str) if count_str else 1
         counts[element] += count
         parsed_length = match.end()
-
-    if parsed_length != len(formula_string):
-        # This indicates trailing unparsed characters.
-        # Similar to above, could indicate issues with formula string.
-        pass  # Silently ignore for now.
-
     return dict(counts)
 
 

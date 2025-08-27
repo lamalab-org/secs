@@ -10,7 +10,8 @@ model:
     smiles:
       freeze_encoder: False
     h_nmr:
-      freeze_encoder: False
+      freeze_encoder: False      
+      use_initial_residual: True
   projection_heads:
     h_nmr:
       dims: [1024, "${model.embedding_size}"]
@@ -19,6 +20,9 @@ model:
     h_nmr_is_on: True
     smiles_freeze: False
 
+paths:
+  checkpoints_dir: /data/mirzaa/MoleculeBindCheckpoints
+
 data:
   modalities:
     - h_nmr
@@ -26,9 +30,9 @@ data:
   batch_size: 256
   dataset_path: "${paths.data_dir}/test_split.parquet"
   h_nmr:
-    augment: False
+    augment: True
 
-ckpt_path: "${paths.checkpoints_dir}/hnmr_20250606_2223/best_model.ckpt"
+ckpt_path: "${paths.checkpoints_dir}/hnmr_augment_pretrain_20250706_1010/best_model.ckpt"
 
 trainer:
   num_nodes: 1

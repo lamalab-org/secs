@@ -4,6 +4,7 @@ from pathlib import Path
 
 import hydra
 import pandas as pd
+import polars as pl
 import pytorch_lightning as L
 import rootutils
 from dotenv import load_dotenv
@@ -30,16 +31,15 @@ def embed(config: DictConfig):
 
     # extract format of dataset file
     data_format = Path(config.data.dataset_path).suffix
-
     handlers = {
         ".csv": pd.read_csv,
         ".pickle": pd.read_pickle,
         ".pkl": pd.read_pickle,
-        ".parquet": pd.read_parquet,
+        ".parquet": pl.read_parquet,
     }
 
     try:
-        data = handlers[data_format](config.data.dataset_path)
+        data = handlers[data_format](config.data.dataset_path).to_pandas()
     except KeyError:
         logger.error(f"Format {data_format} not supported")
 
@@ -53,9 +53,9 @@ def embed(config: DictConfig):
         },
     ).embed_dataloader(data.tokens.to_list())
     predictions = trainer.predict(model=MolBindModule(config), dataloaders=[dataloader])
-    with open(f"pubchem_embeddings/{config.embeddings_path}_{RETRIEVAL_TIME}.pkl", "wb") as f:  # noqa: PTH123
+    with open(f"/data/mirzaa/pubchem_embeddings_{RETRIEVAL_TIME}.pkl", "wb") as f:  # noqa: PTH123
         pkl.dump(predictions, f, protocol=pkl.HIGHEST_PROTOCOL)
-    logger.info(f"Saved embeddings to {config.embeddings_path}.pkl")
+    logger.info(f"Saved embeddings to /data/mirzaa/pubchem_embeddings_{RETRIEVAL_TIME}.pkl")
 
 
 @hydra.main(version_base="1.3", config_path="../configs", config_name="molbind_config.yaml")

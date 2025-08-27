@@ -3,69 +3,77 @@ import random
 import numpy as np
 from scipy.ndimage import gaussian_filter1d
 from scipy.signal import find_peaks
+from scipy.special import comb
 
-# --- Configuration Constants ---
+# --- Configuration Constants (Optimized for Realistic Experimental Data) ---
 PPM_MIN = -2.0
-PPM_MAX = 10.0
-SPECTROMETER_FREQ_HZ = 400.0e6  # Spectrometer frequency in Hz (e.g., 400 MHz)
+PPM_MAX = 10.0  # Expanded range for acidic protons, etc.
 
-# Peak identification parameters
-FINDPKS_MIN_PEAK_PROMINENCE_FRAC = 0.0002
-FINDPKS_MIN_PEAK_DIST_PPM = 0.005
-FINDPKS_MIN_HEIGHT_FRAC = 0.005
+# A list of common spectrometer frequencies in Hz. One is chosen randomly if not specified.
+COMMON_SPECTROMETER_FREQS_HZ = [300e6, 400e6, 500e6, 600e6, 700e6]
 
-# Peak broadening parameters (Voigt components)
-PEAK_GAUSSIAN_SIGMA_PPM_MIN = 0.001  # Gaussian component (inhomogeneity, etc.)
-PEAK_GAUSSIAN_SIGMA_PPM_MAX = 0.003
-PEAK_LORENTZIAN_FWHM_PPM_MIN = 0.001  # Lorentzian component (T2 relaxation)
-PEAK_LORENTZIAN_FWHM_PPM_MAX = 0.008
-VOIGT_ETA_MIN = 0.1  # Min Lorentzian contribution factor for pseudo-Voigt
-VOIGT_ETA_MAX = 0.9  # Max Lorentzian contribution factor for pseudo-Voigt
+# Peak identification parameters (tuned to be less sensitive to noise)
+FINDPKS_MIN_PEAK_PROMINENCE_FRAC = 0.008  # Increased to avoid picking up noise
+FINDPKS_MIN_PEAK_DIST_PPM = 0.015  # Increased to treat multiplets as single entities
+FINDPKS_MIN_HEIGHT_FRAC = 0.015  # Slightly increased to focus on real peaks
 
+# Peak broadening parameters (wider range for more variability)
+PEAK_GAUSSIAN_SIGMA_PPM_MIN = 0.0008
+PEAK_GAUSSIAN_SIGMA_PPM_MAX = 0.004
+PEAK_LORENTZIAN_FWHM_PPM_MIN = 0.0008
+PEAK_LORENTZIAN_FWHM_PPM_MAX = 0.012
+VOIGT_ETA_MIN = 0.1
+VOIGT_ETA_MAX = 0.9
 
 # Global broadening parameters
-FINAL_GLOBAL_BROADENING_SIGMA_PPM_MIN = 0.0003
-FINAL_GLOBAL_BROADENING_SIGMA_PPM_MAX = 0.0015
+FINAL_GLOBAL_BROADENING_SIGMA_PPM_MIN = 0.0002
+FINAL_GLOBAL_BROADENING_SIGMA_PPM_MAX = 0.0020
 
-# Chemical shift perturbation
-MAX_GLOBAL_SHIFT_PPM = 0.12
-MAX_LOCAL_SHIFT_PPM = 0.05
+# Chemical shift perturbation (more realistic global shift)
+MAX_GLOBAL_SHIFT_PPM = 0.05  # Reduced from 0.12, which is a very large error
+MAX_LOCAL_SHIFT_PPM = 0.01
 
-# Intensity variation parameters
-INTENSITY_NOISE_FACTOR = 0.0001
-PEAK_INTENSITY_VARIATION = 0.20
-BASELINE_DRIFT_AMPLITUDE = 0.003
+# Intensity variation parameters (significantly increased noise and baseline issues)
+INTENSITY_NOISE_FACTOR_RANGE = (0.001, 0.01)
+PEAK_INTENSITY_VARIATION = 0.12
+BASELINE_DRIFT_AMPLITUDE = 0.04  # Increased for more pronounced baseline roll
 
 # Coupling simulation parameters
-J_COUPLING_RANGE_HZ = (1.0, 18.0)  # Hz
-COUPLING_PROBABILITY = 1.0
-MAX_COUPLING_PARTNERS = 6  # Max n for (n+1) multiplicity (e.g., 6 for a septet)
+J_COUPLING_RANGE_HZ = (1.0, 18.0)
+COUPLING_PROBABILITY = 0.2
+MAX_COUPLING_PARTNERS = 7  # Allow up to an octet
 
-# Solvent peak parameters
+# Solvent peak parameters (more variability)
 SOLVENT_PEAKS = {
     "CDCl3": {"ppm": 7.26, "intensity_factor": 0.1, "width_factor": 1.0, "lorentz_factor": 1.2},
     "DMSO-d6": {"ppm": 2.50, "intensity_factor": 0.08, "width_factor": 1.2, "lorentz_factor": 1.5},
-    "D2O": {"ppm": 4.79, "intensity_factor": 0.12, "width_factor": 1.5, "lorentz_factor": 2.0},
-    "CD3OD": {"ppm": 3.31, "intensity_factor": 0.09, "width_factor": 1.1, "lorentz_factor": 1.3},
-    "TMS": {"ppm": 0.0, "intensity_factor": 0.05, "width_factor": 0.8, "lorentz_factor": 0.8},
 }
-SOLVENT_PROBABILITY = 1.0
+SOLVENT_PROBABILITY = 0.85  # Slightly reduced from 1.0; not every spectrum shows it
 
-# 13C satellite parameters
-C13_SATELLITE_INTENSITY_FACTOR = 0.0055  # Per satellite (total ~1.1%)
+# Water Peak Parameters
+WATER_PEAKS = {
+    "CDCl3": {"ppm": 1.56, "width_factor": 2.0, "lorentz_factor": 2.5},
+    "DMSO-d6": {"ppm": 3.33, "width_factor": 2.5, "lorentz_factor": 3.0},
+}
+# NEW: Water intensity is now a wide random range, not a fixed factor.
+WATER_INTENSITY_FACTOR_RANGE = (0.01, 1.0)
+WATER_PROBABILITY = 0.65  # Increased probability, as water is very common
+
+# 13C satellite parameters (more likely to appear in good S/N spectra)
+C13_SATELLITE_INTENSITY_FACTOR = 0.0055
 C13_COUPLING_1JCH_HZ_RANGE = (115.0, 160.0)
-C13_SATELLITE_PROBABILITY = 1.0
+C13_SATELLITE_PROBABILITY = 0.6  # Increased probability
 
-# Impurity peak parameters
-IMPURITY_PROBABILITY = 0.5
-NUM_IMPURITY_PEAKS_MAX = 3
-IMPURITY_INTENSITY_MAX_FRAC = 0.05
-IMPURITY_WIDTH_FACTOR_RANGE = (0.8, 1.5)
+# Impurity peak parameters (more likely to have impurities)
+IMPURITY_PROBABILITY = 0.40  # Increased probability
+NUM_IMPURITY_PEAKS_MAX = 4
+IMPURITY_INTENSITY_MAX_FRAC = 0.08
+IMPURITY_WIDTH_FACTOR_RANGE = (0.8, 1.8)  # Wider range for varied impurity shapes
 
-# Phase error parameters
-PHASE_ERROR_PROBABILITY = 1.0
-MAX_ZERO_ORDER_PHASE_DEG = 15.0
-MAX_FIRST_ORDER_PHASE_DEG_PER_PPM = 2.0
+# Phase error parameters (allowing for more severe errors)
+PHASE_ERROR_PROBABILITY = 0.6
+MAX_ZERO_ORDER_PHASE_DEG = 25.0
+MAX_FIRST_ORDER_PHASE_DEG_PER_PPM = 3.0
 
 
 # --- Helper Functions ---
@@ -147,51 +155,7 @@ def _generate_voigt_approx(
             absorption_peak[round(center_idx)] = amplitude
 
     if abs(dispersive_fraction) > 1e-6:
-        # The dispersive component is conventionally associated with the Lorentzian part.
-        # Generate a dispersive Lorentzian with the same 'lorentzian_amp'.
-        # Its effective amplitude relative to the absorptive Lorentzian needs care.
-        # Max of L_abs is lorentzian_amp. Max of L_disp is lorentzian_amp/2.
-        # We want D_final / A_final_L_part = dispersive_fraction (tan(phi))
-        # A_final_L_part is approx eta * amplitude (if Gaussian part is small or similarly peaked)
-
-        # Generate base dispersive Lorentzian, its amplitude is 'lorentzian_amp' in the formula,
-        # but its actual peak value is lorentzian_amp / 2.
         disp_lorentzian_base = _generate_dispersive_lorentzian(x_axis_len, center_idx, lorentzian_fwhm_points, lorentzian_amp)
-
-        # The absorptive Lorentzian part of 'absorption_peak' has an effective amplitude contributing 'eta * amplitude'
-        # to the peak height 'amplitude' (ignoring Gaussian contribution for a moment for scaling D).
-        # So, the amplitude of the LORENTZIAN PART of the scaled absorption_peak is roughly (eta * lorentzian_amp / max_abs_peak_unscaled) * amplitude
-        # This is complex. Simpler: dispersive_fraction is ratio of D_max to L_max.
-        # Peak of abs_lorentzian generated with lorentzian_amp is lorentzian_amp.
-        # Peak of disp_lorentzian generated with lorentzian_amp is lorentzian_amp/2.
-        # So, D_L_base needs to be scaled by 2 to match L_abs_base's amplitude scale.
-        # Then, its contribution to Voigt is via eta.
-        # Amplitude of dispersive component should be: (eta * amplitude_of_absorptive_Lorentzian) * dispersive_fraction
-
-        # Estimate amplitude of the Lorentzian component in the final 'absorption_peak'
-        # This is roughly eta * amplitude, assuming L and G peak at the same point and eta is for height contribution.
-        effective_lorentzian_amplitude_in_absorption_peak = eta * amplitude
-
-        # Scale the base dispersive Lorentzian. Max of disp_lorentzian_base is lorentzian_amp/2.
-        # We want final_dispersive_peak = effective_lorentzian_amplitude_in_absorption_peak * dispersive_fraction
-        # So, disp_lorentzian_base * scale_factor = effective_lorentzian_amplitude_in_absorption_peak * dispersive_fraction
-        # scale_factor = (effective_lorentzian_amplitude_in_absorption_peak * dispersive_fraction) / (lorentzian_amp/2)
-        #              = (eta * amplitude * dispersive_fraction) / (lorentzian_amp/2)
-        # Since lorentzian_amp == amplitude initially:
-        # scale_factor = (eta * dispersive_fraction) / (1/2) = 2 * eta * dispersive_fraction
-
-        # However, if dispersive_fraction = tan(phi), and final signal is A*cos(phi) + D*sin(phi)
-        # where A is (eta*L + (1-eta)*G) and D is (eta*L_disp).
-        # If 'amplitude' is for A*cos(phi), then D*sin(phi) = D * cos(phi)*tan(phi)
-        # = (eta*L_disp_scaled_like_L_abs) * cos(phi)*tan(phi)
-        # This implies the current code is more correct than my re-derivation above if amplitude is post-phasing.
-        # The original code's logic for scaling the dispersive component was:
-        # disp_L_scaled_to_abs_L_peak = disp_L_base * (max(abs_L_base) / max(abs(disp_L_base)))
-        #                           = disp_L_base * (lorentzian_amp / (lorentzian_amp/2)) = disp_L_base * 2
-        # dispersive_component = eta * disp_L_scaled_to_abs_L_peak * dispersive_fraction
-        #                      = eta * (disp_L_base * 2) * dispersive_fraction
-        # This seems to make the dispersive amplitude proportional to `eta * max_abs_L_peak * dispersive_fraction`.
-        # This is a sound approach for pseudo-Voigt phasing.
 
         if np.max(abs_lorentzian) > 1e-9 and np.max(np.abs(disp_lorentzian_base)) > 1e-9:
             # Scale disp_lorentzian_base so its peak magnitude matches abs_lorentzian's peak
@@ -206,7 +170,9 @@ def _generate_voigt_approx(
     return final_peak
 
 
-def _add_baseline_noise(spectrum, noise_factor, max_spectrum_intensity):
+def _add_baseline_noise(spectrum, max_spectrum_intensity):
+    """Adds baseline noise with a randomly selected factor from the configured range."""
+    noise_factor = random.uniform(*INTENSITY_NOISE_FACTOR_RANGE)
     noise_level = noise_factor * max_spectrum_intensity if max_spectrum_intensity > 0 else noise_factor
     noise = np.random.normal(0, noise_level, len(spectrum))
     return spectrum + noise
@@ -228,54 +194,6 @@ def _add_baseline_drift(spectrum, drift_amplitude, max_spectrum_intensity):
         drift_scaled * drift_amplitude * max_spectrum_intensity if max_spectrum_intensity > 0 else drift_scaled * drift_amplitude
     )
     return spectrum + drift_final
-
-
-def _generate_pascal_triangle_intensities(num_equivalent_protons):
-    n = num_equivalent_protons
-    if n < 0:
-        n = 0
-    line = [1.0]  # Ensure float
-    for _ in range(n):
-        new_line = [1.0]
-        for i in range(len(line) - 1):
-            new_line.append(line[i] + line[i + 1])
-        new_line.append(1.0)
-        line = new_line
-    current_sum = np.sum(line)
-    return np.array(line) / current_sum if current_sum > 0 else np.array([1.0])
-
-
-def _simulate_j_coupling(
-    peak_ppm,
-    peak_height,
-    j_value_hz,
-    num_equivalent_protons,
-    points_per_ppm,
-    num_points,
-    spectrometer_freq_hz,
-    dispersive_fraction,  # Common dispersive character for the multiplet
-    multiplet_gauss_sigma_ppm,  # Common Gaussian width for the multiplet lines
-    multiplet_lorentz_fwhm_ppm,  # Common Lorentzian width for the multiplet lines
-):
-    j_value_ppm = _hz_to_ppm(j_value_hz, spectrometer_freq_hz)
-    intensities = _generate_pascal_triangle_intensities(num_equivalent_protons)
-    multiplicity = len(intensities)
-    split_spectrum = np.zeros(num_points)
-
-    # Use the pre-determined linewidths for all lines in this multiplet
-    gauss_sigma_points = multiplet_gauss_sigma_ppm * points_per_ppm
-    lorentz_fwhm_points = multiplet_lorentz_fwhm_ppm * points_per_ppm
-
-    for i, intensity_fraction in enumerate(intensities):
-        offset_ppm = (i - (multiplicity - 1) / 2.0) * j_value_ppm
-        split_ppm = peak_ppm + offset_ppm
-        split_idx = _ppm_to_idx(split_ppm, num_points, PPM_MIN, PPM_MAX)
-
-        peak_contribution = _generate_voigt_approx(
-            num_points, split_idx, gauss_sigma_points, lorentz_fwhm_points, peak_height * intensity_fraction, dispersive_fraction
-        )
-        split_spectrum += peak_contribution
-    return split_spectrum
 
 
 def _calculate_dispersive_fraction_at_ppm(ppm_value, phase_params: dict):
@@ -329,10 +247,14 @@ def _add_c13_satellites(
     return spectrum + satellite_spectrum_addition
 
 
-def _add_solvent_peak(spectrum, points_per_ppm, num_points, max_intensity_overall, phase_params: dict):
+def _add_solvent_and_water_peaks(spectrum, points_per_ppm, num_points, max_intensity_overall, phase_params: dict):
+    """
+    Adds a residual solvent peak and potentially a corresponding water peak.
+    """
     if random.random() > SOLVENT_PROBABILITY:
         return spectrum
 
+    # --- Add Residual Solvent Peak ---
     solvent_name = random.choice(list(SOLVENT_PEAKS.keys()))
     solvent_info = SOLVENT_PEAKS[solvent_name]
 
@@ -356,7 +278,37 @@ def _add_solvent_peak(spectrum, points_per_ppm, num_points, max_intensity_overal
     solvent_peak_shape = _generate_voigt_approx(
         num_points, solvent_idx, gauss_sigma_points, lorentz_fwhm_points, solvent_intensity, solvent_dispersive_fraction
     )
-    return spectrum + solvent_peak_shape
+    spectrum += solvent_peak_shape
+
+    # --- Add Corresponding Water Peak ---
+    if random.random() < WATER_PROBABILITY and solvent_name in WATER_PEAKS:
+        water_info = WATER_PEAKS[solvent_name]
+        water_ppm = water_info["ppm"] + random.uniform(-0.05, 0.05)  # Water peaks can shift more
+        water_idx = _ppm_to_idx(water_ppm, num_points, PPM_MIN, PPM_MAX)
+
+        # MODIFIED: Use a wide random range for the water intensity factor for more realism.
+        water_intensity_factor = random.uniform(*WATER_INTENSITY_FACTOR_RANGE)
+        water_intensity = intensity_scale * water_intensity_factor
+
+        gauss_sigma_ppm_water = base_gauss_sigma * water_info["width_factor"]
+        lorentz_fwhm_ppm_water = base_lorentz_fwhm * water_info["width_factor"] * water_info["lorentz_factor"]
+
+        gauss_sigma_points_water = gauss_sigma_ppm_water * points_per_ppm
+        lorentz_fwhm_points_water = lorentz_fwhm_ppm_water * points_per_ppm
+
+        water_dispersive_fraction = _calculate_dispersive_fraction_at_ppm(water_ppm, phase_params)
+
+        water_peak_shape = _generate_voigt_approx(
+            num_points,
+            water_idx,
+            gauss_sigma_points_water,
+            lorentz_fwhm_points_water,
+            water_intensity,
+            water_dispersive_fraction,
+        )
+        spectrum += water_peak_shape
+
+    return spectrum
 
 
 def _add_impurity_peaks(spectrum, points_per_ppm, num_points, max_intensity_overall, phase_params: dict):
@@ -413,7 +365,76 @@ def _apply_phase_error_to_peak_details(peak_details, ppm_axis):
     return dispersive_fraction_map_for_peaks, phase_parameters
 
 
-def augment(h_nmr: np.array) -> np.array:
+def _simulate_j_coupling(
+    center_ppm,
+    total_intensity,
+    j_hz,
+    n_protons,
+    points_per_ppm,
+    num_points,
+    spectrometer_freq_hz,
+    dispersive_fraction,
+    gauss_sigma_ppm,
+    lorentz_fwhm_ppm,
+):
+    """
+    NEW: Simulates a J-coupling multiplet based on the n+1 rule.
+    The appearance of the multiplet (in ppm) depends on the spectrometer frequency.
+    """
+    multiplet_spectrum = np.zeros(num_points)
+    num_lines = n_protons + 1
+    j_ppm = _hz_to_ppm(j_hz, spectrometer_freq_hz)
+
+    # Get relative intensities from Pascal's triangle
+    pascal_coeffs = [comb(n_protons, k, exact=True) for k in range(num_lines)]
+    total_coeff_sum = sum(pascal_coeffs)
+
+    if total_coeff_sum == 0:
+        return multiplet_spectrum  # Avoid division by zero
+
+    # Calculate positions of each line in the multiplet
+    line_positions_ppm = [center_ppm + (k - n_protons / 2.0) * j_ppm for k in range(num_lines)]
+
+    gauss_sigma_points = gauss_sigma_ppm * points_per_ppm
+    lorentz_fwhm_points = lorentz_fwhm_ppm * points_per_ppm
+
+    for i, pos_ppm in enumerate(line_positions_ppm):
+        line_intensity = total_intensity * (pascal_coeffs[i] / total_coeff_sum)
+        line_idx = _ppm_to_idx(pos_ppm, num_points, PPM_MIN, PPM_MAX)
+
+        if 0 <= line_idx < num_points:
+            # The dispersive fraction is calculated once for the multiplet's center
+            # and applied to all its lines, which is a reasonable approximation.
+            line_shape = _generate_voigt_approx(
+                num_points,
+                line_idx,
+                gauss_sigma_points,
+                lorentz_fwhm_points,
+                line_intensity,
+                dispersive_fraction,
+            )
+            multiplet_spectrum += line_shape
+
+    return multiplet_spectrum
+
+
+def augment(h_nmr: np.array, spectrometer_freq_hz: float = None) -> np.array:
+    """
+    Augments an NMR spectrum with realistic effects, now including variable
+    spectrometer frequencies and more diverse water peak intensities.
+
+    Args:
+        h_nmr (np.array): The input ideal NMR spectrum.
+        spectrometer_freq_hz (float, optional): The spectrometer frequency in Hz.
+            If None, a random frequency from COMMON_SPECTROMETER_FREQS_HZ is chosen.
+
+    Returns:
+        np.array: The augmented NMR spectrum.
+    """
+    # MODIFIED: Select a spectrometer frequency if not provided.
+    if spectrometer_freq_hz is None:
+        spectrometer_freq_hz = random.choice(COMMON_SPECTROMETER_FREQS_HZ)
+
     num_points = len(h_nmr)
     max_intensity_input = np.max(h_nmr) if h_nmr.size > 0 else 0.0
 
@@ -422,10 +443,9 @@ def augment(h_nmr: np.array) -> np.array:
         ppm_axis = np.linspace(PPM_MIN, PPM_MAX, num_points)
     else:
         current_spectrum = h_nmr.copy()
-        if max_intensity_input > 0 or INTENSITY_NOISE_FACTOR > 0:  # Add noise even to zero input if noise factor is non-zero
-            # Use a small default intensity for noise if input is all zero
+        if max_intensity_input > 0 or any(f > 0 for f in INTENSITY_NOISE_FACTOR_RANGE):
             noise_ref_intensity = max_intensity_input if max_intensity_input > 0 else 1.0
-            current_spectrum = _add_baseline_noise(current_spectrum, INTENSITY_NOISE_FACTOR, noise_ref_intensity)
+            current_spectrum = _add_baseline_noise(current_spectrum, noise_ref_intensity)
         return np.maximum(current_spectrum, 0)
 
     current_min_peak_prominence = FINDPKS_MIN_PEAK_PROMINENCE_FRAC * max_intensity_input
@@ -466,28 +486,20 @@ def augment(h_nmr: np.array) -> np.array:
     reconstructed_spectrum = np.zeros_like(h_nmr)
     if peak_details:
         for peak in peak_details:
-            # Get the specific dispersive fraction if it was a simple peak affected by phase error
-            # For complex multiplets, individual lines will have their phase calculated if phase_parameters is active
             peak_dispersive_fraction = dispersive_fraction_map_for_peaks.get(peak["original_idx"], 0.0)
 
             if random.random() < COUPLING_PROBABILITY:
                 j_value_hz = random.uniform(*J_COUPLING_RANGE_HZ)
                 num_coupled_protons = random.randint(1, MAX_COUPLING_PARTNERS)
 
-                # Determine intrinsic linewidths for this multiplet ONCE
                 multiplet_gauss_sigma_ppm = random.uniform(PEAK_GAUSSIAN_SIGMA_PPM_MIN, PEAK_GAUSSIAN_SIGMA_PPM_MAX)
                 multiplet_lorentz_fwhm_ppm = random.uniform(PEAK_LORENTZIAN_FWHM_PPM_MIN, PEAK_LORENTZIAN_FWHM_PPM_MAX)
 
-                # For multiplets, the phase of each line is calculated based on its specific PPM
-                # So, pass phase_parameters and let _simulate_j_coupling handle it IF it were to calculate phase per line.
-                # Current _simulate_j_coupling takes a single dispersive_fraction for the whole multiplet.
-                # This means the multiplet as a whole has phase determined by its center.
-                # Or, we use the global phase_parameters to determine dispersion at peak["perturbed_ppm"]
-                # Let's use the globally determined phase character at the peak's center for the whole multiplet.
                 current_peak_center_dispersive_fraction = _calculate_dispersive_fraction_at_ppm(
                     peak["perturbed_ppm"], phase_parameters
                 )
 
+                # MODIFIED: Call the new _simulate_j_coupling function, passing the chosen spectrometer frequency.
                 coupled_spectrum_part = _simulate_j_coupling(
                     peak["perturbed_ppm"],
                     peak["height"],
@@ -495,8 +507,8 @@ def augment(h_nmr: np.array) -> np.array:
                     num_coupled_protons,
                     points_per_ppm,
                     num_points,
-                    SPECTROMETER_FREQ_HZ,
-                    current_peak_center_dispersive_fraction,  # Pass the calculated fraction for this multiplet's center
+                    spectrometer_freq_hz,
+                    current_peak_center_dispersive_fraction,
                     multiplet_gauss_sigma_ppm,
                     multiplet_lorentz_fwhm_ppm,
                 )
@@ -509,7 +521,6 @@ def augment(h_nmr: np.array) -> np.array:
                 lorentz_fwhm_points = lorentz_fwhm_ppm * points_per_ppm
                 perturbed_idx = _ppm_to_idx(peak["perturbed_ppm"], num_points, PPM_MIN, PPM_MAX)
 
-                # Use the pre-calculated dispersive fraction for this specific peak
                 voigt_peak = _generate_voigt_approx(
                     num_points, perturbed_idx, gauss_sigma_points, lorentz_fwhm_points, peak["height"], peak_dispersive_fraction
                 )
@@ -523,16 +534,17 @@ def augment(h_nmr: np.array) -> np.array:
         max_signal_intensity if max_signal_intensity > 0 else (max_intensity_input if max_intensity_input > 0 else 1e-5)
     )
 
+    # MODIFIED: Pass the spectrometer frequency to functions that depend on it.
     current_spectrum = _add_c13_satellites(
         current_spectrum,
         peak_details,
         points_per_ppm,
         num_points,
         max_intensity_for_additions,
-        SPECTROMETER_FREQ_HZ,
+        spectrometer_freq_hz,
         phase_parameters,
     )
-    current_spectrum = _add_solvent_peak(
+    current_spectrum = _add_solvent_and_water_peaks(
         current_spectrum, points_per_ppm, num_points, max_intensity_for_additions, phase_parameters
     )
     current_spectrum = _add_impurity_peaks(
@@ -560,37 +572,10 @@ def augment(h_nmr: np.array) -> np.array:
         else (max_intensity_input if max_intensity_input > 0 else 1e-5)
     )
 
-    current_spectrum = _add_baseline_noise(current_spectrum, INTENSITY_NOISE_FACTOR, scale_for_baseline)
+    current_spectrum = _add_baseline_noise(current_spectrum, scale_for_baseline)
     current_spectrum = _add_baseline_drift(current_spectrum, BASELINE_DRIFT_AMPLITUDE, scale_for_baseline)
     current_spectrum = np.maximum(current_spectrum, 0)
 
     if random.random() < 0.2:
         current_spectrum *= random.uniform(0.85, 1.15)
     return current_spectrum
-
-
-def augment_with_global_t2_effect(h_nmr: np.array, t2_time_s_range=(0.01, 0.5)) -> np.array:
-    # Note: This applies a *global* T2 effect often simulating very fast relaxation or severe broadening
-    # ON TOP of any per-peak Lorentzian widths already applied by the main augment() function.
-    # t2_time_s_range default is changed to represent more significant broadening.
-    augmented_spectrum = augment(h_nmr)
-    num_points = len(augmented_spectrum)
-    if num_points <= 1 or PPM_MAX == PPM_MIN or SPECTROMETER_FREQ_HZ == 0:
-        return augmented_spectrum
-
-    points_per_ppm = (num_points - 1) / (PPM_MAX - PPM_MIN)
-    t2_s = random.uniform(*t2_time_s_range)
-    if t2_s <= 1e-6:
-        return augmented_spectrum  # Avoid division by zero for extremely small T2
-
-    line_broadening_hz = 1.0 / (np.pi * t2_s)
-    line_broadening_ppm = _hz_to_ppm(line_broadening_hz, SPECTROMETER_FREQ_HZ)
-
-    # Approximate Lorentzian FWHM broadening with a Gaussian filter.
-    # Sigma for Gaussian approx of Lorentzian FWHM = FWHM / (2 * sqrt(2 * ln(2))) approx FWHM / 2.355
-    # Using FWHM / 2 as a rough sigma for the Gaussian filter.
-    broadening_sigma_points = (line_broadening_ppm * points_per_ppm) / 2.0
-
-    if broadening_sigma_points >= 0.3:
-        augmented_spectrum = gaussian_filter1d(augmented_spectrum, sigma=broadening_sigma_points, mode="reflect")
-    return np.maximum(augmented_spectrum, 0)

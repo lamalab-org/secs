@@ -53,6 +53,7 @@ dependencies = [
   "hydra-colorlog==1.2.0",
   "hydra-optuna-sweeper==1.2.0",
   "omegaconf",
+  "pyqt6>=6.9.1",
 ]
 
 [project.optional-dependencies]
@@ -171,5 +172,10 @@ namespace_packages = true
 explicit_package_bases = true
 no_implicit_optional = false
 disable_error_code = "annotation-unchecked"
+
+[dependency-groups]
+dev = [
+    "pyside6>=6.9.1",
+]
 
 [project.scripts]

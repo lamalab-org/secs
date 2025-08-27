@@ -164,9 +164,9 @@ def analyse_pipe(path: Path, n_jobs: int = -1):
     with tqdm.tqdm(total=3, desc="Calculating Top-K") as pbar:
         dataframe["top1"] = Parallel(n_jobs=n_jobs)(delayed(check_top_k)(s, 1) for s in dataframe["score"])
         pbar.update(1)
-        dataframe["top5"] = Parallel(n_jobs=n_jobs)(delayed(check_top_k)(s, 5) for s in dataframe["score"])
+        dataframe["top2"] = Parallel(n_jobs=n_jobs)(delayed(check_top_k)(s, 2) for s in dataframe["score"])
         pbar.update(1)
-        dataframe["top10"] = Parallel(n_jobs=n_jobs)(delayed(check_top_k)(s, 10) for s in dataframe["score"])
+        dataframe["top5"] = Parallel(n_jobs=n_jobs)(delayed(check_top_k)(s, 5) for s in dataframe["score"])
         pbar.update(1)
         dataframe["top20"] = Parallel(n_jobs=n_jobs)(delayed(check_top_k)(s, 20) for s in dataframe["score"])
         pbar.update(1)
@@ -179,8 +179,8 @@ def analyse_pipe(path: Path, n_jobs: int = -1):
     total_rows = len(dataframe)
     if total_rows > 0:
         logger.info(f"Top 1 Accuracy: {dataframe['top1'].sum() / total_rows:.2%}")
+        logger.info(f"Top 2 Accuracy: {dataframe['top2'].sum() / total_rows:.2%}")
         logger.info(f"Top 5 Accuracy: {dataframe['top5'].sum() / total_rows:.2%}")
-        logger.info(f"Top 10 Accuracy: {dataframe['top10'].sum() / total_rows:.2%}")
         logger.info(f"Top 20 Accuracy: {dataframe['top20'].sum() / total_rows:.2%}")
     else:
         logger.warning("No data was processed.")

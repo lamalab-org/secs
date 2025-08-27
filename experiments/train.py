@@ -57,7 +57,9 @@ def train_molbind(config: DictConfig):
     valid_data = data["val"].to_pandas()[features]
     logger.info(f"Validation data shape: {valid_data.shape}")
     # Shuffling the data with a specified fraction and seed
-    train_shuffled_data = train_data.sample(frac=1, random_state=42).reset_index(drop=True)
+    # train_shuffled_data = train_data.sample(frac=1, random_state=42).reset_index(drop=True)
+    # sort by string
+    train_shuffled_data = train_data.sort_values(by=config.data.central_modality).reset_index(drop=True)
     valid_shuffled_data = valid_data.copy()
 
     # set up the dataloaders
@@ -118,6 +120,7 @@ def train_molbind(config: DictConfig):
         gradient_clip_val=2.0,
         precision=config.trainer.precision,
         deterministic=True,
+        reload_dataloaders_every_n_epochs=1,
     )
     # train the model
     trainer.fit(

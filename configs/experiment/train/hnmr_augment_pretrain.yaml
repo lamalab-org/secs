@@ -29,6 +29,10 @@ data:
   dataset_path: jablonkagroup/spectral-dataset
   h_nmr:
     augment: True
+  num_workers: 4
+
+# ckpt_path: "${paths.checkpoints_dir}/hnmr_augment_pretrain_20250704_1546/best_model.ckpt"
+
 
 trainer:
   num_nodes: 1
