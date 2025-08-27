@@ -5,22 +5,16 @@ import numpy as np
 import polars as pl
 from rdkit import Chem
 from rdkit.Chem import rdMolDescriptors
-from scipy import interpolate
+from scipy.interpolate import interp1d
 
 
-def get_atom_counts_from_formula(formula_string: str) -> dict:
+def get_atom_counts_from_formula(formula_string: str) -> dict[str, int]:
     """
     Parses a simple molecular formula string into a dictionary of atom counts.
     Example: "C6H12O6" -> {'C': 6, 'H': 12, 'O': 6}
     Handles elements with one or two letters and optional counts.
     Assumes "flat" formulas (e.g., no parentheses or complex structures).
     """
-    if not isinstance(formula_string, str):
-        # Depending on desired strictness, could raise TypeError or return empty.
-        # Matching original behavior of not erroring out for non-strings if it implicitly fails.
-        return {}
-    if not formula_string:
-        return {}
 
     counts = defaultdict(int)
     # Regex: ([A-Z][a-z]?) matches an element symbol (e.g., C, Cl)
@@ -42,12 +36,6 @@ def get_atom_counts_from_formula(formula_string: str) -> dict:
         count = int(count_str) if count_str else 1
         counts[element] += count
         parsed_length = match.end()
-
-    if parsed_length != len(formula_string):
-        # This indicates trailing unparsed characters.
-        # Similar to above, could indicate issues with formula string.
-        pass  # Silently ignore for now.
-
     return dict(counts)
 
 
@@ -259,22 +247,43 @@ def is_neutral_no_isotopes(smiles):
         return False
 
 
-def downsample_spectrum(spectrum, original_points, target_points):
+def reduce_resolution_by_averaging(vector, window_size):
     """
-    Downsample NMR spectrum from original_points to target_points using cubic interpolation
+    Reduces the resolution of a vector by window averaging and interpolation.
 
-    Parameters:
-    - spectrum: 1D array of spectrum intensities (length = original_points)
-    - original_points: number of points in original spectrum
-    - target_points: desired number of points
+    This function first computes the moving average of the input vector
+    using a specified window size, which reduces its length. It then
+    interpolates the averaged data back to the original vector length.
+
+    Args:
+        vector (np.ndarray): The input 1D numpy array of data.
+        window_size (int): The size of the averaging window. A larger
+                           window results in lower resolution.
 
     Returns:
-    - downsampled_spectrum: 1D array of length target_points
+        np.ndarray: A new vector with reduced resolution but the same
+                    length as the input vector.
     """
-    # Create index arrays
-    original_indices = np.linspace(0, 1, original_points)
-    target_indices = np.linspace(0, 1, target_points)
+    if not isinstance(vector, np.ndarray):
+        vector = np.array(vector)
 
-    # Use cubic interpolation
-    cubic_interp = interpolate.interp1d(original_indices, spectrum, kind="linear")
-    return cubic_interp(target_indices)
+    if window_size <= 1:
+        return vector  # No resolution change needed
+
+    # 1. Window Averaging (Downsampling)
+    # We use convolution for a simple moving average.
+    # The 'valid' mode means we only get points where the window fully overlaps.
+    averaged_vector = np.convolve(vector, np.ones(window_size) / window_size, mode="valid")
+
+    # 2. Interpolation (Upsampling)
+    # Create the x-coordinates for the original and downsampled vectors
+    original_x = np.linspace(0, 1, len(vector))
+    averaged_x = np.linspace(0, 1, len(averaged_vector))
+
+    # Create an interpolation function based on the averaged data
+    interp_func = interp1d(averaged_x, averaged_vector, kind="linear", fill_value="extrapolate")
+
+    # Apply the interpolation function to the original x-coordinates
+    new_vector = interp_func(original_x)
+
+    return new_vector

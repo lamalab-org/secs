@@ -19,6 +19,8 @@ model:
     h_nmr_freeze: False
     h_nmr_is_on: True
     smiles_freeze: False
+  optimizer:
+    lr: 0.0001
 
 data:
   modalities:
@@ -28,12 +30,14 @@ data:
   batch_size: 128
   dataset_path: AdrianM0/luc-dataset
   h_nmr:
-    augment: false
+    augment: False
 
-ckpt_path: "${paths.checkpoints_dir}/hnmr_augment_pretrain_20250605_1523/best_model.ckpt"
+
+ckpt_path: "${paths.checkpoints_dir}/hnmr_augment_pretrain_20250706_1010/best_model.ckpt"
+
 
 trainer:
   num_nodes: 1
-  gpus_per_node: 6
+  gpus_per_node: 4  
 
-run_id: "hnmr_augment_finetune"
+run_id: "hnmr_finetune_residual"

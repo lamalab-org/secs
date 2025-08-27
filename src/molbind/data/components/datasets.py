@@ -5,7 +5,7 @@ from torch.utils.data import Dataset
 
 from molbind.data.components.hnmr import augment
 from molbind.utils import generate_hsqc_matrix
-from molbind.utils.spec2struct import downsample_spectrum
+from molbind.utils.spec2struct import reduce_resolution_by_averaging
 
 
 class StringDataset(Dataset):
@@ -240,11 +240,21 @@ class hNmrDataset(Dataset):
 
     def hnmr_to_vec(self, nmr_shifts: list[list[float]]) -> Tensor:
         nmr_array = np.array(nmr_shifts) / np.max(nmr_shifts)
-        # interpolate to vec_size nr of points
-        if self.vec_size != 10_000:
-            nmr_array = downsample_spectrum(nmr_array, self.vec_size)
-        if self.augment:
+        # if self.augment:
+        resolutions_available = [500, 1000, 2000, 3000, 5000, 10000]
+        self.vec_size = np.random.choice(resolutions_available, p=[0.05, 0.15, 0.2, 0.2, 0.2, 0.2])
+        augment_prob = np.random.rand()
+        if augment_prob > 0.1:
             nmr_array = augment(nmr_array)
+            # resolution to 2000 (but still in a vector of 10_000)
+            nmr_array = reduce_resolution_by_averaging(nmr_array, window_size=int(10_000 / self.vec_size))
+        else:
+            # just add random noise
+            noise = np.random.normal(0, 0.01, nmr_array.shape)
+            nmr_array = nmr_array + noise
+            nmr_array = reduce_resolution_by_averaging(nmr_array, window_size=int(10_000 / self.vec_size))
+        # nmr_array = np.cumsum(nmr_array, axis=0)
+        nmr_array = nmr_array / np.max(nmr_array)
         return torch.tensor(
             nmr_array,
             dtype=torch.float32,

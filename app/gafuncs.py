@@ -1,10 +1,11 @@
+from collections.abc import Callable
 from functools import cache
-from typing import Callable
 
 import numpy as np
+import xgboost
 from loguru import logger
-from rdkit import Chem
-from rdkit.Chem import MolFromSmiles
+from rdkit import Chem, DataStructs
+from rdkit.Chem import AllChem, MolFromSmiles
 from rdkit.Contrib.SA_Score import sascorer
 
 
@@ -32,7 +33,7 @@ class CachedFunction:
         outputs_not_cached = self._batch_f_eval(inputs_not_cached)
 
         # Add new values to cache
-        for x, y in zip(inputs_not_cached, outputs_not_cached):
+        for x, y in zip(inputs_not_cached, outputs_not_cached, strict=False):
             self.cache[x] = y
         return [self.cache[x] for x in inputs]
 
@@ -47,7 +48,7 @@ class CachedBatchFunction(CachedFunction):
         # current best
         scores = self._f(input_list)
         # log the best 3 smiles
-        score_list = list(zip(scores, input_list))
+        score_list = list(zip(scores, input_list, strict=False))
         # one best
         best_score, best_smiles = max(score_list, key=lambda x: x[0])
         if self.best_smiles is None or best_score > self.best_smiles[0]:
@@ -132,7 +133,7 @@ def smiles_is_radical_or_is_charged_or_has_wrong_valence(smiles: str) -> bool:
         try:
             # This will raise an exception if valence is invalid
             Chem.SanitizeMol(mol)
-        except Exception as e:
+        except Exception:
             return True  # Molecule has wrong valence
 
         # Add hydrogens after sanitization succeeds
@@ -152,3 +153,83 @@ def smiles_is_radical_or_is_charged_or_has_wrong_valence(smiles: str) -> bool:
     except Exception:
         # Return True for any parsing errors (likely invalid structures)
         return True
+
+
+def smiles_to_morgan_fingerprint(smiles, n_bits=4096, radius=6):
+    """
+    Converts a SMILES string into a Morgan fingerprint.
+
+    Args:
+        smiles (str): The SMILES representation of the molecule.
+        n_bits (int): The size of the fingerprint bit vector.
+        radius (int): The radius for the Morgan fingerprint algorithm.
+
+    Returns:
+        np.array or None: The fingerprint as a NumPy array, or None if SMILES is invalid.
+    """
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        logger.warning(f"Could not parse SMILES: {smiles}")
+        return None
+    fp = AllChem.GetMorganFingerprintAsBitVect(mol, radius, nBits=n_bits)
+    arr = np.zeros((1,), dtype=np.int8)
+    DataStructs.ConvertToNumpyArray(fp, arr)
+    return arr
+
+
+def predict_match_probability(model, smiles, spectrum, fp_bits=4096, fp_radius=6):
+    """
+    Predicts the probability that a SMILES string and a spectrum are a correct match.
+
+    Args:
+        model (xgb.XGBClassifier): The trained XGBoost model.
+        smiles (str): The SMILES representation of the molecule.
+        spectrum (list or np.array): The NMR spectrum data.
+        fp_bits (int): The size of the fingerprint bit vector (must match training).
+        fp_radius (int): The radius for the Morgan fingerprint (must match training).
+
+    Returns:
+        float: The predicted probability of a match (between 0.0 and 1.0).
+               Returns None if the SMILES string is invalid.
+    """
+    # logger.info(f"Generating fingerprint for SMILES: {smiles}")
+
+    # 1. Generate the Morgan fingerprint for the input SMILES
+    fingerprint = smiles_to_morgan_fingerprint(smiles, n_bits=fp_bits, radius=fp_radius)
+
+    if fingerprint is None:
+        logger.error("Failed to generate fingerprint. Cannot make a prediction.")
+        return None
+
+    # 2. Ensure the spectrum is a NumPy array
+    spectrum_arr = np.array(spectrum)
+
+    # 3. Combine the fingerprint and spectrum to create the feature vector
+    # The shape must be (1, num_features) for a single prediction
+    feature_vector = np.concatenate([fingerprint, spectrum_arr]).reshape(1, -1)
+
+    # logger.info("Predicting match probability...")
+
+    # 4. Use the model to predict the probability
+    # model.predict_proba returns probabilities for each class [class_0, class_1]
+    # We want the probability of class 1 (a match)
+    probability = model.predict_proba(feature_vector)[:, 1]
+
+    return probability[0]
+
+
+def load_model_from_path(model_path):
+    """
+    Loads a saved XGBoost model from a file.
+
+    Args:
+        model_path (str): The path to the saved model file (e.g., 'checkpoints_xgb/xgboost_model.json').
+
+    Returns:
+        xgb.XGBClassifier: The loaded XGBoost model.
+    """
+    logger.info(f"Loading model from {model_path}...")
+    loaded_model = xgboost.XGBClassifier()
+    loaded_model.load_model(model_path)
+    logger.info("Model loaded successfully.")
+    return loaded_model

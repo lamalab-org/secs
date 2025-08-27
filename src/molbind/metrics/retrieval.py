@@ -34,7 +34,6 @@ def compute_retrieval_metrics_from_query(
 
             if ground_truth_id_for_query in current_retrieved_string_ids:
                 retrieval_metrics_entire_db[k_val][i] = 1
-
     return {f"Recall@{k_val}": np.mean(retrieval_metrics_entire_db[k_val]) for k_val in top_k}
 
 
@@ -108,8 +107,8 @@ def full_database_retrieval(
             # efSearch is the depth of exploration during search
             # M = 32  # A common value for HNSW, can be tuned
             index = faiss.IndexFlatIP(dimension)
-            # index.hnsw.efConstruction = 2000
-            # index.hnsw.efSearch = 128
+            index.efConstruction = 2000
+            index.efSearch = 128
 
             # For exact search (slower, especially for large datasets):
             # index = faiss.IndexFlatIP(dimension)

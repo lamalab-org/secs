@@ -11,6 +11,7 @@ model:
       freeze_encoder: False
     h_nmr:
       freeze_encoder: False
+      use_initial_residual: True
   projection_heads:
     h_nmr:
       dims: [1024, "${model.embedding_size}"]
@@ -23,12 +24,14 @@ data:
   modalities:
     - h_nmr
   valid_frac: 1
-  batch_size: 256
+  batch_size: 1024
   dataset_path: "${paths.data_dir}/test_split.parquet"
+  # dataset_path: "${paths.data_dir}/nmrshiftdb/hnmr_cnmr_validation_set.parquet"
+  # dataset_path: "${paths.data_dir}/luc_experimental_data/luc_experimental_train.parquet"
   h_nmr:
     augment: True
 
-ckpt_path: "${paths.checkpoints_dir}/hnmr_augment_pretrain_20250605_1523/best_model.ckpt"
+ckpt_path: "${paths.checkpoints_dir}/hnmr_augment_pretrain_20250705_2202/best_model.ckpt"
 
 trainer:
   num_nodes: 1

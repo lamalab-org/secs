@@ -10,22 +10,74 @@ from loguru import logger
 from prune import embedding_pruning_variable, load_models_dict
 
 from molbind.models import MolBind
-from molbind.utils.spec2struct import gen_close_molformulas_from_seed, is_neutral_no_isotopes
+from molbind.utils.spec2struct import build_formula_string, get_atom_counts_from_formula, is_neutral_no_isotopes
 
 ModelType = MolBind
+
+
+def gen_close_molformulas_from_seed(seed_formula: str) -> list:
+    """
+    Generates a list of valid, closely related molecular formulas that
+    contain all of the same elements as the seed formula.
+
+    Args:
+        seed_formula: The starting molecular formula (e.g., "C6H5Cl").
+
+    Returns:
+        A list of unique, valid molecular formula strings.
+    """
+    initial_counts = get_atom_counts_from_formula(seed_formula)
+    original_elements = set(initial_counts.keys())
+    generated_formulas = set()
+
+    transformations = [
+        ({"C", "H"}, {"C": -3, "H": -6}),
+        ({"C", "H"}, {"C": 1, "H": 2}),
+        ({"C", "H"}, {"C": -1, "H": -2}),
+        ({"C", "H"}, {"C": 2, "H": 4}),
+        ({"C", "H"}, {"C": -2, "H": -4}),
+        ({"N", "H"}, {"N": 1, "H": 1}),
+        ({"N", "H"}, {"N": -1, "H": -1}),
+        ({"Cl", "H"}, {"Cl": 1, "H": 1}),
+        ({"Cl", "H"}, {"Cl": -1, "H": -1}),
+        ({"Br", "H"}, {"Br": 1, "H": 1}),
+        ({"Br", "H"}, {"Br": -1, "H": -1}),
+        ({"F", "H"}, {"F": 1, "H": 1}),
+        ({"F", "H"}, {"F": -1, "H": -1}),
+        ({"S"}, {"S": 1}),
+        ({"S"}, {"S": -1}),
+        ({"P"}, {"P": 1}),
+        ({"P"}, {"P": -1}),
+    ]
+
+    for required_elements, changes in transformations:
+        if required_elements.issubset(original_elements):
+            new_counts = initial_counts.copy()
+
+            for element, delta in changes.items():
+                new_counts[element] += delta
+
+            new_formula = build_formula_string(new_counts)
+
+            if new_formula:
+                new_formula_elements = set(get_atom_counts_from_formula(new_formula).keys())
+                if new_formula_elements == original_elements:
+                    generated_formulas.add(new_formula)
+
+    return sorted(generated_formulas)
 
 
 def aggregate_embeddings_user_provided(
     embeddings: list[dict[str, torch.Tensor]],
     modalities: list[str],
 ) -> dict[str, torch.Tensor]:
-    device = "cpu"
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     collected_tensors_for_modality = {mod: [] for mod in modalities}
 
     for batch_dict in embeddings:  # Each dict is for a batch
         for mod in modalities:
             if mod in batch_dict and batch_dict[mod] is not None and batch_dict[mod].nelement() > 0:
-                collected_tensors_for_modality[mod].append(batch_dict[mod])
+                collected_tensors_for_modality[mod].append(batch_dict[mod].cpu())
 
     concatenated_embeddings = {}
     for mod, tensor_list in collected_tensors_for_modality.items():
@@ -47,7 +99,7 @@ def get_1d_target_embedding_from_raw_batches_pkl(
     target_idx: int,
     pickle_content_config: dict,  # Must contain 'modalities_in_batch_dict' and 'primary_spectral_key'
     expected_total_molecules_after_aggregation: int,
-    device: str = "cpu",
+    device: str = "cuda" if torch.cuda.is_available() else "cpu",
 ) -> torch.Tensor | None:
     modalities_in_batch_dict = pickle_content_config.get("modalities_in_batch_dict")
     primary_spec_key = pickle_content_config.get("primary_spectral_key")
@@ -137,7 +189,7 @@ class SimpleMoleculeAnalyzer:
         logger.info(f"Analyzer: Models loaded for: {list(self.models.keys())}")
 
     def load_pubchem(self) -> None:
-        hf_dataset = pl.read_parquet("cache_pubchem.parquet")
+        hf_dataset = pl.read_parquet("/app/cache_pubchem.parquet")
         self.pubchem_cache = hf_dataset.drop_nulls(subset=["smiles", "molecular_formula"])
 
     def _get_all_target_1D_embeddings_for_idx(self, smiles_index: int) -> dict[str, torch.Tensor]:
@@ -148,7 +200,7 @@ class SimpleMoleculeAnalyzer:
         for spec_type in self.available_modalities:
             raw_file_path = self.raw_embedding_file_paths.get(spec_type)
             pickle_config = self.RAW_EMBEDDING_PKL_CONFIGS.get(spec_type)
-            model_device = "cpu"
+            model_device = "cuda" if torch.cuda.is_available() else "cpu"
 
             if raw_file_path and pickle_config:
                 emb_tensor = get_1d_target_embedding_from_raw_batches_pkl(
@@ -165,7 +217,7 @@ class SimpleMoleculeAnalyzer:
     def _get_all_target_1D_embeddings_for_smiles(self, smiles: str) -> dict[str, torch.Tensor]:
         """Generates 1D embeddings for a given SMILES string on-the-fly."""
         target_1D_embeddings = {}
-        device = "cpu"
+        device = "cuda" if torch.cuda.is_available() else "cpu"
 
         for spec_type in self.available_modalities:
             model = self.models.get(spec_type)
@@ -230,18 +282,14 @@ class SimpleMoleculeAnalyzer:
             DataFrame on failure.
         """
 
-        # --- 1. Input Validation and Pre-computation (Guard Clauses) ---
-
-        # mf_str = "".join(f"{k}{v}" for k, v in sorted(mf_dict.items()) if v > 1)
-
         models_for_scoring = {st: self.models[st] for st in target_embeddings if st in self.models}
         close_mol_formulas = gen_close_molformulas_from_seed(mf_str)
         filtered_cache = self.pubchem_cache.filter(pl.col("molecular_formula").is_in(close_mol_formulas))
         filtered_cache = filtered_cache.filter(pl.col("smiles").map_elements(is_neutral_no_isotopes, return_dtype=pl.Boolean))
         # Directly get SMILES list from the Polars DataFrame
         isomer_df = filtered_cache.to_pandas()
+        # isomer_df = isomer_df.sample(n=min(65536, len(isomer_df)), random_state=42)
 
-        # --- 4. Scoring ---
         num_isomers, candidate_smiles = len(isomer_df), isomer_df["smiles"].tolist()
         logger.info(f"Scoring {num_isomers} candidate isomers for {mf_str}.")
 

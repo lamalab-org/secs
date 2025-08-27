@@ -26,7 +26,8 @@ data:
   batch_size: 1024
   dataset_path: "${paths.data_dir}/nmrshiftdb/hnmr_cnmr_validation_set.parquet"
 
-ckpt_path: "${paths.checkpoints_dir}/hnmr_augment_finetune_20250605_1915/best_model.ckpt"
+
+ckpt_path: "${paths.checkpoints_dir}/residual_augment_resolution_physics_20250708_1251/best_model.ckpt"
 
 trainer:
   num_nodes: 1

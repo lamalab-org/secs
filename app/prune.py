@@ -11,16 +11,16 @@ from molbind.data.available import ModalityConstants
 from molbind.models import MolBind
 from molbind.utils import rename_keys_with_prefix
 
-# torch.manual_seed(42)
-# torch.cuda.manual_seed_all(42)
-# torch.backends.cudnn.deterministic = True
-# torch.backends.cudnn.benchmark = False
+torch.manual_seed(42)
+torch.cuda.manual_seed_all(42)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
 
 tqdm.pandas()
 
 
 def read_weights(config) -> MolBind:
-    device = "cpu"
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     model = MolBind(config).to(device)
     model.load_state_dict(
         rename_keys_with_prefix(torch.load(config.ckpt_path, map_location=torch.device(device))["state_dict"]),
@@ -65,7 +65,7 @@ def tokenize_string(smiles: list[str] | str, modality_token_type: str = "smiles"
 
 
 def encode_smiles_variable(individuals: list[str] | str, models_dict: dict[str, MolBind | None]) -> dict[str, Tensor]:
-    device = "cpu"
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     input_ids, attention_mask = tokenize_string(individuals, "smiles")
     input_ids, attention_mask = input_ids.to(device), attention_mask.to(device)
     embeddings = {}
@@ -85,7 +85,7 @@ def gpu_encode_smiles_variable(
 ) -> dict[str, Tensor]:
     active_models = {m: model for m, model in models_dict.items() if model}
     # Determine a default device, even if no active models (for returning empty tensors)
-    default_device = "cpu"
+    default_device = "cuda" if torch.cuda.is_available() else "cpu"
 
     if not active_models or not individuals:
         return {m: torch.empty(0, device=default_device) for m in models_dict}
@@ -98,10 +98,10 @@ def gpu_encode_smiles_variable(
         chunk_embs = encode_smiles_variable(batch, active_models)
         for mod, emb in chunk_embs.items():
             if emb.nelement() > 0:
-                all_parts[mod].append(emb)
+                all_parts[mod].append(emb.cpu())
 
     final_embeddings = {}
-    for mod in models_dict:  # Iterate over original keys
+    for mod in models_dict:
         if all_parts.get(mod):
             final_embeddings[mod] = torch.cat(all_parts[mod], dim=0)
         else:
@@ -189,7 +189,7 @@ def embedding_pruning_variable(
             continue
 
         scores = cos_sim(target_1D_emb_gpu.unsqueeze(0), cand_embs_gpu)
-        all_individual_scores_cpu[mod] = scores
+        all_individual_scores_cpu[mod] = scores.cpu()
 
     # --- Calculate combined score from individual scores ---
     if num_smiles > 0:  # combined_scores_cpu is torch.zeros(num_smiles)
@@ -219,5 +219,6 @@ def embedding_pruning_variable(
             logger.warning(
                 "Pruning: None of the scoreable modalities had valid candidate embeddings to contribute to the combined score. Combined score will remain zeros."
             )
+    # If num_smiles == 0, combined_scores_cpu is None, which is correct.
 
     return combined_scores_cpu, all_individual_scores_cpu
