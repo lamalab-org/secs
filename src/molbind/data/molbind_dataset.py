@@ -96,6 +96,7 @@ class MolBindDataset:
             data=c_nmr_data[modality].to_list(),
             central_modality=self.central_modality,
             central_modality_data=self._handle_central_modality_data(c_nmr_data),
+            augment=self.config.data.c_nmr.augment if self.config else False,
         )
 
     def build_ir_dataset(self) -> IrDataset:

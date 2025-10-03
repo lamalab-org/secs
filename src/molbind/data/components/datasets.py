@@ -3,6 +3,7 @@ import torch
 from torch import Tensor
 from torch.utils.data import Dataset
 
+from molbind.data.components.cnmr import augment_13c
 from molbind.data.components.hnmr import augment
 from molbind.utils import generate_hsqc_matrix
 from molbind.utils.spec2struct import reduce_resolution_by_averaging
@@ -99,9 +100,10 @@ class cNmrDataset(Dataset):
     def __init__(
         self,
         data: list[list[float]],
-        vec_len: int = 512,
-        min_value: float = 0,
-        max_value: float = 300,
+        vec_len: int = 2048,
+        min_value: float = -5,
+        max_value: float = 230,
+        augment: bool = False,
         **kwargs,
     ) -> None:
         self.c_nmr = data
@@ -111,6 +113,7 @@ class cNmrDataset(Dataset):
         self.central_modality = kwargs["central_modality"]
         self.other_modality = "c_nmr"
         self.central_modality_data = kwargs["central_modality_data"]
+        self.augment = augment
 
     def __len__(self):
         return len(self.c_nmr)
@@ -122,11 +125,12 @@ class cNmrDataset(Dataset):
         }
 
     def c_nmr_to_vec(self, nmr_shifts: list[float]) -> Tensor:
-        init_vec = torch.zeros(self.vec_len, dtype=torch.float32)
-        for shift in nmr_shifts:
-            index = int(shift / self.max_value * self.vec_len)
-            init_vec[index] = 1
-        return init_vec
+        cnmr_augmented = augment_13c(nmr_shifts)
+        if self.augment:
+            nmr_array = np.array(cnmr_augmented) / np.max(cnmr_augmented)
+        else:
+            nmr_array = np.array(cnmr_augmented) / np.max(cnmr_augmented)
+        return torch.tensor(nmr_array, dtype=torch.float32).unsqueeze(0)
 
 
 class IrDataset(Dataset):
@@ -240,19 +244,19 @@ class hNmrDataset(Dataset):
 
     def hnmr_to_vec(self, nmr_shifts: list[list[float]]) -> Tensor:
         nmr_array = np.array(nmr_shifts) / np.max(nmr_shifts)
-        # if self.augment:
-        resolutions_available = [500, 1000, 2000, 3000, 5000, 10000]
-        self.vec_size = np.random.choice(resolutions_available, p=[0.05, 0.15, 0.2, 0.2, 0.2, 0.2])
-        augment_prob = np.random.rand()
-        if augment_prob > 0.1:
-            nmr_array = augment(nmr_array)
-            # resolution to 2000 (but still in a vector of 10_000)
-            nmr_array = reduce_resolution_by_averaging(nmr_array, window_size=int(10_000 / self.vec_size))
+        if self.augment:
+            resolutions_available = [500, 1000, 2000, 3000, 5000, 10000]
+            self.vec_size = np.random.choice(resolutions_available, p=[0.05, 0.15, 0.2, 0.2, 0.2, 0.2])
+            augment_prob = np.random.rand()
+            if augment_prob > 0.1:
+                nmr_array = augment(nmr_array)
+                # resolution to 2000 (but still in a vector of 10_000)
+                nmr_array = reduce_resolution_by_averaging(nmr_array, window_size=int(10_000 / self.vec_size))
         else:
             # just add random noise
             noise = np.random.normal(0, 0.01, nmr_array.shape)
-            nmr_array = nmr_array + noise
-            nmr_array = reduce_resolution_by_averaging(nmr_array, window_size=int(10_000 / self.vec_size))
+            # nmr_array = nmr_array + noise
+            # nmr_array = reduce_resolution_by_averaging(nmr_array, window_size=int(10_000 / self.vec_size))
         # nmr_array = np.cumsum(nmr_array, axis=0)
         nmr_array = nmr_array / np.max(nmr_array)
         return torch.tensor(
