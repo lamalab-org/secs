@@ -27,33 +27,27 @@ classifiers = [
 
 requires-python = ">=3.11, <3.13"
 dependencies = [
-  "faiss-cpu",
-  "torch",
-  "torchvision",
-  "torch_geometric",
-  "numpy<2.0",
-  "loguru",
-  "transformers<4.42.0",
-  "datasets==3.6.0",
-  "fire",
-  "rdkit",
-  "pyarrow",
-  "pandas",
-  "polars",
-  "info-nce-pytorch",
+  "faiss-cpu==1.13.2",
+  "torch==2.10.0",
+  "torch-geometric==2.7.0",
+  "numpy==2.3.5",
+  "scipy==1.16.3",
+  "loguru==0.7.3",
+  "transformers==4.41.2",
+  "datasets==4.8.4",
+  "rdkit==2025.9.6",
+  "pyarrow==23.0.1",
+  "pandas==2.3.3",
+  "info-nce-pytorch==0.1.4",
   "hydra-core==1.3.2",
-  "fsspec",
-  "lightning>=2.0.0",
-  "torchmetrics>=0.11.4",
-  "rootutils",
-  "pre-commit",
-  "class_resolver",
-  "rich",
-  "wandb",
-  "hydra-colorlog==1.2.0",
-  "hydra-optuna-sweeper==1.2.0",
-  "omegaconf",
-  "pyqt6>=6.9.1",
+  "lightning==2.6.0",
+  "pytorch-lightning==2.6.1",
+  "torchmetrics==1.9.0",
+  "rootutils==1.0.7",
+  "class-resolver==0.7.1",
+  "omegaconf==2.3.0",
+  "python-dotenv==1.2.2",
+  "wandb==0.25.1",
 ]
 
 [project.optional-dependencies]
@@ -172,6 +166,11 @@ namespace_packages = true
 explicit_package_bases = true
 no_implicit_optional = false
 disable_error_code = "annotation-unchecked"
+
+[tool.uv.workspace]
+members = [
+    "resources_ee/molscribe_embedding",
+]
 
 [dependency-groups]
 dev = [
