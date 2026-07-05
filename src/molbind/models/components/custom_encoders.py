@@ -18,18 +18,52 @@ class SmilesEncoder(BaseModalityEncoder):
         super().__init__("ibm-research/MoLFormer-XL-both-10pct", freeze_encoder, pretrained, **kwargs)
 
     def _initialize_encoder(self):
-        self.encoder = AutoModel.from_pretrained(self.model_name, trust_remote_code=True)
+        self.encoder = AutoModel.from_pretrained(self.model_name, trust_remote_code=True, revision="7b12d946c181a37f6012b9dc3b002275de070314")
         if self.freeze_encoder:
             for param in self.encoder.parameters():
                 param.requires_grad = False
 
-    def forward(self, x: tuple[Tensor, Tensor]) -> Tensor:
-        token_ids, attention_mask = x if len(x) == 2 else (x[0], x[1])
+    def forward(self, x: tuple[Tensor, ...]) -> Tensor:
+        token_ids, attention_mask = x[0], x[1]
         output = self.encoder(
             input_ids=token_ids,
             attention_mask=attention_mask,
         )
-        return output.pooler_output
+        emb = output.pooler_output
+        if len(x) == 4:
+            x_min, x_max = x[2], x[3]
+            emb = torch.concat([emb, x_min.unsqueeze(-1), x_max.unsqueeze(-1)], dim=-1)
+        return emb
+
+
+# class IupacNameEncoder(BaseModalityEncoder):
+#     """IUPAC-name encoder using the MT5 encoder of the IUPAC2SMILES model.
+
+#     Uses the encoder stack of ``knowledgator/IUPAC2SMILES-canonical-base``
+#     (an MT5, ``d_model`` == 512) and mean-pools the last hidden state into a
+#     ``[B, 512]`` embedding, matching the other MolBind string encoders.
+#     The matching tokenizer is ``NamesConverter(...).iupac_tokenizer``.
+#     """
+
+#     def __init__(self, freeze_encoder: bool = False, pretrained: bool = True, **kwargs) -> None:
+#         super().__init__("knowledgator/IUPAC2SMILES-canonical-base", freeze_encoder, pretrained, **kwargs)
+
+#     def _initialize_encoder(self) -> None:
+#         # Lazy import so the project does not hard-depend on chemicalconverters
+#         # unless the IUPAC modality is actually used.
+#         from chemicalconverters import NamesConverter
+
+#         converter = NamesConverter(model_name=self.model_name)
+#         self.encoder = converter.model.encoder  # MT5Stack encoder
+#         if self.freeze_encoder:
+#             for param in self.encoder.parameters():
+#                 param.requires_grad = False
+
+#     def forward(self, x: tuple[Tensor, Tensor]) -> Tensor:
+#         token_ids, attention_mask = x[0], x[1]
+#         # MT5 encoder only takes input_ids / attention_mask (no token_type_ids).
+#         output = self.encoder(input_ids=token_ids, attention_mask=attention_mask)
+#         return torch.mean(output.last_hidden_state, dim=1)  # mean-pool -> [B, 512]
 
 
 class CustomFingerprintEncoder(FingerprintEncoder):
