@@ -1,5 +1,8 @@
+from io import BytesIO
+
 import numpy as np
 import torch
+from PIL import Image
 from torch import Tensor
 from torch.utils.data import Dataset
 
@@ -42,11 +45,75 @@ class StringDataset(Dataset):
     def __getitem__(self, idx):
         return {
             self.central_modality: tuple([i[idx] for i in self.central_modality_data])
-            if isinstance(self.central_modality_data_type, str)
+            if self.central_modality_data_type is str
             else Tensor(self.central_modality_data[idx]),
             self.other_modality: tuple([i[idx] for i in self.other_modality_data])
-            if isinstance(self.other_modality_data_type, str)
+            if self.other_modality_data_type is str
             else Tensor(self.other_modality_data)[idx],
+        }
+
+
+class ImageDataset(Dataset):
+    def __init__(
+        self,
+        data: list[str],
+        central_modality: str,
+        central_modality_data: tuple[Tensor, ...],
+        augment: bool = False,
+        input_size: int = 384,
+        image_render_size: int = 384,
+        **kwargs,
+    ) -> None:
+        """Dataset for the molecule-image modality.
+
+        Images are rendered on the fly from SMILES with RDKit and preprocessed
+        with MolScribe's transform, yielding a ``[3, input_size, input_size]``
+        tensor consumable by :class:`MolScribeImageEncoder`.
+
+        Args:
+            data: list of SMILES strings to depict (the "image" column).
+            central_modality: name of the central modality.
+            central_modality_data: tokenized central-modality tensors.
+            augment: if ``True`` apply MolScribe's train-time depiction
+                augmentation (random rotation, crops, blur, noise). Use only for
+                training; keep ``False`` for reproducible val/eval embeddings.
+            input_size: side length of the preprocessed tensor (MolScribe: 384).
+            image_render_size: side length of the RDKit-rendered image.
+        """
+
+        from molscribe.dataset import get_transforms
+
+        self.smiles = data
+        self.central_modality = central_modality
+        self.other_modality = "image"
+        self.central_modality_data = central_modality_data
+        self.image_render_size = image_render_size
+        self.transform = get_transforms(input_size, augment=augment, rotate=augment)
+
+    def __len__(self) -> int:
+        return len(self.smiles)
+
+    def _render(self, smiles: str) -> np.ndarray:
+        from rdkit import Chem
+        from rdkit.Chem.Draw import rdMolDraw2D
+
+        mol = Chem.MolFromSmiles(smiles) if isinstance(smiles, str) else None
+        size = self.image_render_size
+        if mol is None:
+            # Unparseable SMILES -> blank white image; CropWhite/Resize handle it.
+            return np.full((size, size, 3), 255, dtype=np.uint8)
+        drawer = rdMolDraw2D.MolDraw2DCairo(size, size)
+        drawer.DrawMolecule(mol)
+        drawer.FinishDrawing()
+        image = Image.open(BytesIO(drawer.GetDrawingText())).convert("RGB")
+        return np.array(image)
+
+    def __getitem__(self, idx: int) -> dict:
+        image = self._render(self.smiles[idx])
+        image_tensor = self.transform(image=image, keypoints=[])["image"]
+        return {
+            self.central_modality: [i[idx] for i in self.central_modality_data],
+            self.other_modality: image_tensor,
         }
 
 
@@ -125,11 +192,7 @@ class cNmrDataset(Dataset):
         }
 
     def c_nmr_to_vec(self, nmr_shifts: list[float]) -> Tensor:
-        cnmr_augmented = augment_13c(nmr_shifts)
-        if self.augment:
-            nmr_array = np.array(cnmr_augmented) / np.max(cnmr_augmented)
-        else:
-            nmr_array = np.array(cnmr_augmented) / np.max(cnmr_augmented)
+        nmr_array = np.array(nmr_shifts) / np.max(nmr_shifts)
         return torch.tensor(nmr_array, dtype=torch.float32).unsqueeze(0)
 
 
@@ -155,6 +218,53 @@ class IrDataset(Dataset):
         return {
             self.central_modality: [i[index] for i in self.central_modality_data],
             self.other_modality: ir,
+        }
+
+
+class GeneralDataset(Dataset):
+    def __init__(
+        self,
+        data: list[list[float]],
+        **kwargs,
+    ) -> None:
+        self.general = data
+        # self.min_value = min_value
+        # self.max_value = max_value
+        self.central_modality = kwargs["central_modality"]
+        self.other_modality = "general"
+        self.central_modality_data = kwargs["central_modality_data"]
+        self.pad_length = 10000
+
+    def __len__(self):
+        return len(self.general)
+
+    # def __getitem__(self, index: int) -> dict:
+    #     general = torch.tensor(self.general[index], dtype=torch.float32)
+    #     # pad (or truncate) to self.pad_length
+    #     if general.size(0) < self.pad_length:
+    #         general = torch.nn.functional.pad(general, (0, self.pad_length - general.size(0)))
+    #     else:
+    #         general = general[:self.pad_length]
+    #     general = (general - general.min()) / (general.max() - general.min())
+    #     general = general.unsqueeze(0)
+
+    #     return {
+    #         self.central_modality: [g[index] for g in self.central_modality_data],
+    #         self.other_modality: general,
+    #     }
+    def __getitem__(self, index: int) -> dict:
+        general = torch.tensor(self.general[index], dtype=torch.float32)
+        # interpolate to self.pad_length points
+        general = general.unsqueeze(0).unsqueeze(0)  # (1, 1, L)
+        general = torch.nn.functional.interpolate(
+            general, size=self.pad_length, mode="linear", align_corners=False
+        ).squeeze(0).squeeze(0)  # (pad_length,)
+        general = (general - general.min()) / (general.max() - general.min())
+        general = general.unsqueeze(0)
+
+        return {
+            self.central_modality: [g[index] for g in self.central_modality_data],
+            self.other_modality: general,
         }
 
 
