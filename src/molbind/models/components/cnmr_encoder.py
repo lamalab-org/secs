@@ -1,374 +1,242 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
-class ResidualBlock1D(nn.Module):
-    """Enhanced 1D Residual block with configurable expansion"""
+class ConvStem(nn.Module):
+    """
+    Light convolutional stem for sparse 13C spectra.
 
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        kernel_size: int = 3,
-        stride: int = 1,
-        dropout: float = 0.1,
-        expansion: int = 4,
-        use_se: bool = True,
-        activation: str = "relu",
-    ):
+    Design choices (vs. the original):
+      - NO early MaxPool and NO stride-2 stem conv. Isolated 13C peaks must
+        survive to the transformer; the original stem downsampled 4x before
+        any block ran, smearing/dropping single-bin peaks.
+      - Gentle, controlled downsampling via a couple of stride-2 stages only.
+      - Depthwise-separable convs keep it cheap while giving each output token
+        a receptive field over a small ppm neighborhood (local peak shape).
+    """
+
+    def __init__(self, in_channels: int, dims=(64, 128, 256), strides=(1, 2, 2)):
         super().__init__()
-
-        # Bottleneck design with expansion
-        mid_channels = out_channels // expansion if expansion > 1 else out_channels
-
-        # Choose activation function
-        if activation == "relu":
-            act_fn = nn.ReLU(inplace=True)
-        elif activation == "swish":
-            act_fn = nn.SiLU(inplace=True)
-        elif activation == "gelu":
-            act_fn = nn.GELU()
-        else:
-            act_fn = nn.ReLU(inplace=True)
-
-        # Bottleneck layers
         layers = []
-        if expansion > 1:
-            # 1x1 conv to reduce channels
-            layers.extend([nn.Conv1d(in_channels, mid_channels, 1, bias=False), nn.BatchNorm1d(mid_channels), act_fn])
-        else:
-            mid_channels = in_channels
-
-        # 3x3 conv
-        layers.extend(
-            [
-                nn.Conv1d(mid_channels, mid_channels, kernel_size, stride=stride, padding=kernel_size // 2, bias=False),
-                nn.BatchNorm1d(mid_channels),
-                act_fn,
-                nn.Dropout(dropout),
+        c_prev = in_channels
+        for c, s in zip(dims, strides):
+            layers += [
+                nn.Conv1d(c_prev, c, kernel_size=7, stride=s, padding=3, bias=False),
+                nn.BatchNorm1d(c),
+                nn.SiLU(inplace=True),
+                nn.Conv1d(c, c, kernel_size=5, stride=1, padding=2, groups=c, bias=False),
+                nn.BatchNorm1d(c),
+                nn.SiLU(inplace=True),
             ]
-        )
+            c_prev = c
+        self.net = nn.Sequential(*layers)
+        self.out_channels = dims[-1]
+        self.total_stride = 1
+        for s in strides:
+            self.total_stride *= s
 
-        # 1x1 conv to expand channels
-        if expansion > 1:
-            layers.extend([nn.Conv1d(mid_channels, out_channels, 1, bias=False), nn.BatchNorm1d(out_channels)])
-
-        self.conv_layers = nn.Sequential(*layers)
-
-        # Squeeze-and-Excitation
-        self.se = None
-        if use_se:
-            se_channels = max(1, out_channels // 16)
-            self.se = nn.Sequential(
-                nn.AdaptiveAvgPool1d(1),
-                nn.Conv1d(out_channels, se_channels, 1),
-                act_fn,
-                nn.Conv1d(se_channels, out_channels, 1),
-                nn.Sigmoid(),
-            )
-
-        # Skip connection
-        self.skip = nn.Sequential()
-        if stride != 1 or in_channels != out_channels:
-            self.skip = nn.Sequential(
-                nn.Conv1d(in_channels, out_channels, 1, stride=stride, bias=False), nn.BatchNorm1d(out_channels)
-            )
-
-        self.act_fn = act_fn
-
-    def forward(self, x):
-        residual = self.skip(x)
-        out = self.conv_layers(x)
-
-        # Apply SE if present
-        if self.se is not None:
-            out = out * self.se(out)
-
-        out += residual
-        return self.act_fn(out)
+    def forward(self, x):  # (B, C_in, L) -> (B, C_out, L/total_stride)
+        return self.net(x)
 
 
-class ScalableCNNEncoder(nn.Module):
-    """Highly scalable CNN encoder with compound scaling and an optional initial residual connection."""
+class SinusoidalPositionalEncoding(nn.Module):
+    """Fixed sinusoidal PE over the sequence (ppm) axis."""
+
+    def __init__(self, dim: int, max_len: int = 8192):
+        super().__init__()
+        pe = torch.zeros(max_len, dim)
+        pos = torch.arange(0, max_len, dtype=torch.float32).unsqueeze(1)
+        div = torch.exp(torch.arange(0, dim, 2, dtype=torch.float32) * (-torch.log(torch.tensor(10000.0)) / dim))
+        pe[:, 0::2] = torch.sin(pos * div)
+        pe[:, 1::2] = torch.cos(pos * div)
+        self.register_buffer("pe", pe.unsqueeze(0))  # (1, max_len, dim)
+
+    def forward(self, x):  # x: (B, T, D)
+        return x + self.pe[:, : x.size(1)]
+
+
+class AttentionPool(nn.Module):
+    """
+    Learnable attention pooling: a query token attends over all sequence
+    positions and produces one vector. Unlike AdaptiveAvgPool this LEARNS
+    which peaks matter and preserves positional information (via PE on the
+    tokens), which matters for 13C where position is signal.
+    """
+
+    def __init__(self, dim: int, num_heads: int = 8, dropout: float = 0.1):
+        super().__init__()
+        self.query = nn.Parameter(torch.randn(1, 1, dim) * 0.02)
+        self.attn = nn.MultiheadAttention(dim, num_heads, dropout=dropout, batch_first=True)
+        self.norm = nn.LayerNorm(dim)
+
+    def forward(self, x):  # (B, T, D) -> (B, D)
+        B = x.size(0)
+        q = self.query.expand(B, -1, -1)
+        out, _ = self.attn(q, x, x)
+        return self.norm(out.squeeze(1))
+
+
+class ContrastiveCNmrBackbone(nn.Module):
+    """
+    13C-NMR encoder for CLIP-style contrastive alignment with molecule embeddings.
+
+    Pipeline:  spectrum (B,1,L)
+        -> light conv stem (local peak shape, gentle downsampling)
+        -> tokens + positional encoding
+        -> transformer encoder (global peak-relationship reasoning)
+        -> attention pooling (learned, position-aware)
+        -> projection head -> L2-normalized embedding
+    """
 
     def __init__(
         self,
-        input_length: int = 2048,
+        input_length: int = 8192,
         input_channels: int = 1,
-        latent_dim: int = 512,
-        # Scaling parameters
-        width_mult: float = 1.0,
-        depth_mult: float = 1.0,
-        resolution_mult: float = 1.0,
-        compound_coeff: float = 0,
-        base_channels: list[int] | None = None,
-        blocks_per_stage: list[int] | None = None,
-        strides: list[int] | None = None,
+        embed_dim: int = 256,
+        proj_dim: int = 512,
+        depth: int = 6,
+        num_heads: int = 8,
+        mlp_ratio: float = 4.0,
         dropout: float = 0.1,
-        use_attention: bool = True,
-        attention_heads: int = 8,
-        use_se: bool = True,
-        activation: str = "swish",
-        stem_type: str = "conv",
-        # --- NEW: Initial Residual Connection Parameters ---
-        use_initial_residual: bool = True,
-        residual_projection_dim: int = 128,
+        stem_dims=(64, 128, 256),
+        stem_strides=(1, 2, 2),
     ):
         super().__init__()
 
-        # --- NEW: Store residual connection flag ---
-        self.use_initial_residual = use_initial_residual
+        self.stem = ConvStem(input_channels, dims=stem_dims, strides=stem_strides)
+        if self.stem.out_channels != embed_dim:
+            self.proj_in = nn.Conv1d(self.stem.out_channels, embed_dim, 1)
+        else:
+            self.proj_in = nn.Identity()
 
-        # Apply compound scaling (EfficientNet style)
-        if compound_coeff > 0:
-            width_mult *= 1.1**compound_coeff
-            depth_mult *= 1.2**compound_coeff
-            resolution_mult *= 1.15**compound_coeff
+        self.pos_enc = SinusoidalPositionalEncoding(embed_dim, max_len=input_length)
 
-        # Default configurations
-        if base_channels is None:
-            base_channels = [32, 64, 128, 256, 512]
-        if blocks_per_stage is None:
-            blocks_per_stage = [2, 3, 4, 6, 3]
-        if strides is None:
-            strides = [1, 2, 2, 2, 2]
+        enc_layer = nn.TransformerEncoderLayer(
+            d_model=embed_dim,
+            nhead=num_heads,
+            dim_feedforward=int(embed_dim * mlp_ratio),
+            dropout=dropout,
+            activation="gelu",
+            batch_first=True,
+            norm_first=True,
+        )
+        self.transformer = nn.TransformerEncoder(enc_layer, num_layers=depth)
+        self.encoder_norm = nn.LayerNorm(embed_dim)
+        self.pool = AttentionPool(embed_dim, num_heads=num_heads, dropout=dropout)
 
-        # Scale channels by width multiplier and ensure they're divisible by common factors
-        def make_divisible(v, divisor=8):
-            """Make channel count divisible by divisor for efficiency"""
-            new_v = max(divisor, int(v + divisor / 2) // divisor * divisor)
-            if new_v < 0.9 * v:
-                new_v += divisor
-            return new_v
-
-        self.channels = [make_divisible(max(8, int(ch * width_mult))) for ch in base_channels]
-        self.blocks_per_stage = [max(1, int(blocks * depth_mult)) for blocks in blocks_per_stage]
-        self.input_length = int(input_length * resolution_mult)
-        self.use_attention = use_attention
-
-        # Stem (initial feature extraction)
-        if stem_type == "conv":
-            self.stem = nn.Sequential(
-                nn.Conv1d(input_channels, self.channels[0], 7, stride=2, padding=3, bias=False),
-                nn.BatchNorm1d(self.channels[0]),
-                nn.SiLU(inplace=True) if activation == "swish" else nn.ReLU(inplace=True),
-                nn.MaxPool1d(3, stride=2, padding=1),
-            )
-        else:  # patch embedding style
-            patch_size = 16
-            self.stem = nn.Sequential(
-                nn.Conv1d(input_channels, self.channels[0], patch_size, stride=patch_size // 2),
-                nn.BatchNorm1d(self.channels[0]),
-                nn.SiLU(inplace=True) if activation == "swish" else nn.ReLU(inplace=True),
-            )
-
-        # Build stages
-        self.stages = nn.ModuleList()
-        in_channels = self.channels[0]
-        for _, (out_channels, num_blocks, stride) in enumerate(
-            zip(self.channels[1:], self.blocks_per_stage[1:], strides[1:], strict=False)
-        ):
-            stage = []
-            stage.append(
-                ResidualBlock1D(in_channels, out_channels, stride=stride, dropout=dropout, use_se=use_se, activation=activation)
-            )
-            for _ in range(num_blocks - 1):
-                stage.append(
-                    ResidualBlock1D(out_channels, out_channels, stride=1, dropout=dropout, use_se=use_se, activation=activation)
-                )
-            self.stages.append(nn.Sequential(*stage))
-            in_channels = out_channels
-
-        # Multi-head self-attention (optional)
-        final_channels = self.channels[-1]
-        if use_attention:
-            max_heads = final_channels // 64 if final_channels >= 64 else 1
-            actual_heads = min(attention_heads, max_heads)
-            for h in range(actual_heads, 0, -1):
-                if final_channels % h == 0:
-                    actual_heads = h
-                    break
-            self.attention = nn.MultiheadAttention(
-                embed_dim=final_channels, num_heads=actual_heads, dropout=dropout, batch_first=True
-            )
-            self.attention_norm = nn.LayerNorm(final_channels)
-
-        # This path processes the raw input to create a feature vector to be concatenated
-        # with the deep features from the main CNN body.
-        self.initial_residual_processor = None
-        if self.use_initial_residual:
-            # We use pooling to reduce the long sequence to a manageable size, then a linear layer.
-            pooled_length = 256  # A hyperparameter to control the size after pooling
-            self.initial_residual_processor = nn.Sequential(
-                nn.AdaptiveAvgPool1d(pooled_length),
-                nn.Flatten(),
-                nn.Linear(input_channels * pooled_length, residual_projection_dim),
-                nn.LayerNorm(residual_projection_dim),
-                nn.SiLU() if activation == "swish" else nn.ReLU(),
-            )
-
-        # Global feature aggregation
-        self.global_pool = nn.AdaptiveAvgPool1d(1)
-
-        # The input dimension to the head now depends on whether we use the initial residual.
-        head_input_dim = final_channels
-        if self.use_initial_residual:
-            head_input_dim += residual_projection_dim
-
-        head_dim = head_input_dim * 2  # Double for richer representation
         self.head = nn.Sequential(
-            nn.Linear(head_input_dim, head_dim),
-            nn.BatchNorm1d(head_dim),
-            nn.SiLU(inplace=True) if activation == "swish" else nn.ReLU(inplace=True),
-            nn.Dropout(dropout * 2),
-            nn.Linear(head_dim, latent_dim * 2),
-            nn.BatchNorm1d(latent_dim * 2),
-            nn.SiLU(inplace=True) if activation == "swish" else nn.ReLU(inplace=True),
-            nn.Dropout(dropout),
-            nn.Linear(latent_dim * 2, latent_dim),
-            nn.Sigmoid(),
+            nn.Linear(embed_dim, proj_dim),
+            nn.GELU(),
+            nn.Linear(proj_dim, proj_dim),
         )
 
-        self._initialize_weights()
+        self._init_weights()
 
-    def _initialize_weights(self):
-        """Initialize weights using modern techniques"""
+    def _init_weights(self):
         for m in self.modules():
             if isinstance(m, nn.Conv1d):
                 nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
             elif isinstance(m, (nn.BatchNorm1d, nn.LayerNorm)):
                 nn.init.ones_(m.weight)
                 nn.init.zeros_(m.bias)
             elif isinstance(m, nn.Linear):
-                nn.init.normal_(m.weight, 0, 0.01)
-                nn.init.zeros_(m.bias)
+                nn.init.trunc_normal_(m.weight, std=0.02)
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # --- NEW: Store initial input for the residual path ---
-        initial_x = x if self.use_initial_residual else None
-
-        # Main CNN Path
+    def forward(self, x: torch.Tensor, normalize: bool = True) -> torch.Tensor:
         x = self.stem(x)
-        for stage in self.stages:
-            x = stage(x)
-
-        # Optional attention
-        if self.use_attention:
-            x_att = x.transpose(1, 2)
-            x_att_out, _ = self.attention(x_att, x_att, x_att)
-            x_att = self.attention_norm(x_att + x_att_out)
-            x = x_att.transpose(1, 2)
-
-        # Global pooling for deep features
-        deep_features = self.global_pool(x).squeeze(-1)  # (B, C_final)
-
-        # --- NEW: Process and combine features ---
-        if self.use_initial_residual and self.initial_residual_processor is not None:
-            # Process the original input through the residual path
-            residual_features = self.initial_residual_processor(initial_x)  # (B, residual_projection_dim)
-            # Concatenate deep features with the initial residual features
-            combined_features = torch.cat((deep_features, residual_features), dim=1)
-        else:
-            combined_features = deep_features
-
-        # Pass combined features to the final head
-        return self.head(combined_features)
-
-
-# Predefined scaling configurations
-def get_scaled_model(scale: str = "small", **kwargs):
-    """Get predefined scaled models"""
-
-    configs = {
-        "tiny": {
-            "width_mult": 0.5,
-            "depth_mult": 0.5,
-            "base_channels": [16, 32, 64, 128, 256],
-            "blocks_per_stage": [1, 2, 2, 3, 2],
-            "dropout": 0.05,
-            "use_attention": False,
-            "use_se": False,
-            "use_initial_residual": True,  # Enable for tiny model
-        },
-        "small": {
-            "width_mult": 0.75,
-            "depth_mult": 0.75,
-            "base_channels": [32, 64, 128, 256, 512],
-            "blocks_per_stage": [2, 2, 3, 4, 2],
-            "dropout": 0.1,
-            "use_attention": True,
-            "attention_heads": 4,
-            "use_initial_residual": True,
-        },
-        "medium": {
-            "width_mult": 1.0,
-            "depth_mult": 1.0,
-            "base_channels": [64, 128, 256, 512, 512],
-            "blocks_per_stage": [2, 3, 4, 6, 3],
-            "dropout": 0.15,
-            "use_attention": True,
-            "attention_heads": 8,
-            "use_initial_residual": True,
-        },
-        "large": {
-            "width_mult": 1.5,
-            "depth_mult": 1.25,
-            "base_channels": [64, 128, 256, 512, 1024],
-            "blocks_per_stage": [3, 4, 6, 8, 4],
-            "dropout": 0.2,
-            "use_attention": True,
-            "attention_heads": 16,
-            "use_initial_residual": True,
-        },
-        "xlarge": {
-            "width_mult": 2.0,
-            "depth_mult": 1.5,
-            "base_channels": [64, 128, 256, 512, 1024],
-            "blocks_per_stage": [3, 4, 8, 12, 6],
-            "dropout": 0.25,
-            "use_attention": True,
-            "attention_heads": 32,
-            "activation": "swish",
-            "use_initial_residual": True,  # Enable by default for xlarge
-        },
-        "efficient_b0": {"compound_coeff": 0, "use_initial_residual": True},
-        "efficient_b1": {"compound_coeff": 0.5, "use_initial_residual": True},
-        "efficient_b2": {"compound_coeff": 1.0, "use_initial_residual": True},
-        "efficient_b3": {"compound_coeff": 1.5, "use_initial_residual": True},
-        "efficient_b4": {"compound_coeff": 2.0, "use_initial_residual": True},
-        "efficient_b5": {"compound_coeff": 2.5, "use_initial_residual": True},
-        "efficient_b6": {"compound_coeff": 3.0, "use_initial_residual": True},
-        "efficient_b7": {"compound_coeff": 3.5, "use_initial_residual": True},
-    }
-
-    config = configs.get(scale, configs["medium"])
-    config.update(kwargs)
-
-    return ScalableCNNEncoder(**config)
+        x = self.proj_in(x)
+        x = x.transpose(1, 2)
+        x = self.pos_enc(x)
+        x = self.transformer(x)
+        x = self.encoder_norm(x)
+        x = self.pool(x)
+        x = self.head(x)
+        if normalize:
+            x = F.normalize(x, dim=-1)
+        return x
 
 
 class cNmrEncoder(nn.Module):
-    # --- MODIFIED: Added flag to control the initial residual connection ---
-    def __init__(self, ckpt_path: str | None = None, freeze_encoder: bool = False, use_initial_residual: bool = False) -> None:
-        super().__init__()
-        # Pass the flag to the model factory
-        self.encoder = get_scaled_model("xlarge", use_initial_residual=use_initial_residual)
-        if freeze_encoder:
-            for param in self.encoder.parameters():
-                param.requires_grad = False
+    """
+    API-compatible wrapper (matches the original cNmrEncoder signature).
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.encoder(x)
+    Args:
+        ckpt_path:      optional path to a checkpoint to load into the backbone.
+                        Accepts either a raw state_dict or a dict containing
+                        'state_dict'/'model'/'encoder' keys; a leading 'encoder.'
+                        prefix on keys is stripped automatically.
+        freeze_encoder: if True, freezes all backbone params (requires_grad=False)
+                        and keeps it in eval mode so BN/dropout don't update.
+    """
+
+    def __init__(
+        self,
+        ckpt_path: str | None = None,
+        freeze_encoder: bool = False,
+        **backbone_kwargs,
+    ) -> None:
+        super().__init__()
+        self.encoder = ContrastiveCNmrBackbone(**backbone_kwargs)
+        self.frozen = freeze_encoder
+
+        if ckpt_path is not None:
+            self._load_ckpt(ckpt_path)
+
+        if freeze_encoder:
+            for p in self.encoder.parameters():
+                p.requires_grad = False
+            self.encoder.eval()
+
+    def _load_ckpt(self, ckpt_path: str) -> None:
+        state = torch.load(ckpt_path, map_location="cpu")
+        # unwrap common container keys
+        for key in ("state_dict", "model", "encoder"):
+            if isinstance(state, dict) and key in state and isinstance(state[key], dict):
+                state = state[key]
+                break
+        # strip a leading "encoder." prefix if the ckpt was saved from the wrapper
+        cleaned = {}
+        for k, v in state.items():
+            cleaned[k[len("encoder."):] if k.startswith("encoder.") else k] = v
+        missing, unexpected = self.encoder.load_state_dict(cleaned, strict=False)
+        if missing:
+            print(f"[cNmrEncoder] missing keys: {len(missing)} (e.g. {missing[:3]})")
+        if unexpected:
+            print(f"[cNmrEncoder] unexpected keys: {len(unexpected)} (e.g. {unexpected[:3]})")
+
+    def train(self, mode: bool = True):
+        """Keep a frozen encoder in eval mode even when the parent is train()'d."""
+        super().train(mode)
+        if self.frozen:
+            self.encoder.eval()
+        return self
+
+    def forward(self, x: torch.Tensor, normalize: bool = True) -> torch.Tensor:
+        if self.frozen:
+            with torch.no_grad():
+                return self.encoder(x, normalize=normalize)
+        return self.encoder(x, normalize=normalize)
 
 
 if __name__ == "__main__":
-    # Example usage
-    # The hNmrCNNEncoder now enables the initial residual connection by default.
-    # You can disable it by passing use_initial_residual=False
-    model = cNmrEncoder(ckpt_path=None, freeze_encoder=False, use_initial_residual=True).to("cuda")
-    model.eval()
+    device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    input_tensor = torch.randn(4, 1, 2048)  # Batch size 4, 1 channel, length 10000
-    output = model(input_tensor.to("cuda"))
-    print(f"\nInput shape: {input_tensor.shape}")
-    print(f"Output shape: {output.shape}")  # Should be (4, 1024) for latent_dim=1024
+    model = cNmrEncoder(ckpt_path=None, freeze_encoder=False).to(device)
+    model.eval()
+    x = torch.randn(4, 1, 4096, device=device)
+    with torch.no_grad():
+        z = model(x)
+    print(f"Input:  {tuple(x.shape)}")
+    print(f"Output: {tuple(z.shape)}  (L2-normalized)")
+    print(f"Row norms: {z.norm(dim=-1)}")
+    print(f"Params: {sum(p.numel() for p in model.parameters())/1e6:.1f}M")
+
+    # frozen check
+    frozen = cNmrEncoder(ckpt_path=None, freeze_encoder=True).to(device)
+    n_trainable = sum(p.numel() for p in frozen.parameters() if p.requires_grad)
+    print(f"Frozen trainable params: {n_trainable}")
