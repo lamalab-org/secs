@@ -165,10 +165,6 @@ def reduce_resolution_by_averaging(vector: np.ndarray, window_size: int) -> np.n
     """
     Reduces the resolution of a vector by window averaging and interpolation.
 
-    This function first computes the moving average of the input vector
-    using a specified window size, which reduces its length. It then
-    interpolates the averaged data back to the original vector length.
-
     Args:
         vector (np.ndarray): The input 1D numpy array of data.
         window_size (int): The size of the averaging window. A larger
@@ -178,23 +174,15 @@ def reduce_resolution_by_averaging(vector: np.ndarray, window_size: int) -> np.n
         np.ndarray: A new vector with reduced resolution but the same
                     length as the input vector.
     """
-    if not isinstance(vector, np.ndarray):
+    if isinstance(vector, list):
         vector = np.array(vector)
 
     if window_size <= 1:
-        return vector  # No resolution change needed
+        return vector
 
-    # 1. Window Averaging (Downsampling)
-    # We use convolution for a simple moving average.
-    # The 'valid' mode means we only get points where the window fully overlaps.
     averaged_vector = np.convolve(vector, np.ones(window_size) / window_size, mode="valid")
-
-    # 2. Interpolation (Upsampling)
-    # Create the x-coordinates for the original and downsampled vectors
     original_x = np.linspace(0, 1, len(vector))
     averaged_x = np.linspace(0, 1, len(averaged_vector))
-
-    # Create an interpolation function based on the averaged data
     interp_func = interp1d(averaged_x, averaged_vector, kind="linear", fill_value="extrapolate")
 
     # Apply the interpolation function to the original x-coordinates

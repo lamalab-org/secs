@@ -1,7 +1,6 @@
 from secs.data.components.datasets import (
     GeneralDataset,
     HSQCDataset,
-    ImageDataset,
     IrDataset,
     StringDataset,
     cNmrDataset,
