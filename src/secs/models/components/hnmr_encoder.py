@@ -351,12 +351,12 @@ class hNmrCNNEncoder(nn.Module):
     def __init__(self, ckpt_path: str | None = None, freeze_encoder: bool = False, use_initial_residual: bool = False) -> None:
         super().__init__()
         # Pass the flag to the model factory
-        
+
         self.encoder = get_scaled_model("xlarge", use_initial_residual=use_initial_residual)
-        
+
         if ckpt_path:
             self.load_state_dict(torch.load(ckpt_path, device=self.encoder.device))
-        
+
         if freeze_encoder:
             for param in self.encoder.parameters():
                 param.requires_grad = False
