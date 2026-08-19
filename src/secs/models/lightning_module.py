@@ -1,5 +1,4 @@
 import contextlib
-import copy
 import os
 
 import torch
@@ -43,21 +42,6 @@ class SECSModule(LightningModule):
         self.batch_size = self.per_device_batch_size * self.world_size
         self.central_modality = cfg.data.central_modality
 
-        # freeze a reference copy of the central-modality encoder
-        self.reference_encoder = copy.deepcopy(self.model.dict_encoders[self.central_modality])
-        self.reference_proj = (
-            copy.deepcopy(self.model.dict_projection_heads[self.central_modality])
-            if self.central_modality in self.model.dict_projection_heads
-            else None
-        )
-        for m in (self.reference_encoder, self.reference_proj):
-            if m is not None:
-                m.eval()
-                for p in m.parameters():
-                    p.requires_grad_(False)
-
-        self.kl_weight = getattr(cfg.model.loss, "kl_weight", 0)
-
         logger.info(f"Per device batch size: {self.per_device_batch_size}")
         logger.info(f"Loss batch size: {self.batch_size}")
 
@@ -68,18 +52,6 @@ class SECSModule(LightningModule):
         else:
             forward_pass = self.model(batch)
         return forward_pass
-
-    def _reference_central_embedding(self, batch: dict | tuple) -> Tensor:
-        # mirror MolBind.forward's central-modality path, using frozen modules
-        input_data = batch[0] if isinstance(batch, tuple) else batch
-        if isinstance(batch, tuple) and isinstance(batch[0], Data):
-            input_data = self._treat_graph_batch(batch[0])
-        central_in = input_data[self.central_modality]
-        with torch.no_grad():
-            emb = self.reference_encoder.forward(central_in)
-            if self.reference_proj is not None:
-                emb = self.reference_proj(emb)
-        return emb
 
     def _info_nce_loss(self, z1: Tensor, z2: Tensor) -> float:
         if self.world_size > 1:
@@ -126,20 +98,9 @@ class SECSModule(LightningModule):
             )
         return loss
 
-    def _kl_central(self, batch, current_central):
-        ref = self._reference_central_embedding(batch)
-        log_cur = torch.log_softmax(current_central, dim=-1)
-        log_ref = torch.log_softmax(ref, dim=-1)
-        return torch.nn.functional.kl_div(log_cur, log_ref, log_target=True, reduction="batchmean")
-
     def training_step(self, batch: dict) -> Tensor:
         embeddings_dict = self.forward(batch)
-        loss = self._multimodal_loss(embeddings_dict, "train")
-        if self.kl_weight > 0:
-            kl = self._kl_central(batch, embeddings_dict[self.central_modality])
-            self.log("train_kl", kl, batch_size=self.batch_size, sync_dist=self.world_size > 1)
-            loss = loss + self.kl_weight * kl
-        return loss
+        return self._multimodal_loss(embeddings_dict, "train")
 
     def validation_step(self, batch: dict) -> Tensor:
         embeddings_dict = self.forward(batch)

@@ -5,15 +5,22 @@ import torch
 from secs.elucidation import (
     OPTIMIZER_RESOLVER,
     CachedObjective,
+    FaissCandidateSource,
     FormulaPenalty,
     OptimizerResult,
     ScoreOnlyOptimizer,
+    StaticCandidateSource,
     ValidityPenalty,
     WeightedObjective,
 )
 from secs.elucidation.components import EmbeddingSimilarity, _ensure_1d
 from secs.elucidation.molecules import atom_counts, is_radical_charged_or_wrong_valence
 from secs.elucidation.objective import ScoringComponent
+from secs.utils.elucidation import (
+    build_formula_string,
+    gen_close_molformulas_from_seed,
+    get_atom_counts_from_formula,
+)
 
 
 class StubEmbedder:
@@ -200,11 +207,6 @@ def test_optimizers_are_resolvable_by_name():
 
 def test_candidate_formulas_include_the_seed_first():
     """The target molecule has exactly the seed formula, so it must be reachable."""
-    from secs.utils.elucidation import (
-        build_formula_string,
-        gen_close_molformulas_from_seed,
-        get_atom_counts_from_formula,
-    )
 
     seed = "C6H5Cl"
     canonical = build_formula_string(get_atom_counts_from_formula(seed))
@@ -214,14 +216,12 @@ def test_candidate_formulas_include_the_seed_first():
 
 
 def test_candidate_formulas_are_unique():
-    from secs.utils.elucidation import gen_close_molformulas_from_seed
 
     candidates = gen_close_molformulas_from_seed("C10H12N2O")
     assert len(candidates) == len(set(candidates))
 
 
 def test_candidate_formulas_include_neighbours():
-    from secs.utils.elucidation import gen_close_molformulas_from_seed
 
     candidates = gen_close_molformulas_from_seed("C6H5Cl")
     assert "C7H7Cl" in candidates
@@ -229,7 +229,6 @@ def test_candidate_formulas_include_neighbours():
 
 
 def test_candidate_formulas_reject_unparseable_input():
-    from secs.utils.elucidation import gen_close_molformulas_from_seed
 
     with pytest.raises(ValueError, match="Invalid seed formula"):
         gen_close_molformulas_from_seed("")
@@ -247,9 +246,6 @@ def _toy_index(vectors):
 
 def test_faiss_source_preserves_spectral_ranking_within_the_formula_filter():
     """The neighbour order decides ranking; the formula filter only removes rows."""
-    import numpy as np
-
-    from secs.elucidation import FaissCandidateSource
 
     # row 0 matches the target best, row 2 next, row 1 is orthogonal.
     vectors = np.array([[1.0, 0.0], [0.0, 1.0], [0.9, 0.1]], dtype="float32")
@@ -264,9 +260,6 @@ def test_faiss_source_preserves_spectral_ranking_within_the_formula_filter():
 
 
 def test_faiss_source_excludes_implausible_formulas():
-    import numpy as np
-
-    from secs.elucidation import FaissCandidateSource
 
     vectors = np.array([[1.0, 0.0], [0.99, 0.01]], dtype="float32")
     source = FaissCandidateSource(
@@ -280,9 +273,6 @@ def test_faiss_source_excludes_implausible_formulas():
 
 def test_faiss_source_keeps_molecules_with_the_exact_target_formula():
     """Regression: the seed formula must survive the filter."""
-    import numpy as np
-
-    from secs.elucidation import FaissCandidateSource
 
     vectors = np.array([[1.0, 0.0]], dtype="float32")
     source = FaissCandidateSource(
@@ -295,9 +285,6 @@ def test_faiss_source_keeps_molecules_with_the_exact_target_formula():
 
 
 def test_faiss_source_falls_back_when_no_formula_matches():
-    import numpy as np
-
-    from secs.elucidation import FaissCandidateSource
 
     vectors = np.array([[1.0, 0.0]], dtype="float32")
     source = FaissCandidateSource(
@@ -310,16 +297,12 @@ def test_faiss_source_falls_back_when_no_formula_matches():
 
 
 def test_faiss_source_rejects_mismatched_metadata():
-    import numpy as np
-
-    from secs.elucidation import FaissCandidateSource
 
     with pytest.raises(ValueError, match="same length"):
         FaissCandidateSource(index=None, smiles=np.array(["a", "b"]), formulas=np.array(["C"]))
 
 
 def test_static_source_returns_its_list():
-    from secs.elucidation import StaticCandidateSource
 
     source = StaticCandidateSource(["CCO", "CCC", "CC"])
     assert source.propose(torch.tensor([1.0]), "C2H6O", n_candidates=2) == ["CCO", "CCC"]

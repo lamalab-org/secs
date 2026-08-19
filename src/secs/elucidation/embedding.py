@@ -9,14 +9,27 @@ from secs.data.modalities import ModalityConstants
 from secs.models import MolBind
 from secs.utils import rename_keys_with_prefix, select_device
 
+# SECSModule keeps a frozen reference copy of the central encoder for its KL
+# term. Those tensors are saved in the checkpoint but are not part of MolBind,
+# so they must be dropped before a strict load.
+LIGHTNING_ONLY_PREFIXES = ("reference_encoder.", "reference_proj.")
+
+
+def molbind_state_dict(state_dict: dict) -> dict:
+    """Reduce a SECSModule checkpoint to just the MolBind weights."""
+    renamed = rename_keys_with_prefix(state_dict)
+    return {k: v for k, v in renamed.items() if not k.startswith(LIGHTNING_ONLY_PREFIXES)}
+
 
 def load_model(config, device: str) -> MolBind:
-    """Build a MolBind from a composed Hydra config and load its checkpoint."""
+    """Build a MolBind from a composed Hydra config and load its checkpoint.
+
+    Loads strictly, so a genuine architecture/config mismatch still fails
+    loudly rather than silently leaving layers at their initial values.
+    """
     model = MolBind(config).to(device)
-    model.load_state_dict(
-        rename_keys_with_prefix(torch.load(config.ckpt_path, map_location=torch.device(device))["state_dict"]),
-        strict=True,
-    )
+    checkpoint = torch.load(config.ckpt_path, map_location=torch.device(device))
+    model.load_state_dict(molbind_state_dict(checkpoint["state_dict"]), strict=True)
     model.eval()
     return model
 
