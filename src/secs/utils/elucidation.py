@@ -1,6 +1,5 @@
 import re
 from collections import defaultdict
-from typing import Dict, List, Optional
 
 import numpy as np
 from rdkit import Chem
@@ -47,7 +46,7 @@ def build_formula_string(atom_counts: dict) -> str:
     return "".join(parts)
 
 
-def _apply_deltas(base: Dict[str, int], deltas: Dict[str, int]) -> Optional[Dict[str, int]]:
+def _apply_deltas(base: dict[str, int], deltas: dict[str, int]) -> dict[str, int] | None:
     """Apply atom-count deltas; return None if any count would go negative."""
     counts = base.copy()
     for elem, d in deltas.items():
@@ -58,7 +57,7 @@ def _apply_deltas(base: Dict[str, int], deltas: Dict[str, int]) -> Optional[Dict
     return {e: c for e, c in counts.items() if c > 0}
 
 
-def _zero_out(base: Dict[str, int], elements: List[str], h_delta: int) -> Optional[Dict[str, int]]:
+def _zero_out(base: dict[str, int], elements: list[str], h_delta: int) -> dict[str, int] | None:
     """Remove given elements entirely, adjusting H. Return None if nothing changed."""
     if not any(base.get(e, 0) > 0 for e in elements):
         return None  # transformation is a no-op
@@ -69,7 +68,7 @@ def _zero_out(base: Dict[str, int], elements: List[str], h_delta: int) -> Option
     return counts
 
 
-def gen_close_molformulas_from_seed(seed_formula: str) -> List[str]:
+def gen_close_molformulas_from_seed(seed_formula: str) -> list[str]:
     """
     Generate chemically plausible 'neighbor' molecular formulas of a seed.
     """
@@ -81,7 +80,7 @@ def gen_close_molformulas_from_seed(seed_formula: str) -> List[str]:
         raise ValueError(f"Could not parse formula: {seed_formula!r}")
 
     # Simple delta-based transformations
-    delta_sets: List[Dict[str, int]] = [
+    delta_sets: list[dict[str, int]] = [
         {"C": -3, "H": -6},
         {"C": +1, "H": +2},
         {"C": -1, "H": -2},
@@ -100,7 +99,7 @@ def gen_close_molformulas_from_seed(seed_formula: str) -> List[str]:
         {"P": -1},
     ]
 
-    candidates: List[Optional[Dict[str, int]]] = [_apply_deltas(initial, d) for d in delta_sets]
+    candidates: list[dict[str, int] | None] = [_apply_deltas(initial, d) for d in delta_sets]
 
     # Structural removals
     total_halogens = sum(initial.get(x, 0) for x in ("Cl", "Br", "F"))
@@ -110,7 +109,7 @@ def gen_close_molformulas_from_seed(seed_formula: str) -> List[str]:
 
     seed_canonical = build_formula_string({e: c for e, c in initial.items() if c > 0})
     seen = set()
-    results: List[str] = []
+    results: list[str] = []
     for counts in candidates:
         if counts is None:
             continue

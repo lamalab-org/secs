@@ -4,7 +4,6 @@ from typing import Any
 import torch
 import yaml
 from analchem.model.transformer import SpecFormer
-from analchem.utils import task_shapes
 from torch import nn
 
 from secs.utils import rename_keys_with_prefix

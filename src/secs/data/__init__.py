@@ -7,3 +7,13 @@ from secs.data.components.datasets import (
     hNmrDataset,
 )
 from secs.data.components.hnmr import augment as augment_hnmr
+
+__all__ = [
+    "GeneralDataset",
+    "HSQCDataset",
+    "IrDataset",
+    "StringDataset",
+    "augment_hnmr",
+    "cNmrDataset",
+    "hNmrDataset",
+]
