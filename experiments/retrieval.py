@@ -12,8 +12,8 @@ from loguru import logger
 from omegaconf import DictConfig
 
 from secs.data.analysis import aggregate_embeddings
-from secs.data.datamodule import MolBindDataModule
-from secs.data.molbind_dataset import MolBindDataset
+from secs.data.datamodule import SECSDataModule
+from secs.data.secs_dataset import SECSDataset
 from secs.metrics.retrieval import full_database_retrieval
 from secs.models.lightning_module import MolBindModule
 from secs.utils.utils import HANDLERS as handlers
@@ -50,7 +50,7 @@ def embed(config: DictConfig):
 
     # set up the dataloaders
     valid_datasets = (
-        MolBindDataset(
+        SECSDataset(
             central_modality=config.data.central_modality,
             other_modalities=config.data.modalities,
             data=valid_shuffled_data,
@@ -59,7 +59,7 @@ def embed(config: DictConfig):
         ).build_datasets_for_modalities(),
     )
 
-    datamodule = MolBindDataModule(
+    datamodule = SECSDataModule(
         data={
             "predict": valid_datasets,
             "dataloader_arguments": {

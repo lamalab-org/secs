@@ -16,8 +16,8 @@ from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from pytorch_lightning.strategies.ddp import DDPStrategy
 
-from secs.data.datamodule import MolBindDataModule
-from secs.data.molbind_dataset import MolBindDataset
+from secs.data.datamodule import SECSDataModule
+from secs.data.secs_dataset import SECSDataset
 from secs.models.lightning_module import MolBindModule
 
 load_dotenv()
@@ -51,7 +51,7 @@ def train_molbind(config: DictConfig):
     data = load_dataset(
         config.data.dataset_path, config.data.dataset_config if hasattr(config.data, "dataset_config") else "default"
     )
-    features = [*config.data.modalities, config.data.central_modality]#, "x_min", "x_max"]
+    features = [*config.data.modalities, config.data.central_modality]  # , "x_min", "x_max"]
     train_data = data["train"].to_pandas()[features]
     logger.info(f"Train data shape: {train_data.shape}")
     valid_data = data["val"].to_pandas()[features]
@@ -64,14 +64,14 @@ def train_molbind(config: DictConfig):
 
     # set up the dataloaders
     train_dataloader, valid_dataloader = (
-        MolBindDataset(
+        SECSDataset(
             central_modality=config.data.central_modality,
             other_modalities=config.data.modalities,
             data=train_shuffled_data,
             context_length=config.data.context_length,
             config=config,
         ).build_datasets_for_modalities(),
-        MolBindDataset(
+        SECSDataset(
             central_modality=config.data.central_modality,
             other_modalities=config.data.modalities,
             data=valid_shuffled_data,
@@ -81,7 +81,7 @@ def train_molbind(config: DictConfig):
         ).build_datasets_for_modalities(),
     )
     # set up the data module
-    datamodule = MolBindDataModule(
+    datamodule = SECSDataModule(
         data={
             "train": train_dataloader,
             "val": valid_dataloader,
@@ -166,7 +166,7 @@ def _get_first_node():
     return nodelist
 
 
-def init_distributed_mode(port=12354):
+def init_distributed_mode(port: int = 12354):
     """Initialize some environment variables for PyTorch Distributed
     using Slurm.
     """

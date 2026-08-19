@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from loguru import logger
 from omegaconf import DictConfig
 
-from secs.data.datamodule import MolBindDataModule
+from secs.data.datamodule import SECSDataModule
 from secs.models.lightning_module import MolBindModule
 
 load_dotenv()
@@ -44,7 +44,7 @@ def embed(config: DictConfig):
         logger.error(f"Format {data_format} not supported")
 
     # Split the data into validation and training datasets
-    dataloader = MolBindDataModule(
+    dataloader = SECSDataModule(
         data={
             "dataloader_arguments": {
                 "batch_size": config.data.batch_size,
