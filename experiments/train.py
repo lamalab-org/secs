@@ -18,7 +18,7 @@ from pytorch_lightning.strategies.ddp import DDPStrategy
 
 from secs.data.datamodule import SECSDataModule
 from secs.data.secs_dataset import SECSDataset
-from secs.models.lightning_module import MolBindModule
+from secs.models.lightning_module import SECSModule
 
 load_dotenv()
 
@@ -125,7 +125,7 @@ def train_molbind(config: DictConfig):
     )
     # train the model
     trainer.fit(
-        model=MolBindModule(config),
+        model=SECSModule(config),
         datamodule=datamodule,
     )
     # copy the best model under the name "best_model"

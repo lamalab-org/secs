@@ -15,7 +15,7 @@ from secs.data.analysis import aggregate_embeddings
 from secs.data.datamodule import SECSDataModule
 from secs.data.secs_dataset import SECSDataset
 from secs.metrics.retrieval import full_database_retrieval
-from secs.models.lightning_module import MolBindModule
+from secs.models.lightning_module import SECSModule
 from secs.utils.utils import HANDLERS as handlers
 
 load_dotenv()
@@ -70,7 +70,7 @@ def embed(config: DictConfig):
     )
 
     predictions = trainer.predict(
-        model=MolBindModule(config),
+        model=SECSModule(config),
         datamodule=datamodule,
     )
     with open(f"{config.embeddings_path}_{RETRIEVAL_TIME}.pkl", "wb") as f:

@@ -12,7 +12,7 @@ from loguru import logger
 from omegaconf import DictConfig
 
 from secs.data.datamodule import SECSDataModule
-from secs.models.lightning_module import MolBindModule
+from secs.models.lightning_module import SECSModule
 
 load_dotenv()
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
@@ -52,7 +52,7 @@ def embed(config: DictConfig):
             },
         },
     ).embed_dataloader(data.tokens.to_list())
-    predictions = trainer.predict(model=MolBindModule(config), dataloaders=[dataloader])
+    predictions = trainer.predict(model=SECSModule(config), dataloaders=[dataloader])
     with open(f"/data/mirzaa/pubchem_embeddings_{RETRIEVAL_TIME}.pkl", "wb") as f:  # noqa: PTH123
         pkl.dump(predictions, f, protocol=pkl.HIGHEST_PROTOCOL)
     logger.info(f"Saved embeddings to /data/mirzaa/pubchem_embeddings_{RETRIEVAL_TIME}.pkl")

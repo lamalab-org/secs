@@ -19,7 +19,7 @@ from secs.models.model import MolBind
 from secs.utils import rename_keys_with_prefix, select_device
 
 
-class MolBindModule(LightningModule):
+class SECSModule(LightningModule):
     def __init__(self, cfg: DictConfig) -> None:
         super().__init__()
         self.model = MolBind(cfg=cfg)
