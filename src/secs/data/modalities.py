@@ -1,7 +1,10 @@
 from enum import Enum, StrEnum
+from typing import NamedTuple
+
+from transformers import PreTrainedTokenizerBase
 
 from secs.data import GeneralDataset, HSQCDataset, IrDataset, StringDataset, cNmrDataset, hNmrDataset
-from secs.data.components.mb_tokenizers import SMILES_TOKENIZER
+from secs.data.components.secs_tokenizers import SMILES_TOKENIZER
 from secs.models import (
     HSQCEncoder,
     IrCNNEncoder,
@@ -10,6 +13,13 @@ from secs.models import (
     cNmrEncoder,
     hNmrCNNEncoder,
 )
+
+
+class ModalitySpec(NamedTuple):
+    data_type: type
+    dataset: type
+    encoder: type
+    tokenizer: PreTrainedTokenizerBase | None = None
 
 
 class StringModalities(StrEnum):
@@ -39,12 +49,12 @@ class ModalityConstants(Enum):
     ModalityConstants[modality]: (data_type, dataset, encoder, tokenizer)
     """
 
-    c_nmr = (list, cNmrDataset, cNmrEncoder, None)
-    h_nmr = (list, hNmrDataset, hNmrCNNEncoder, None)
-    ir = (list, IrDataset, IrCNNEncoder, None)
-    smiles = (str, StringDataset, SmilesEncoder, SMILES_TOKENIZER)
-    hsqc = (list, HSQCDataset, HSQCEncoder, None)
-    general = (list, GeneralDataset, SfmEmbeddingModel, None)
+    c_nmr = ModalitySpec(list, cNmrDataset, cNmrEncoder)
+    h_nmr = ModalitySpec(list, hNmrDataset, hNmrCNNEncoder)
+    ir = ModalitySpec(list, IrDataset, IrCNNEncoder)
+    smiles = ModalitySpec(str, StringDataset, SmilesEncoder, SMILES_TOKENIZER)
+    hsqc = ModalitySpec(list, HSQCDataset, HSQCEncoder)
+    general = ModalitySpec(list, GeneralDataset, SfmEmbeddingModel)
 
     @property
     def data_type(self):

@@ -4,7 +4,7 @@ import pandas as pd
 from torch import Tensor
 from torch.utils.data import Dataset
 
-from secs.data.available import (
+from secs.data.modalities import (
     ModalityConstants,
     NonStringModalities,
     StringModalities,
@@ -190,7 +190,10 @@ class SECSDataset:
         context_length: int,
         modality: str,
     ) -> tuple[Tensor, Tensor]:
-        tokenized_data = ModalityConstants[modality].tokenizer(
+
+        t = ModalityConstants[modality].tokenizer
+
+        tokenized_data = t(
             dataset,
             padding="max_length",
             truncation=True,

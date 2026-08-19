@@ -9,7 +9,7 @@ from secs.models import ProjectionHead
 class MolBind(nn.Module):
     def __init__(self, cfg: DictConfig) -> None:
         super().__init__()
-        from secs.data.available import ModalityConstants
+        from secs.data.modalities import ModalityConstants
 
         modalities = cfg.data.modalities
         central_modality = cfg.data.central_modality

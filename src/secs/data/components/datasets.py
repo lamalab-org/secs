@@ -26,7 +26,7 @@ class StringDataset(Dataset):
             central_modality (str): name of central modality as found in ModalityConstants
             other_modality (str): name of other modality as found in ModalityConstants
         """
-        from secs.data.available import ModalityConstants
+        from secs.data.modalities import ModalityConstants
 
         # modality pair definition
         self.central_modality = central_modality
@@ -314,7 +314,7 @@ class hNmrDataset(Dataset):
 class StringDatasetEmbedding(Dataset):
     def __init__(
         self,
-        data: list[list[str]],
+        data: list[list[int]],
     ) -> None:
         self.data = data
 
