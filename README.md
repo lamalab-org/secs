@@ -9,8 +9,8 @@
 It is recommmended to use `uv` for creating a virtual environment. The instructions to install `uv` can be found on [uv's homepage](https://docs.astral.sh/uv/getting-started/installation/).
 
 ```conda
-uv venv --python 3.11 molbind
-source molbind/bin/activate
+uv venv --python 3.11 secs
+source secs/bin/activate
 uv pip install -e .
 ```
 
