@@ -1,7 +1,6 @@
 from functools import partial
 
 import pandas as pd
-import polars as pl
 from torch import Tensor
 from torch.utils.data import Dataset
 

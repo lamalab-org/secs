@@ -1,37 +1,27 @@
 import re
 from collections import defaultdict
+from typing import Dict, List, Optional
 
 import numpy as np
-import polars as pl
 from rdkit import Chem
 from rdkit.Chem import rdMolDescriptors
 from scipy.interpolate import interp1d
 
 
 def get_atom_counts_from_formula(formula_string: str) -> dict[str, int]:
-    """
-    Parses a simple molecular formula string into a dictionary of atom counts.
+    """Parses a simple molecular formula string into a dictionary of atom counts.
     Example: "C6H12O6" -> {'C': 6, 'H': 12, 'O': 6}
-    Handles elements with one or two letters and optional counts.
-    Assumes "flat" formulas (e.g., no parentheses or complex structures).
+
+    Args:
+        formula_string (str): Molecular formula
+
+    Returns:
+        dict[str, int]: Atom types and counts dictionary
     """
 
     counts = defaultdict(int)
-    # Regex: ([A-Z][a-z]?) matches an element symbol (e.g., C, Cl)
-    #        (\d*) matches an optional count number
-    pattern = re.compile(r"([A-Z][a-z]?)(\d*)")
-
-    parsed_length = 0
-    for match in pattern.finditer(formula_string):
-        if match.start() != parsed_length:
-            pass
-
-        element = match.group(1)
-        count_str = match.group(2)
-
-        count = int(count_str) if count_str else 1
-        counts[element] += count
-        parsed_length = match.end()
+    for element, count in re.findall(r"([A-Z][a-z]?)(\d*)", formula_string):
+        counts[element] += int(count) if count else 1
     return dict(counts)
 
 
@@ -55,9 +45,6 @@ def build_formula_string(atom_counts: dict) -> str:
             parts.append(element if count == 1 else f"{element}{count}")
 
     return "".join(parts)
-
-
-from typing import Dict, List, Optional
 
 
 def _apply_deltas(base: Dict[str, int], deltas: Dict[str, int]) -> Optional[Dict[str, int]]:

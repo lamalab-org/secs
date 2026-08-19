@@ -10,8 +10,8 @@ import rootutils
 from dotenv import load_dotenv
 from loguru import logger
 from omegaconf import DictConfig
-
 from secs.data.analysis import aggregate_embeddings
+
 from secs.data.datamodule import SECSDataModule
 from secs.data.secs_dataset import SECSDataset
 from secs.metrics.retrieval import full_database_retrieval
