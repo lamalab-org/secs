@@ -35,7 +35,6 @@ from secs.elucidation.verifiers import (
     PeakCountVerifier,
     SimulatedShiftVerifier,
     SpectrumSimulator,
-    UnsaturationVerifier,
     Verifier,
     hungarian_peak_distance,
 )
@@ -68,7 +67,6 @@ __all__ = [
     "StaticCandidateSource",
     "SyntheticAccessibility",
     "TrajectoryCallback",
-    "UnsaturationVerifier",
     "ValidityPenalty",
     "Verifier",
     "WeightedObjective",

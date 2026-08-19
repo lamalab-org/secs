@@ -7,10 +7,8 @@ from secs.elucidation import (
     HttpShiftSimulator,
     PeakCountVerifier,
     SimulatedShiftVerifier,
-    UnsaturationVerifier,
     WeightedObjective,
 )
-from secs.elucidation.molecules import atom_counts
 from secs.elucidation.verifiers import VERIFIER_RESOLVER, n_distinct_environments
 from secs.elucidation.verifiers.metrics import greedy_peak_distance, hungarian_peak_distance
 
@@ -131,12 +129,6 @@ def test_verifier_scores_are_never_positive():
 def test_peak_count_verifier_rejects_a_nonsense_target():
     with pytest.raises(ValueError, match="must be positive"):
         PeakCountVerifier(n_observed_peaks=0)
-
-
-def test_unsaturation_verifier_rewards_the_right_skeleton():
-    verifier = UnsaturationVerifier(atom_counts("c1ccccc1"))
-    assert verifier.verify("c1ccccc1") == pytest.approx(0.0)
-    assert verifier.verify("CCCCCC") < 0.0
 
 
 def test_simulated_shift_verifier_ranks_a_good_simulator_highly():

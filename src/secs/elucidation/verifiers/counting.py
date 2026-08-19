@@ -65,35 +65,3 @@ class PeakCountVerifier(Verifier):
         required = self.n_observed_peaks - self.solvent_tolerance
         shortfall = max(required - n, 0)
         return -min(shortfall / self.n_observed_peaks, 1.0)
-
-
-class UnsaturationVerifier(Verifier):
-    """Checks the degree of unsaturation implied by the target formula.
-
-    Rings plus pi bonds are strongly constrained by a formula, so this
-    catches candidates that satisfy the atom counts with the wrong skeleton.
-    """
-
-    name = "unsaturation"
-
-    def __init__(self, target_counts: dict[str, int]) -> None:
-        self.target_dou = self.degree_of_unsaturation(target_counts)
-
-    @staticmethod
-    def degree_of_unsaturation(counts: dict[str, int]) -> float:
-        carbon = counts.get("C", 0)
-        hydrogen = counts.get("H", 0)
-        nitrogen = counts.get("N", 0)
-        halogens = sum(counts.get(x, 0) for x in ("F", "Cl", "Br", "I"))
-        return (2 * carbon + 2 + nitrogen - hydrogen - halogens) / 2
-
-    def verify(self, smiles: str) -> float:
-        mol = Chem.MolFromSmiles(smiles)
-        if mol is None:
-            return -1.0
-        mol = Chem.AddHs(mol)
-        counts: dict[str, int] = {}
-        for atom in mol.GetAtoms():
-            counts[atom.GetSymbol()] = counts.get(atom.GetSymbol(), 0) + 1
-        gap = abs(self.degree_of_unsaturation(counts) - self.target_dou)
-        return -min(gap / max(self.target_dou, 1.0), 1.0)

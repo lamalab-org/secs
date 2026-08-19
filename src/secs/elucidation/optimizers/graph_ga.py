@@ -61,4 +61,5 @@ class GraphGAOptimizer(MoleculeOptimizer):
             population=population,
             n_evaluated=state.n_evaluated,
             generations=state.generation,
+            all_scored=state.ranked(),
         )

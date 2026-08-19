@@ -18,6 +18,10 @@ class OptimizerResult:
     population: list[tuple[str, float]] = field(default_factory=list)
     n_evaluated: int = 0
     generations: int = 0
+    # Every molecule scored during the search, best first. `population` is only
+    # what survived selection, so it hides the molecules the objective saw and
+    # rejected -- which is most of what an experiment wants to look at.
+    all_scored: list[tuple[str, float]] = field(default_factory=list)
 
     @property
     def best(self) -> tuple[str, float] | None:
@@ -60,4 +64,5 @@ class ScoreOnlyOptimizer(MoleculeOptimizer):
         cached = self._wrap(objective, initial_population)
         cached.eval_batch(initial_population)
         state = cached.state
-        return OptimizerResult(population=state.ranked(), n_evaluated=state.n_evaluated, generations=0)
+        ranked = state.ranked()
+        return OptimizerResult(population=ranked, n_evaluated=state.n_evaluated, generations=0, all_scored=ranked)

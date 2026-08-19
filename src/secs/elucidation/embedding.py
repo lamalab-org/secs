@@ -9,9 +9,6 @@ from secs.data.modalities import ModalityConstants
 from secs.models import MolBind
 from secs.utils import rename_keys_with_prefix, select_device
 
-# SECSModule keeps a frozen reference copy of the central encoder for its KL
-# term. Those tensors are saved in the checkpoint but are not part of MolBind,
-# so they must be dropped before a strict load.
 LIGHTNING_ONLY_PREFIXES = ("reference_encoder.", "reference_proj.")
 
 
