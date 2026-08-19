@@ -24,11 +24,7 @@ def get_atom_counts_from_formula(formula_string: str) -> dict[str, int]:
     parsed_length = 0
     for match in pattern.finditer(formula_string):
         if match.start() != parsed_length:
-            # This indicates unparsed characters, suggesting a complex or malformed formula.
-            # For this scope, we assume simple formulas and might ignore such parts or errors.
-            # Example: "CH(CH3)2" - (CH3)2 part would be problematic.
-            # Consider raising ValueError for stricter parsing if needed.
-            pass  # Silently continue with what was parsed.
+            pass
 
         element = match.group(1)
         count_str = match.group(2)
@@ -41,173 +37,101 @@ def get_atom_counts_from_formula(formula_string: str) -> dict[str, int]:
 
 def build_formula_string(atom_counts: dict) -> str:
     """
-    Constructs a molecular formula string from a dictionary of atom counts.
-    Follows Hill system convention (C, then H, then other elements alphabetically).
-    Omits elements with counts <= 0. Omits count if it's 1.
-    Example: {'C': 6, 'H': 12, 'O': 6} -> "C6H12O6"
-             {'C': 1, 'H': 4} -> "CH4"
+    Hill-system formula string: C, H, then others alphabetically; omits counts <= 0 and '1'.
+
+    Args:
+        atom_counts (dict): The atom count dictionary {"C": 10, "H": 12, "O": 6}
+
+    Returns:
+        str: The molecular formula
     """
-    if not isinstance(atom_counts, dict):
-        return ""  # Or raise TypeError
+    others = sorted(e for e in atom_counts if e not in ("C", "H"))
+    element_order = ["C", "H"] + others
 
-    formula_parts = []
+    parts = []
+    for element in element_order:
+        count = atom_counts.get(element, 0)
+        if count > 0:
+            parts.append(element if count == 1 else f"{element}{count}")
 
-    # Carbon is typically first
-    c_count = atom_counts.get("C", 0)
-    if c_count > 0:
-        formula_parts.append("C")
-        if c_count > 1:
-            formula_parts.append(str(c_count))
-
-    # Hydrogen is typically second (if Carbon is present or by convention)
-    h_count = atom_counts.get("H", 0)
-    if h_count > 0:
-        formula_parts.append("H")
-        if h_count > 1:
-            formula_parts.append(str(h_count))
-
-    # Other elements, sorted alphabetically
-    other_elements = sorted([el for el in atom_counts if el not in ("C", "H") and atom_counts.get(el, 0) > 0])
-
-    for el_symbol in other_elements:
-        count = atom_counts[el_symbol]  # Already filtered for count > 0
-        formula_parts.append(el_symbol)
-        if count > 1:
-            formula_parts.append(str(count))
-
-    return "".join(formula_parts)
+    return "".join(parts)
 
 
-def gen_close_molformulas_from_seed(seed_formula: str) -> list:
-    initial_counts = get_atom_counts_from_formula(seed_formula)
+from typing import Dict, List, Optional
 
-    carbons = initial_counts.get("C", 0)
-    hydrogens = initial_counts.get("H", 0)
-    nitrogens = initial_counts.get("N", 0)
-    chlorine = initial_counts.get("Cl", 0)
-    bromine = initial_counts.get("Br", 0)
-    fluorine = initial_counts.get("F", 0)
-    phosphorus_orig = initial_counts.get("P", 0)  # Renamed to avoid conflict
-    sulphur_orig = initial_counts.get("S", 0)  # Renamed to avoid conflict
 
-    generated_formulas = []
+def _apply_deltas(base: Dict[str, int], deltas: Dict[str, int]) -> Optional[Dict[str, int]]:
+    """Apply atom-count deltas; return None if any count would go negative."""
+    counts = base.copy()
+    for elem, d in deltas.items():
+        counts[elem] = counts.get(elem, 0) + d
+        if counts[elem] < 0:
+            return None
+    # Drop zero-count elements
+    return {e: c for e, c in counts.items() if c > 0}
 
-    # Transformations based on original logic, applied to atom counts
 
-    # 0: C-3, H-6
-    counts = initial_counts.copy()
-    counts["C"] = carbons - 3
-    counts["H"] = hydrogens - 6
-    generated_formulas.append(build_formula_string(counts))
+def _zero_out(base: Dict[str, int], elements: List[str], h_delta: int) -> Optional[Dict[str, int]]:
+    """Remove given elements entirely, adjusting H. Return None if nothing changed."""
+    if not any(base.get(e, 0) > 0 for e in elements):
+        return None  # transformation is a no-op
+    counts = {e: c for e, c in base.items() if e not in elements and c > 0}
+    counts["H"] = counts.get("H", 0) + h_delta
+    if counts["H"] < 0:
+        return None
+    return counts
 
-    # 1: C+1, H+2
-    counts = initial_counts.copy()
-    counts["C"] = carbons + 1
-    counts["H"] = hydrogens + 2
-    generated_formulas.append(build_formula_string(counts))
 
-    # 2: C-1, H-2
-    counts = initial_counts.copy()
-    counts["C"] = carbons - 1
-    counts["H"] = hydrogens - 2
-    generated_formulas.append(build_formula_string(counts))
+def gen_close_molformulas_from_seed(seed_formula: str) -> List[str]:
+    """
+    Generate chemically plausible 'neighbor' molecular formulas of a seed.
+    """
+    if not seed_formula or not isinstance(seed_formula, str):
+        raise ValueError(f"Invalid seed formula: {seed_formula!r}")
 
-    # 3: C+2, H+4
-    counts = initial_counts.copy()
-    counts["C"] = carbons + 2
-    counts["H"] = hydrogens + 4
-    generated_formulas.append(build_formula_string(counts))
+    initial = get_atom_counts_from_formula(seed_formula)
+    if not initial or all(v <= 0 for v in initial.values()):
+        raise ValueError(f"Could not parse formula: {seed_formula!r}")
 
-    # 4: C-2, H-4
-    counts = initial_counts.copy()
-    counts["C"] = carbons - 2
-    counts["H"] = hydrogens - 4
-    generated_formulas.append(build_formula_string(counts))
+    # Simple delta-based transformations
+    delta_sets: List[Dict[str, int]] = [
+        {"C": -3, "H": -6},
+        {"C": +1, "H": +2},
+        {"C": -1, "H": -2},
+        {"C": +2, "H": +4},
+        {"C": -2, "H": -4},
+        {"N": +1, "H": +1},
+        {"N": -1, "H": -1},
+        {"Cl": +1, "H": +1},
+        {"Cl": -1, "H": -1},
+        {"Br": +1, "H": +1},
+        {"Br": -1, "H": -1},
+        {"F": +1, "H": +1},
+        {"S": +1},
+        {"S": -1},
+        {"P": +1},
+        {"P": -1},
+    ]
 
-    # 5: N+1, H+1
-    counts = initial_counts.copy()
-    counts["N"] = nitrogens + 1
-    counts["H"] = hydrogens + 1
-    generated_formulas.append(build_formula_string(counts))
+    candidates: List[Optional[Dict[str, int]]] = [_apply_deltas(initial, d) for d in delta_sets]
 
-    # 6: N-1, H-1
-    counts = initial_counts.copy()
-    counts["N"] = nitrogens - 1
-    counts["H"] = hydrogens - 1
-    generated_formulas.append(build_formula_string(counts))
+    # Structural removals
+    total_halogens = sum(initial.get(x, 0) for x in ("Cl", "Br", "F"))
+    candidates.append(_zero_out(initial, ["Cl", "Br", "F"], h_delta=total_halogens))
+    candidates.append(_zero_out(initial, ["P"], h_delta=5))
+    candidates.append(_zero_out(initial, ["S"], h_delta=4))
 
-    # 7: Cl+1, H+1
-    counts = initial_counts.copy()
-    counts["Cl"] = chlorine + 1
-    counts["H"] = hydrogens + 1
-    generated_formulas.append(build_formula_string(counts))
-
-    # 8: Cl-1, H-1
-    counts = initial_counts.copy()
-    counts["Cl"] = chlorine - 1
-    counts["H"] = hydrogens - 1
-    generated_formulas.append(build_formula_string(counts))
-
-    # 9: Br+1, H+1
-    counts = initial_counts.copy()
-    counts["Br"] = bromine + 1
-    counts["H"] = hydrogens + 1
-    generated_formulas.append(build_formula_string(counts))
-
-    # 10: Br-1, H-1
-    counts = initial_counts.copy()
-    counts["Br"] = bromine - 1
-    counts["H"] = hydrogens - 1
-    generated_formulas.append(build_formula_string(counts))
-
-    # 11: F+1, H+1
-    counts = initial_counts.copy()
-    counts["F"] = fluorine + 1
-    counts["H"] = hydrogens + 1
-    generated_formulas.append(build_formula_string(counts))
-
-    # 12: Remove Cl, Br, F. H_new = H_original + total_original_halogens.
-    total_halogens_original = initial_counts.get("Cl", 0) + initial_counts.get("Br", 0) + initial_counts.get("F", 0)
-    counts = initial_counts.copy()
-    counts["H"] = hydrogens + total_halogens_original
-    counts["Cl"] = 0
-    counts["Br"] = 0
-    counts["F"] = 0
-    generated_formulas.append(build_formula_string(counts))
-
-    # 13: P becomes 0. H_new = H_original + 5.
-    counts = initial_counts.copy()
-    counts["H"] = hydrogens + 5
-    counts["P"] = 0
-    generated_formulas.append(build_formula_string(counts))
-
-    # 14: S becomes 0. H_new = H_original + 4.
-    counts = initial_counts.copy()
-    counts["H"] = hydrogens + 4
-    counts["S"] = 0
-    generated_formulas.append(build_formula_string(counts))
-
-    # 15: S+1
-    counts = initial_counts.copy()
-    counts["S"] = sulphur_orig + 1
-    generated_formulas.append(build_formula_string(counts))
-
-    # 16: S-1
-    counts = initial_counts.copy()
-    counts["S"] = sulphur_orig - 1
-    generated_formulas.append(build_formula_string(counts))
-
-    # 17: P+1
-    counts = initial_counts.copy()
-    counts["P"] = phosphorus_orig + 1
-    generated_formulas.append(build_formula_string(counts))
-
-    # 18: P-1
-    counts = initial_counts.copy()
-    counts["P"] = phosphorus_orig - 1
-    generated_formulas.append(build_formula_string(counts))
-
-    return generated_formulas
+    seed_canonical = build_formula_string({e: c for e, c in initial.items() if c > 0})
+    seen = set()
+    results: List[str] = []
+    for counts in candidates:
+        if counts is None:
+            continue
+        formula = build_formula_string(counts)
+        if formula and formula != seed_canonical and formula not in seen:
+            seen.add(formula)
+            results.append(formula)
+    return results
 
 
 def smiles_to_molecular_formula(smiles: str) -> str:
@@ -218,17 +142,7 @@ def smiles_to_molecular_formula(smiles: str) -> str:
     return rdMolDescriptors.CalcMolFormula(mol)
 
 
-def convert_to_molecular_formulas(datafile: str) -> list[str]:
-    """Converts a datafile to a list of molecular formulas using Polars."""
-    # Read the pickle file
-    data = pl.read_pickle(datafile)
-    data = data.with_columns(pl.col("smiles").map_elements(smiles_to_molecular_formula).alias("molecular_formula"))
-
-    # Convert to list and return
-    return data["molecular_formula"].to_list()
-
-
-def is_neutral_no_isotopes(smiles):
+def is_neutral_no_isotopes(smiles: str) -> bool:
     """Check if molecule is neutral and contains no isotopes"""
     try:
         mol = Chem.MolFromSmiles(smiles)
@@ -247,7 +161,7 @@ def is_neutral_no_isotopes(smiles):
         return False
 
 
-def reduce_resolution_by_averaging(vector, window_size):
+def reduce_resolution_by_averaging(vector: np.ndarray, window_size: int) -> np.ndarray:
     """
     Reduces the resolution of a vector by window averaging and interpolation.
 

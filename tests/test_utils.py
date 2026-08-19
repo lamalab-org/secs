@@ -1,4 +1,4 @@
-from secs.utils.utils import find_all_pairs_in_list
+from secs.utils import find_all_pairs_in_list
 
 
 def test_pairing_function():
