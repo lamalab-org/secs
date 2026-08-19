@@ -42,14 +42,10 @@ def read_cached_CID_smiles_in_batches(batch_size=1_999_968):
         # Parallel canonicalization
         canonical_smiles = parallel_canonicalize(smiles_batch)
         # Add canonical SMILES to the dataframe
-        batch_ = batch.with_columns(
-            [pl.Series(canonical_smiles).alias("canonical_smiles")]
-        )
+        batch_ = batch.with_columns([pl.Series(canonical_smiles).alias("canonical_smiles")])
 
         # Save batch as a parquet file
-        batch_.write_parquet(
-            f"pubchem_canonical/CID-SMILES-canonical-batch-{batch_index}.parquet"
-        )
+        batch_.write_parquet(f"pubchem_canonical/CID-SMILES-canonical-batch-{batch_index}.parquet")
         logger.info(f"Batch {batch_index} processed and saved.")
 
     logger.info("Processing completed and data saved.")

@@ -15,7 +15,6 @@ from mol_ga.preconfigured_gas import default_ga
 from prune_sim import gpu_encode_smiles_variable, load_models_dict, tanimoto_similarity
 from rdkit import Chem  # For atom counts
 
-# Use the SAME helper and SimpleMoleculeAnalyzer's PKL config definition
 from retrieval import SimpleMoleculeAnalyzer, get_1d_target_embedding_from_raw_batches_pkl
 from torch.nn.functional import cosine_similarity as torch_cosine_similarity
 from tqdm import tqdm
