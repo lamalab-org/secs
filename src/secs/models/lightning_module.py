@@ -1,4 +1,5 @@
 import contextlib
+import copy
 import os
 
 import torch
@@ -41,7 +42,6 @@ class SECSModule(LightningModule):
         self.per_device_batch_size = cfg.data.batch_size
         self.batch_size = self.per_device_batch_size * self.world_size
         self.central_modality = cfg.data.central_modality
-        import copy
 
         # freeze a reference copy of the central-modality encoder
         self.reference_encoder = copy.deepcopy(self.model.dict_encoders[self.central_modality])

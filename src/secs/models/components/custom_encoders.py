@@ -28,11 +28,7 @@ class SmilesEncoder(BaseModalityEncoder):
             input_ids=token_ids,
             attention_mask=attention_mask,
         )
-        emb = output.pooler_output
-        if len(x) == 4:
-            x_min, x_max = x[2], x[3]
-            emb = torch.concat([emb, x_min.unsqueeze(-1), x_max.unsqueeze(-1)], dim=-1)
-        return emb
+        return output.pooler_output
 
 
 class IrCNNEncoder(nn.Module):

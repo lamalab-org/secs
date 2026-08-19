@@ -3,12 +3,11 @@ from typing import NamedTuple
 
 from transformers import PreTrainedTokenizerBase
 
-from secs.data import GeneralDataset, HSQCDataset, IrDataset, StringDataset, cNmrDataset, hNmrDataset
+from secs.data import HSQCDataset, IrDataset, StringDataset, cNmrDataset, hNmrDataset
 from secs.data.components.secs_tokenizers import SMILES_TOKENIZER
 from secs.models import (
     HSQCEncoder,
     IrCNNEncoder,
-    SfmEmbeddingModel,
     SmilesEncoder,
     cNmrEncoder,
     hNmrCNNEncoder,
@@ -28,7 +27,6 @@ class StringModalities(StrEnum):
     POLYMER_NAME = "polymer_name"
     IUPAC_NAME = "iupac_name"
     PSMILES = "psmiles"
-    GENERAL = "general"
 
 
 class NonStringModalities(StrEnum):
@@ -41,7 +39,6 @@ class NonStringModalities(StrEnum):
     BIGSMILES = "bigsmiles"
     POLYMER_NAME = "polymer_name"
     PSMILES = "psmiles"
-    GENERAL = "general"
 
 
 class ModalityConstants(Enum):
@@ -54,7 +51,6 @@ class ModalityConstants(Enum):
     ir = ModalitySpec(list, IrDataset, IrCNNEncoder)
     smiles = ModalitySpec(str, StringDataset, SmilesEncoder, SMILES_TOKENIZER)
     hsqc = ModalitySpec(list, HSQCDataset, HSQCEncoder)
-    general = ModalitySpec(list, GeneralDataset, SfmEmbeddingModel)
 
     @property
     def data_type(self):

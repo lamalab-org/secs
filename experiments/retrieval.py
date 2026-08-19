@@ -73,7 +73,7 @@ def embed(config: DictConfig):
         model=SECSModule(config),
         datamodule=datamodule,
     )
-    with open(f"{config.embeddings_path}_{RETRIEVAL_TIME}.pkl", "wb") as f:
+    with Path(f"{config.embeddings_path}_{RETRIEVAL_TIME}.pkl").open("wb") as f:
         pkl.dump(predictions, f, protocol=pkl.HIGHEST_PROTOCOL)
 
     aggregated_embeddings = aggregate_embeddings(
@@ -82,7 +82,7 @@ def embed(config: DictConfig):
         central_modality=config.data.central_modality,
     )
     # # concatenate predictions outside of this script and save predictions
-    with open(f"{config.embeddings_path}.pkl", "wb") as f:
+    with Path(f"{config.embeddings_path}.pkl").open("wb") as f:
         pkl.dump(aggregated_embeddings, f, protocol=pkl.HIGHEST_PROTOCOL)
 
     logger.info(f"Saved embeddings to {config.embeddings_path}.pkl")

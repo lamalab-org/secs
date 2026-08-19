@@ -1,5 +1,4 @@
 from secs.data.components.datasets import (
-    GeneralDataset,
     HSQCDataset,
     IrDataset,
     StringDataset,
@@ -9,7 +8,6 @@ from secs.data.components.datasets import (
 from secs.data.components.hnmr import augment as augment_hnmr
 
 __all__ = [
-    "GeneralDataset",
     "HSQCDataset",
     "IrDataset",
     "StringDataset",

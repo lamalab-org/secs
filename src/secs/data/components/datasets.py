@@ -169,41 +169,6 @@ class IrDataset(Dataset):
         }
 
 
-class GeneralDataset(Dataset):
-    def __init__(
-        self,
-        data: list[list[float]],
-        **kwargs,
-    ) -> None:
-        self.general = data
-        # self.min_value = min_value
-        # self.max_value = max_value
-        self.central_modality = kwargs["central_modality"]
-        self.other_modality = "general"
-        self.central_modality_data = kwargs["central_modality_data"]
-        self.pad_length = 10000
-
-    def __len__(self):
-        return len(self.general)
-
-    def __getitem__(self, index: int) -> dict:
-        general = torch.tensor(self.general[index], dtype=torch.float32)
-        # interpolate to self.pad_length points
-        general = general.unsqueeze(0).unsqueeze(0)  # (1, 1, L)
-        general = (
-            torch.nn.functional.interpolate(general, size=self.pad_length, mode="linear", align_corners=False)
-            .squeeze(0)
-            .squeeze(0)
-        )  # (pad_length,)
-        general = (general - general.min()) / (general.max() - general.min())
-        general = general.unsqueeze(0)
-
-        return {
-            self.central_modality: [g[index] for g in self.central_modality_data],
-            self.other_modality: general,
-        }
-
-
 class MassSpecDataset(Dataset):
     def __init__(
         self,

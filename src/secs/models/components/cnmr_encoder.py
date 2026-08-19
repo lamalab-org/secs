@@ -1,9 +1,9 @@
 import math
 
 import torch
-from loguru import logger
 import torch.nn as nn
 import torch.nn.functional as F
+from loguru import logger
 
 
 class FourierShiftEmbedding(nn.Module):
@@ -46,8 +46,7 @@ class PeakTokenizer(nn.Module):
 
     def forward(self, shifts, mask):  # (B,P),(B,P) -> tokens (B,P,dim)
         tok = self.pos(shifts) + self.peak_token
-        tok = tok * mask.unsqueeze(-1)  # zero out padding
-        return tok
+        return tok * mask.unsqueeze(-1)  # zero out padding
 
 
 class AttentionPool(nn.Module):

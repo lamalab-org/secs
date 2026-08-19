@@ -311,7 +311,7 @@ class ScalableCNNEncoder2D(nn.Module):
             x = stage_module(x)
 
         if self.use_attention and self.attention is not None:
-            B, C, H, W = x.shape
+            _batch, _channels, H, W = x.shape
             x_att = x.flatten(2).transpose(1, 2)  # (B, H*W, C)
             att_output, _ = self.attention(x_att, x_att, x_att)
             x_att = self.attention_norm(x_att + att_output)  # Post-norm

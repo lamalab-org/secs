@@ -39,7 +39,6 @@ projection_heads:
   smiles_is_on: True
   c_nmr_is_on: True
   ir_is_on: True
-  general_is_on: True
   h_nmr_is_on: True
   image_is_on: True
   iupac_name_is_on: True
@@ -78,9 +77,6 @@ projection_heads:
     dims: [512, "${model.embedding_size}"]
     activation: LeakyReLU
   multi_spec:
-    dims: [512, "${model.embedding_size}"]
-    activation: LeakyReLU
-  general:
     dims: [512, "${model.embedding_size}"]
     activation: LeakyReLU
 

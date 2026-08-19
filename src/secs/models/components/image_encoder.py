@@ -1,5 +1,3 @@
-from typing import List
-
 import torch
 import torch.nn as nn
 from loguru import logger
@@ -39,10 +37,10 @@ class MolScribeImageEncoder(nn.Module):
 
     def _initialize_encoder(self, ckpt_path: str | None, repo_id: str, checkpoint_filename: str) -> None:
         # Imported lazily so the project does not hard-depend on molscribe.
-        from molscribe import MolScribe
+        from molscribe import MolScribe  # noqa: PLC0415  (optional dependency)
 
         if ckpt_path is None:
-            from huggingface_hub import hf_hub_download
+            from huggingface_hub import hf_hub_download  # noqa: PLC0415  (only needed to fetch weights)
 
             ckpt_path = hf_hub_download(repo_id, checkpoint_filename)
 
@@ -102,7 +100,7 @@ class ImageEncoder(nn.Module):
                         Defaults to False
         :return: torch.nn.Sequential module as feature-extractor
         """
-        layers: List[nn.Module] = []  # noqa: UP006
+        layers: list[nn.Module] = []
 
         in_channels = 1
         for v in self.cfg:

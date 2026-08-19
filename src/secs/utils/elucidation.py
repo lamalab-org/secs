@@ -35,7 +35,7 @@ def build_formula_string(atom_counts: dict) -> str:
         str: The molecular formula
     """
     others = sorted(e for e in atom_counts if e not in ("C", "H"))
-    element_order = ["C", "H"] + others
+    element_order = ["C", "H", *others]
 
     parts = []
     for element in element_order:
@@ -172,6 +172,4 @@ def reduce_resolution_by_averaging(vector: np.ndarray, window_size: int) -> np.n
     interp_func = interp1d(averaged_x, averaged_vector, kind="linear", fill_value="extrapolate")
 
     # Apply the interpolation function to the original x-coordinates
-    new_vector = interp_func(original_x)
-
-    return new_vector
+    return interp_func(original_x)
