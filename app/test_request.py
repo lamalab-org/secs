@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import requests
 
-from molbind.utils.spec2struct import smiles_to_molecular_formula
+from secs.utils.spec2struct import smiles_to_molecular_formula
 
 # Replace with your actual URL
 # data = pd.read_parquet("/home/mirzaa/projects/MoleculeBind/data/data_chemotion_final_clean_luc/chemotion1500.parquet")

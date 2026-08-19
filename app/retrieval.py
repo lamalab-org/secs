@@ -9,8 +9,8 @@ import torch
 from loguru import logger
 from prune import embedding_pruning_variable, load_models_dict
 
-from molbind.models import MolBind
-from molbind.utils.spec2struct import build_formula_string, get_atom_counts_from_formula, is_neutral_no_isotopes
+from secs.models import MolBind
+from secs.utils.spec2struct import build_formula_string, get_atom_counts_from_formula, is_neutral_no_isotopes
 
 ModelType = MolBind
 

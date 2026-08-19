@@ -1,5 +1,5 @@
-from molbind.models.components.custom_encoders import ImageEncoder
-from molbind.data.components.datasets import ImageDataset
+from secs.models.components.custom_encoders import ImageEncoder
+from secs.data.components.datasets import ImageDataset
 from torch.utils.data import DataLoader
 from typing import List
 

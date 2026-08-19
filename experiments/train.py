@@ -16,9 +16,9 @@ from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from pytorch_lightning.strategies.ddp import DDPStrategy
 
-from molbind.data.datamodule import MolBindDataModule
-from molbind.data.molbind_dataset import MolBindDataset
-from molbind.models.lightning_module import MolBindModule
+from secs.data.datamodule import MolBindDataModule
+from secs.data.molbind_dataset import MolBindDataset
+from secs.models.lightning_module import MolBindModule
 
 load_dotenv()
 

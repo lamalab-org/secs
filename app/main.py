@@ -17,7 +17,7 @@ from rdkit import Chem
 from retrieval import SimpleMoleculeAnalyzer
 from torch.nn.functional import cosine_similarity as torch_cosine_similarity
 
-from molbind.utils.spec2struct import get_atom_counts_from_formula, smiles_to_molecular_formula
+from secs.utils.spec2struct import get_atom_counts_from_formula, smiles_to_molecular_formula
 
 
 def compute_individual_atom_counts(individual: str) -> dict | None:

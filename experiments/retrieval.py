@@ -11,12 +11,12 @@ from dotenv import load_dotenv
 from loguru import logger
 from omegaconf import DictConfig
 
-from molbind.data.analysis import aggregate_embeddings
-from molbind.data.datamodule import MolBindDataModule
-from molbind.data.molbind_dataset import MolBindDataset
-from molbind.metrics.retrieval import full_database_retrieval
-from molbind.models.lightning_module import MolBindModule
-from molbind.utils.utils import HANDLERS as handlers
+from secs.data.analysis import aggregate_embeddings
+from secs.data.datamodule import MolBindDataModule
+from secs.data.molbind_dataset import MolBindDataset
+from secs.metrics.retrieval import full_database_retrieval
+from secs.models.lightning_module import MolBindModule
+from secs.utils.utils import HANDLERS as handlers
 
 load_dotenv()
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)

@@ -11,8 +11,8 @@ from dotenv import load_dotenv
 from loguru import logger
 from omegaconf import DictConfig
 
-from molbind.data.datamodule import MolBindDataModule
-from molbind.models.lightning_module import MolBindModule
+from secs.data.datamodule import MolBindDataModule
+from secs.models.lightning_module import MolBindModule
 
 load_dotenv()
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
