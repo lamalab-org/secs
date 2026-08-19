@@ -7,7 +7,7 @@ from rdkit import Chem, DataStructs
 from torch import Tensor
 from tqdm import tqdm
 
-from secs.data.available import ModalityConstants
+from secs.data.modalities import ModalityConstants
 from secs.models import MolBind
 from secs.utils import rename_keys_with_prefix
 

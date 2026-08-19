@@ -361,22 +361,3 @@ class IrEncoder(nn.Module):
         return self.encoder(x)
 
 
-if __name__ == "__main__":
-    # Example usage
-    # The hNmrCNNEncoder now enables the initial residual connection by default.
-    # You can disable it by passing use_initial_residual=False
-    model = IrEncoder(ckpt_path=None, freeze_encoder=False, use_initial_residual=True).to("cuda")
-    model.eval()
-    print(model)  # Print the model to see the new `initial_residual_processor`
-
-    input_tensor = torch.randn(4, 1, 1600)  # Batch size 4, 1 channel, length 10000
-    output = model(input_tensor.to("cuda"))
-    print(f"\nInput shape: {input_tensor.shape}")
-    print(f"Output shape: {output.shape}")  # Should be (4, 1024) for latent_dim=1024
-
-    # Example of disabling the feature
-    print("\n--- Model without initial residual connection ---")
-    model_no_residual = IrEncoder(use_initial_residual=False).to("cuda")
-    model_no_residual.eval()
-    output_no_residual = model_no_residual(input_tensor.to("cuda"))
-    print(f"Output shape (no residual): {output_no_residual.shape}")
