@@ -139,7 +139,6 @@ class cNmrDataset(Dataset):
     def __getitem__(self, index: int) -> dict:
         return {
             self.central_modality: [col[index] for col in self.central_modality_data],
-            # already padded to (max_peaks,); default collate stacks -> (B, max_peaks)
             "c_nmr": (self.shifts[index], self.mask[index]),
         }
 

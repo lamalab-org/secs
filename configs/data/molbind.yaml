@@ -15,9 +15,3 @@ batch_size: 128
 
 h_nmr:
   augment: false
-
-image:
-  # Molecule images are rendered from SMILES on the fly (MolScribe modality).
-  # `augment` applies MolScribe's depiction augmentation on the train split only.
-  augment: true
-  input_size: 384

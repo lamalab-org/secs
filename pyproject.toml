@@ -157,9 +157,8 @@ lint.flake8-unused-arguments.ignore-variadic-names = true
 lint.pydocstyle.convention = "numpy"
 lint.isort.known-first-party = ["secs"]
 src = ["src"]
-# Only first-party code is linted. `resources_ee/` is vendored third-party
-# (MolScribe), `app/` is being folded into the package, and the rest is data
-# or Hydra config.
+# Only first-party code is linted. `resources_ee/` is untracked scratch,
+# `app/` is being folded into the package, and the rest is data or Hydra config.
 extend-exclude = [
   "resources_ee",
   "notebooks",
@@ -178,11 +177,6 @@ namespace_packages = true
 explicit_package_bases = true
 no_implicit_optional = false
 disable_error_code = "annotation-unchecked"
-
-[tool.uv.workspace]
-members = [
-    "resources_ee/molscribe_embedding",
-]
 
 [dependency-groups]
 dev = [
