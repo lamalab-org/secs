@@ -1,22 +1,15 @@
-"""Structure elucidation: search for molecules whose embeddings match a spectrum.
-
-The pipeline separates three concerns that were previously entangled in one
-script:
-
-- ``embedding``   turn SMILES into per-modality embeddings with trained models
-- ``objective``   score candidates (composable, weighted components)
-- ``optimizers``  propose candidates (pluggable search strategies)
-
-An optimiser only ever sees an objective, so adding a search algorithm never
-requires touching the scoring code, and vice versa.
-"""
-
 from secs.elucidation.caching import (
     CachedObjective,
     CacheState,
     LogBestCallback,
     ProgressCallback,
     SnapshotCallback,
+)
+from secs.elucidation.candidates import (
+    CandidateSource,
+    FaissCandidateSource,
+    HttpCandidateSource,
+    StaticCandidateSource,
 )
 from secs.elucidation.components import (
     EmbeddingSimilarity,
@@ -39,9 +32,12 @@ __all__ = [
     "OPTIMIZER_RESOLVER",
     "CacheState",
     "CachedObjective",
+    "CandidateSource",
     "EmbeddingSimilarity",
+    "FaissCandidateSource",
     "FormulaPenalty",
     "GraphGAOptimizer",
+    "HttpCandidateSource",
     "LogBestCallback",
     "MoleculeOptimizer",
     "Objective",
@@ -51,6 +47,7 @@ __all__ = [
     "ScoringComponent",
     "SmilesEmbedder",
     "SnapshotCallback",
+    "StaticCandidateSource",
     "SyntheticAccessibility",
     "ValidityPenalty",
     "WeightedObjective",

@@ -1,13 +1,5 @@
-"""RDKit helpers for scoring candidate molecules.
-
-These are pure functions over SMILES strings: no models, no torch, no I/O.
-Keeping them here means the objective components below can be unit-tested
-without loading a checkpoint.
-"""
-
-from __future__ import annotations
-
 from functools import cache
+from pathlib import Path
 
 from loguru import logger
 from rdkit import Chem
@@ -58,20 +50,31 @@ def is_radical_charged_or_wrong_valence(smiles: str) -> bool:
 
 @cache
 def synthetic_accessibility(smiles: str) -> float:
-    """SA score (1 = easy, 10 = hard). Returns 10.0 when it cannot be computed."""
-    from rdkit.Chem import RDConfig
-    import os
-    import sys
+    """SA score (1 = easy, 10 = hard). Returns 10.0 when it cannot be computed.
 
-    sa_path = os.path.join(RDConfig.RDContribDir, "SA_Score")
-    if sa_path not in sys.path:
-        sys.path.append(sa_path)
-    import sascorer
-
+    RDKit ships `sascorer` as a contrib module that is not on the import path
+    by default, so the path append and import are deferred to first use rather
+    than run at module import.
+    """
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return 10.0
     try:
-        return sascorer.calculateScore(mol)
+        return _sascorer().calculateScore(mol)
     except (ValueError, RuntimeError, ZeroDivisionError):
         return 10.0
+
+
+@cache
+def _sascorer():
+    """Import RDKit's contrib SA_Score module, adding it to sys.path first."""
+    import sys  # noqa: PLC0415
+
+    from rdkit.Chem import RDConfig  # noqa: PLC0415
+
+    sa_path = str(Path(RDConfig.RDContribDir) / "SA_Score")
+    if sa_path not in sys.path:
+        sys.path.append(sa_path)
+    import sascorer  # noqa: PLC0415
+
+    return sascorer

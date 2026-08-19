@@ -53,6 +53,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+elucidation = [
+  # Graph genetic algorithm backend for secs.elucidation.optimizers.
+  "mol_ga>=0.2.0",
+]
 dev = [
   "codecov-cli>=0.4.1",
   "pytest>=7.4.0",

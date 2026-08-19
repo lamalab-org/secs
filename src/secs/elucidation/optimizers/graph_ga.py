@@ -1,7 +1,3 @@
-"""Graph genetic algorithm backed by the `mol_ga` package."""
-
-from __future__ import annotations
-
 from functools import partial
 
 from loguru import logger
@@ -55,9 +51,7 @@ class GraphGAOptimizer(MoleculeOptimizer):
             population_size=self.population_size,
             logger=logger,
             rng=self.rng,
-            offspring_gen_func=partial(
-                graph_ga_blended_generation, frac_graph_ga_mutate=self.frac_graph_ga_mutate
-            ),
+            offspring_gen_func=partial(graph_ga_blended_generation, frac_graph_ga_mutate=self.frac_graph_ga_mutate),
         )
 
         # mol_ga yields (score, smiles); OptimizerResult stores (smiles, score).

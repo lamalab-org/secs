@@ -1,13 +1,3 @@
-"""Encoding candidate SMILES with trained SECS models.
-
-`secs-app` hardcoded ``device="cpu"`` and the research copy hardcoded
-``"cuda"``; that single difference was the main reason the two copies could
-not be shared. Here the device is a constructor argument that defaults to
-whatever hardware is present.
-"""
-
-from __future__ import annotations
-
 from pathlib import Path
 
 import torch
@@ -53,7 +43,7 @@ def load_models(
                 config = compose(config_name="molbind_config", overrides=[f"experiment={experiment}"])
             models[modality] = load_model(config, device)
             logger.info(f"Loaded {modality} model from experiment: {experiment}")
-        except Exception as error:  # noqa: BLE001  (one bad model must not sink the run)
+        except Exception as error:
             logger.warning(f"Failed to load {modality} model ({experiment}): {error}")
     return models
 

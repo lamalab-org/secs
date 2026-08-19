@@ -1,23 +1,6 @@
-"""Caching and progress reporting around an objective.
-
-The two deployments had forked this class: the research copy logged the best
-molecule so far, the service copy wrote JSON snapshots for its /status
-endpoint. Neither difference is about *scoring*, so both are expressed here as
-progress callbacks over one shared cache.
-"""
-
-from __future__ import annotations
-
 from typing import Protocol
 
-import numpy as np
 from loguru import logger
-
-
-class ProgressCallback(Protocol):
-    """Notified after each batch is scored."""
-
-    def __call__(self, state: CacheState) -> None: ...
 
 
 class CacheState:
@@ -49,6 +32,12 @@ class CacheState:
     def best(self) -> tuple[str, float] | None:
         ranked = self.ranked()
         return ranked[0] if ranked else None
+
+
+class ProgressCallback(Protocol):
+    """Notified after each batch is scored."""
+
+    def __call__(self, state: CacheState) -> None: ...
 
 
 class CachedObjective:

@@ -69,8 +69,12 @@ def _zero_out(base: dict[str, int], elements: list[str], h_delta: int) -> dict[s
 
 
 def gen_close_molformulas_from_seed(seed_formula: str) -> list[str]:
-    """
-    Generate chemically plausible 'neighbor' molecular formulas of a seed.
+    """Generate chemically plausible molecular formulas near a seed.
+
+    The returned list starts with the canonicalised seed formula itself,
+    followed by neighbours reachable by small atom-count edits. Callers use
+    this to restrict a candidate database, so omitting the seed would exclude
+    every molecule with the target formula.
     """
     if not seed_formula or not isinstance(seed_formula, str):
         raise ValueError(f"Invalid seed formula: {seed_formula!r}")
@@ -107,14 +111,17 @@ def gen_close_molformulas_from_seed(seed_formula: str) -> list[str]:
     candidates.append(_zero_out(initial, ["P"], h_delta=5))
     candidates.append(_zero_out(initial, ["S"], h_delta=4))
 
+    # The seed itself comes first: for structure elucidation the target molecule
+    # has exactly this formula, so excluding it would make the correct answer
+    # unreachable from any formula-filtered candidate pool.
     seed_canonical = build_formula_string({e: c for e, c in initial.items() if c > 0})
-    seen = set()
-    results: list[str] = []
+    seen = {seed_canonical}
+    results: list[str] = [seed_canonical]
     for counts in candidates:
         if counts is None:
             continue
         formula = build_formula_string(counts)
-        if formula and formula != seed_canonical and formula not in seen:
+        if formula and formula not in seen:
             seen.add(formula)
             results.append(formula)
     return results

@@ -1,13 +1,3 @@
-"""Composable scoring for candidate molecules.
-
-An Objective maps a batch of SMILES to a score array where **higher is better**.
-Objectives are built by combining weighted ScoringComponent terms, so a search
-algorithm never needs to know what is being optimised, and a new term can be
-added without touching the optimiser.
-"""
-
-from __future__ import annotations
-
 from typing import Protocol, runtime_checkable
 
 import numpy as np
@@ -60,4 +50,6 @@ class WeightedObjective:
         """Per-component contributions, for inspecting why a candidate scored as it did."""
         if not smiles:
             return {component.name: np.array([]) for _, component in self.components}
-        return {component.name: weight * np.asarray(component.score(smiles), dtype=float) for weight, component in self.components}
+        return {
+            component.name: weight * np.asarray(component.score(smiles), dtype=float) for weight, component in self.components
+        }

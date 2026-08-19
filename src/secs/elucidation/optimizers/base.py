@@ -1,12 +1,3 @@
-"""The search side of elucidation: propose molecules, score them, keep the best.
-
-An optimiser knows nothing about spectra, embeddings or RDKit -- it only sees
-an :class:`~secs.elucidation.objective.Objective`. Adding a new search strategy
-means implementing :meth:`MoleculeOptimizer.run` and registering it.
-"""
-
-from __future__ import annotations
-
 import random
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -35,10 +26,7 @@ class OptimizerResult:
     def to_records(self, retrieved: set[str] | None = None) -> list[dict]:
         """Flatten to JSON-friendly records, marking which molecules were retrieved."""
         retrieved = retrieved or set()
-        return [
-            {"smiles": smiles, "score": score, "retrieved": smiles in retrieved}
-            for smiles, score in self.population
-        ]
+        return [{"smiles": smiles, "score": score, "retrieved": smiles in retrieved} for smiles, score in self.population]
 
 
 class MoleculeOptimizer(ABC):

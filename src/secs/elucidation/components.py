@@ -1,7 +1,3 @@
-"""Concrete scoring components for structure elucidation."""
-
-from __future__ import annotations
-
 import numpy as np
 import torch
 from torch import Tensor
@@ -67,8 +63,7 @@ class FormulaPenalty(ScoringComponent):
         if not counts:
             return self.invalid_penalty
         deviation = sum(
-            abs(counts.get(element, 0) - self.target_counts.get(element, 0))
-            for element in set(counts) | set(self.target_counts)
+            abs(counts.get(element, 0) - self.target_counts.get(element, 0)) for element in set(counts) | set(self.target_counts)
         )
         return -deviation / self.total_atoms
 
