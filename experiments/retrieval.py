@@ -82,8 +82,8 @@ def embed(config: DictConfig):
         central_modality=config.data.central_modality,
     )
     # # concatenate predictions outside of this script and save predictions
-    # with open(f"{config.embeddings_path}.pkl", "wb") as f:
-    #     pkl.dump(aggregated_embeddings, f, protocol=pkl.HIGHEST_PROTOCOL)
+    with open(f"{config.embeddings_path}.pkl", "wb") as f:
+        pkl.dump(aggregated_embeddings, f, protocol=pkl.HIGHEST_PROTOCOL)
 
     logger.info(f"Saved embeddings to {config.embeddings_path}.pkl")
     retrieval_metrics = full_database_retrieval(

@@ -3,7 +3,7 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "molbind"
+name = "secs"
 description = "A package for binding molecular modalities."
 version = "0.0.1"
 readme = "README.md"

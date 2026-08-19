@@ -51,7 +51,7 @@ def train_molbind(config: DictConfig):
     data = load_dataset(
         config.data.dataset_path, config.data.dataset_config if hasattr(config.data, "dataset_config") else "default"
     )
-    features = [*config.data.modalities, config.data.central_modality]
+    features = [*config.data.modalities, config.data.central_modality]#, "x_min", "x_max"]
     train_data = data["train"].to_pandas()[features]
     logger.info(f"Train data shape: {train_data.shape}")
     valid_data = data["val"].to_pandas()[features]
@@ -77,6 +77,7 @@ def train_molbind(config: DictConfig):
             data=valid_shuffled_data,
             context_length=config.data.context_length,
             config=config,
+            split="val",
         ).build_datasets_for_modalities(),
     )
     # set up the data module

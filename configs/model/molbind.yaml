@@ -21,6 +21,17 @@ encoders:
     output_dims: [256, 512, 1024]
     latent_dim: 256
     freeze_encoder: False
+  h_nmr:
+    freeze_encoder: False
+  image:
+    # MolScribe Swin-B backbone; images are rendered from SMILES on the fly.
+    # ckpt_path: null  # null -> download swin_base_char_aux_1m.pth from HF Hub
+    pretrained: True
+    freeze_encoder: True
+  iupac_name:
+    # IUPAC2SMILES MT5 encoder (knowledgator/IUPAC2SMILES-canonical-base).
+    pretrained: True
+    freeze_encoder: True
 
 embedding_size: 512
 projection_heads:
@@ -28,12 +39,17 @@ projection_heads:
   smiles_is_on: True
   c_nmr_is_on: True
   ir_is_on: True
+  general_is_on: True
   h_nmr_is_on: True
+  image_is_on: True
+  iupac_name_is_on: True
   # freeze projection heads
   c_nmr_freeze: True
   ir_freeze: True
   smiles_freeze: True
   h_nmr_freeze: False
+  image_freeze: False
+  iupac_name_freeze: False
   # default projection heads for each modality
   smiles:
     dims: [768, "${model.embedding_size}"]
@@ -53,9 +69,21 @@ projection_heads:
   h_nmr:
     dims: [128, "${model.embedding_size}"]
     activation: LeakyReLU
+  image:
+    # MolScribe Swin-B features are 1024-dim -> shared embedding_size.
+    dims: [1024, "${model.embedding_size}"]
+    activation: LeakyReLU
+  iupac_name:
+    # IUPAC2SMILES MT5 encoder is 512-dim -> shared embedding_size.
+    dims: [512, "${model.embedding_size}"]
+    activation: LeakyReLU
   multi_spec:
     dims: [512, "${model.embedding_size}"]
     activation: LeakyReLU
+  general:
+    dims: [512, "${model.embedding_size}"]
+    activation: LeakyReLU
+
 
 optimizer:
   lr: 0.0001
