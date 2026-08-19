@@ -16,7 +16,10 @@ class SmilesEncoder(BaseModalityEncoder):
 
     def _initialize_encoder(self):
         self.encoder = AutoModel.from_pretrained(
-            self.model_name, trust_remote_code=True, revision="7b12d946c181a37f6012b9dc3b002275de070314"
+            self.model_name,
+            trust_remote_code=True,
+            revision="7b12d946c181a37f6012b9dc3b002275de070314",
+            deterministic_eval=True,
         )
         if self.freeze_encoder:
             for param in self.encoder.parameters():
