@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import requests
 
-from secs.utils.spec2struct import smiles_to_molecular_formula
+from secs.utils.elucidation import smiles_to_molecular_formula
 
 # Replace with your actual URL
 # data = pd.read_parquet("/home/mirzaa/projects/MoleculeBind/data/data_chemotion_final_clean_luc/chemotion1500.parquet")
@@ -17,7 +17,7 @@ for idx in range(0, 10):
     mf = smiles_to_molecular_formula(data.smiles.iloc[idx])
 
     print(idx, mf, data.smiles.iloc[idx])  # noqa: T201
-    url = "https://lamalab-org--spec2struct-elucidate-spectrum.modal.run"
+    url = "https://lamalab-org--elucidation-elucidate-spectrum.modal.run"
     response = requests.post(
         url, json={"mf": mf, "spectrum": spectrum, "pop_ga": 10000, "offspring_ga": 1024, "gens_ga": 10, "model": "regular"}
     )

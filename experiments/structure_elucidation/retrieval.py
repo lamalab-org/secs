@@ -13,7 +13,7 @@ from prune_sim import embedding_pruning_variable, load_models_dict, tanimoto_sim
 from tqdm.auto import tqdm
 
 from secs.models import MolBind
-from secs.utils.spec2struct import gen_close_molformulas_from_seed, is_neutral_no_isotopes, smiles_to_molecular_formula
+from secs.utils.elucidation import gen_close_molformulas_from_seed, is_neutral_no_isotopes, smiles_to_molecular_formula
 
 ModelType = MolBind
 

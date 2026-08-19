@@ -7,7 +7,7 @@ from torch.utils.data import Dataset
 
 from secs.data.components.hnmr import augment
 from secs.utils import generate_hsqc_matrix
-from secs.utils.spec2struct import reduce_resolution_by_averaging
+from secs.utils.elucidation import reduce_resolution_by_averaging
 
 
 class StringDataset(Dataset):

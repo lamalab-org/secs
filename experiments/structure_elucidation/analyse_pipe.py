@@ -10,7 +10,7 @@ from prune_sim import tanimoto_similarity
 from rdkit import Chem
 from rdkit.rdBase import BlockLogs
 
-from secs.utils.spec2struct import smiles_to_molecular_formula
+from secs.utils.elucidation import smiles_to_molecular_formula
 
 
 def get_jsons(path: Path) -> list[Path]:

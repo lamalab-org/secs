@@ -1,10 +1,10 @@
 from typing import Any
 
 import modal
-from main import spec2struct
+from main import elucidation
 from pydantic import BaseModel
 
-app = modal.App("spec2struct")
+app = modal.App("elucidation")
 image = (
     modal.Image.from_registry("nvidia/cuda:12.6.2-base-ubuntu22.04", add_python="3.11")
     .add_local_file("./retrieval.py", "/app/retrieval.py", copy=True)
@@ -44,4 +44,4 @@ class GenerateRequest(BaseModel):
 )
 @modal.fastapi_endpoint(method="POST")
 def elucidate_spectrum(request: dict) -> dict[str, Any]:
-    return spec2struct(**request)
+    return elucidation(**request)
