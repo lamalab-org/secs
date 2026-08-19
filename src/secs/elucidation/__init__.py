@@ -4,6 +4,7 @@ from secs.elucidation.caching import (
     LogBestCallback,
     ProgressCallback,
     SnapshotCallback,
+    TrajectoryCallback,
 )
 from secs.elucidation.candidates import (
     CandidateSource,
@@ -30,6 +31,7 @@ from secs.elucidation.optimizers import (
 from secs.elucidation.verifiers import (
     VERIFIER_RESOLVER,
     CallableSimulator,
+    HttpShiftSimulator,
     PeakCountVerifier,
     SimulatedShiftVerifier,
     SpectrumSimulator,
@@ -50,6 +52,7 @@ __all__ = [
     "FormulaPenalty",
     "GraphGAOptimizer",
     "HttpCandidateSource",
+    "HttpShiftSimulator",
     "LogBestCallback",
     "MoleculeOptimizer",
     "Objective",
@@ -64,6 +67,7 @@ __all__ = [
     "SpectrumSimulator",
     "StaticCandidateSource",
     "SyntheticAccessibility",
+    "TrajectoryCallback",
     "UnsaturationVerifier",
     "ValidityPenalty",
     "Verifier",

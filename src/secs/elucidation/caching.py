@@ -105,6 +105,40 @@ class LogBestCallback:
                 logger.info("Target SMILES recovered.")
 
 
+class TrajectoryCallback:
+    """Records the search trajectory, one entry per scored batch.
+
+    Lets a run be studied after the fact: when the best score improved, how
+    many molecules it took, and whether a known answer was ever reached.
+    `annotate` adds caller-supplied fields (similarity to a reference, say)
+    to each entry.
+    """
+
+    def __init__(self, annotate=None, target_smiles: str | None = None) -> None:
+        self.annotate = annotate
+        self.target_smiles = target_smiles
+        self.history: list[dict] = []
+
+    def __call__(self, state: CacheState) -> None:
+        best = state.best()
+        entry = {
+            "generation": state.generation,
+            "n_evaluated": state.n_evaluated,
+            "best_smiles": best[0] if best else None,
+            "best_score": best[1] if best else None,
+        }
+        if self.target_smiles is not None:
+            entry["target_seen"] = self.target_smiles in state.cache
+            entry["target_score"] = state.cache.get(self.target_smiles)
+        if self.annotate is not None and best is not None:
+            entry.update(self.annotate(best[0]))
+        self.history.append(entry)
+
+    @property
+    def generations(self) -> int:
+        return self.history[-1]["generation"] if self.history else 0
+
+
 class SnapshotCallback:
     """Atomically writes a JSON progress snapshot for an external status reader.
 

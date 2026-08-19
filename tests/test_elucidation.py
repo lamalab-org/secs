@@ -10,6 +10,7 @@ from secs.elucidation import (
     OptimizerResult,
     ScoreOnlyOptimizer,
     StaticCandidateSource,
+    TrajectoryCallback,
     ValidityPenalty,
     WeightedObjective,
 )
@@ -306,3 +307,33 @@ def test_static_source_returns_its_list():
 
     source = StaticCandidateSource(["CCO", "CCC", "CC"])
     assert source.propose(torch.tensor([1.0]), "C2H6O", n_candidates=2) == ["CCO", "CCC"]
+
+
+# --- trajectory recording --------------------------------------------------
+
+
+def test_trajectory_records_one_entry_per_batch():
+    recorder = TrajectoryCallback()
+    cached = CachedObjective(lambda s: np.array([len(x) for x in s], dtype=float), callbacks=[recorder])
+    cached.eval_batch(["CC", "CCC"])
+    cached.eval_batch(["CCCC"])
+    assert len(recorder.history) == 2
+    assert recorder.history[-1]["best_smiles"] == "CCCC"
+    assert recorder.history[-1]["n_evaluated"] == 3
+
+
+def test_trajectory_tracks_whether_the_target_was_reached():
+    recorder = TrajectoryCallback(target_smiles="CCCC")
+    cached = CachedObjective(lambda s: np.array([len(x) for x in s], dtype=float), callbacks=[recorder])
+    cached.eval_batch(["CC"])
+    assert recorder.history[-1]["target_seen"] is False
+    cached.eval_batch(["CCCC"])
+    assert recorder.history[-1]["target_seen"] is True
+    assert recorder.history[-1]["target_score"] == 4.0
+
+
+def test_trajectory_annotations_are_recorded():
+    recorder = TrajectoryCallback(annotate=lambda s: {"length": len(s)})
+    cached = CachedObjective(lambda s: np.zeros(len(s)), callbacks=[recorder])
+    cached.eval_batch(["CCO"])
+    assert recorder.history[-1]["length"] == 3

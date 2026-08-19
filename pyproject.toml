@@ -153,6 +153,7 @@ lint.extend-ignore = [
   "RUF015", # Prefer next(iter())
   "RET505", # Unnecessary `elif` after `return`
 ]
+lint.per-file-ignores = { "scripts/*" = ["T201"] }
 lint.unfixable = [
   "T20",  # Removes print statements
   "F841", # Removes unused variables
