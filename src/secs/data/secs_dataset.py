@@ -4,11 +4,6 @@ import pandas as pd
 from torch import Tensor
 from torch.utils.data import Dataset
 
-from secs.data.modalities import (
-    ModalityConstants,
-    NonStringModalities,
-    StringModalities,
-)
 from secs.data.components.datasets import (
     FingerprintSECSDataset,
     GeneralDataset,
@@ -19,6 +14,11 @@ from secs.data.components.datasets import (
     StringDataset,
     cNmrDataset,
     hNmrDataset,
+)
+from secs.data.modalities import (
+    ModalityConstants,
+    NonStringModalities,
+    StringModalities,
 )
 
 

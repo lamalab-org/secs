@@ -7,8 +7,8 @@ from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader, DistributedSampler
 from torch_geometric.loader import DataLoader as GeometricDataLoader
 
-from secs.data.modalities import NonStringModalities
 from secs.data.components.datasets import StringDatasetEmbedding
+from secs.data.modalities import NonStringModalities
 
 
 class SECSDataModule(LightningDataModule):
