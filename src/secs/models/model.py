@@ -9,8 +9,6 @@ from secs.models import ProjectionHead
 class MolBind(nn.Module):
     def __init__(self, cfg: DictConfig) -> None:
         super().__init__()
-        # Deferred: secs.data.modalities imports the encoder classes from
-        # secs.models, so importing it at module level would be circular.
         from secs.data.modalities import ModalityConstants  # noqa: PLC0415
 
         modalities = cfg.data.modalities
