@@ -35,8 +35,8 @@ class FourierShiftEmbedding(nn.Module):
 
 
 class PeakTokenizer(nn.Module):
-    """Turn (shifts, mask) into a token sequence with a learned [CLS]-style
-    presence signal. Padding tokens are zeroed and masked in attention."""
+    """Turn (shifts, mask) into a token sequence. Padding tokens are zeroed
+    and masked in attention."""
 
     def __init__(self, dim: int, n_freqs: int = 64, max_ppm: float = 218.0):
         super().__init__()
@@ -49,33 +49,18 @@ class PeakTokenizer(nn.Module):
         return tok * mask.unsqueeze(-1)  # zero out padding
 
 
-class AttentionPool(nn.Module):
-    """Learned query attends over peak tokens -> one vector. Respects padding."""
-
-    def __init__(self, dim: int, num_heads: int = 8, dropout: float = 0.1):
-        super().__init__()
-        self.query = nn.Parameter(torch.randn(1, 1, dim) * 0.02)
-        self.attn = nn.MultiheadAttention(dim, num_heads, dropout=dropout, batch_first=True)
-        self.norm = nn.LayerNorm(dim)
-
-    def forward(self, x, key_padding_mask=None):  # x:(B,P,D), mask:(B,P) True=pad
-        B = x.size(0)
-        q = self.query.expand(B, -1, -1)
-        out, _ = self.attn(q, x, x, key_padding_mask=key_padding_mask)
-        return self.norm(out.squeeze(1))
-
-
 class PeakSetBackbone(nn.Module):
     """Set-transformer style encoder over 13C peaks for contrastive alignment.
 
     peaks (shifts, mask)
         -> continuous ppm embedding (+ peak-presence token)
-        -> transformer encoder (permutation-equivariant, padding-masked)
-        -> attention pooling (padding-aware)
+        -> prepend learned [CLS] token
+        -> transformer encoder (permutation-equivariant over peaks, padding-masked)
+        -> [CLS] embedding
         -> projection head -> L2-normalized embedding
 
-    No convs, no downsampling, no BatchNorm: none fit a sparse permutation-
-    invariant peak set. LayerNorm throughout (stable on sparse input).
+    The [CLS] token is never masked, so even an all-padding row stays finite
+    (CLS attends to itself).
     """
 
     def __init__(
@@ -91,6 +76,7 @@ class PeakSetBackbone(nn.Module):
     ):
         super().__init__()
         self.tokenizer = PeakTokenizer(embed_dim, n_freqs=n_freqs, max_ppm=max_ppm)
+        self.cls_token = nn.Parameter(torch.randn(1, 1, embed_dim) * 0.02)
 
         enc_layer = nn.TransformerEncoderLayer(
             d_model=embed_dim,
@@ -103,7 +89,6 @@ class PeakSetBackbone(nn.Module):
         )
         self.transformer = nn.TransformerEncoder(enc_layer, num_layers=depth)
         self.encoder_norm = nn.LayerNorm(embed_dim)
-        self.pool = AttentionPool(embed_dim, num_heads=num_heads, dropout=dropout)
 
         self.head = nn.Sequential(
             nn.Linear(embed_dim, proj_dim),
@@ -123,12 +108,18 @@ class PeakSetBackbone(nn.Module):
                 nn.init.zeros_(m.bias)
 
     def forward(self, shifts, mask, normalize: bool = True):
-        # transformer/pool want True = PAD; our mask has True = real peak
-        pad = ~mask
-        x = self.tokenizer(shifts, mask)
+        B = shifts.size(0)
+        x = self.tokenizer(shifts, mask)                                # (B, P, D)
+        x = torch.cat([self.cls_token.expand(B, -1, -1), x], dim=1)     # (B, 1+P, D)
+
+        pad = ~mask                                                     # True = pad
+        pad = torch.cat(
+            [torch.zeros(B, 1, dtype=torch.bool, device=pad.device), pad], dim=1
+        )                                                               # CLS never padded
+
         x = self.transformer(x, src_key_padding_mask=pad)
         x = self.encoder_norm(x)
-        x = self.pool(x, key_padding_mask=pad)
+        x = x[:, 0]                                                     # CLS embedding
         x = self.head(x)
         if normalize:
             x = F.normalize(x, dim=-1)
@@ -136,8 +127,7 @@ class PeakSetBackbone(nn.Module):
 
 
 class cNmrEncoder(nn.Module):
-    """API-compatible wrapper. forward now takes (shifts, mask) instead of a
-    dense spectrum tensor.
+    """API-compatible wrapper. forward takes (shifts, mask).
 
     Args:
         ckpt_path:      optional checkpoint (raw state_dict or wrapped in
