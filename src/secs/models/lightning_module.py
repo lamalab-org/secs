@@ -36,8 +36,6 @@ class SECSModule(LightningModule):
 
         self.config = cfg
         self.loss = InfoNCE(temperature=cfg.model.loss.temperature, negative_mode="unpaired")
-        if cfg.model.loss.sparse:
-            self.l1_loss = torch.nn.L1Loss()
         self.per_device_batch_size = cfg.data.batch_size
         self.batch_size = self.per_device_batch_size * self.world_size
         self.central_modality = cfg.data.central_modality
@@ -73,10 +71,6 @@ class SECSModule(LightningModule):
             loss = (central_to_modality_loss + modality_to_central_loss) / 2
         else:
             loss = central_to_modality_loss
-        if self.config.model.loss.sparse:
-            loss = loss + self.config.model.loss.l1_loss_weight * self.l1_loss(
-                embeddings_dict[modality_pair[0]], embeddings_dict[modality_pair[1]]
-            )
         #  check if loss is nan
         if torch.isnan(loss):
             logger.error(f"Loss is nan for {prefix} batch.")
