@@ -47,6 +47,8 @@ CONFIDENCE_Z = 1.96
 
 BATCH_SIZE = int(os.environ.get("CASCADE_BATCH_SIZE", "32"))
 EMBED_SEED = int(os.environ.get("CASCADE_EMBED_SEED", "42"))
+# Retry molecules ETKDG rejects with plain distance geometry; see _embed.
+FALLBACK_GEOMETRY = os.environ.get("CASCADE_FALLBACK_GEOMETRY", "1") != "0"
 
 
 def _compute_stacked_offsets(sizes, repeats):
@@ -75,15 +77,32 @@ def _mol_iter(df):
 
 
 def _embed(smiles: str):
-    """SMILES -> MMFF-optimised 3D conformer. The model is geometry-based."""
+    """SMILES -> MMFF-optimised 3D conformer. The model is geometry-based.
+
+    ETKDG is tried first, since its knowledge-based geometry is what the
+    model was trained on. Where it reports the embedding infeasible -- which
+    strained bridged systems such as [2.2]paracyclophanes always do, about 2%
+    of chemotion, because the experimental-torsion terms cannot be satisfied
+    -- plain distance geometry embeds the same molecule in milliseconds and
+    MMFF restores the local chemistry. That geometry reproduces the bent
+    aromatic decks these molecules are known for, and predicts to ~1.6 ppm,
+    which beats dropping the molecule.
+    """
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return None
     mol = Chem.AddHs(mol)
+
     params = AllChem.ETKDGv3()
     params.randomSeed = EMBED_SEED
     if AllChem.EmbedMolecule(mol, params) != 0:
-        return None
+        if not FALLBACK_GEOMETRY:
+            return None
+        params.useExpTorsionAnglePrefs = False
+        params.useBasicKnowledge = False
+        if AllChem.EmbedMolecule(mol, params) != 0:
+            return None
+
     try:
         AllChem.MMFFOptimizeMolecule(mol)
     except (ValueError, RuntimeError):

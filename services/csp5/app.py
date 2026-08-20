@@ -170,4 +170,7 @@ def predict(request: dict) -> dict:
     for slot, (_, rows) in zip(surviving_slots, grouped):
         shifts[slot] = [round(float(v), 3) for v in rows["shift_ppm"]]
 
+    if rescue and FALLBACK_GEOMETRY:
+        _predict_from_geometry(rescue, shifts)
+
     return {"shifts": shifts, "uncertainty": uncertainty}

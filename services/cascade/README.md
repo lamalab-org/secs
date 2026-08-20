@@ -1,16 +1,11 @@
 # CASCADE-2.0 shift prediction service
 
-Wraps [CASCADE-2.0](https://github.com/asbhd/CASCADE-2.0) (`Predict_SMILES_FF_GPR`)
-as an HTTP service so `secs.elucidation` can use it as a spectrum simulator.
+Wraps [CASCADE-2.0](https://github.com/asbhd/CASCADE-2.0)
+(`Predict_SMILES_FF_GPR`) as a 13C shift simulator for `secs.elucidation`.
+Its own container because CASCADE pins Python 3.10 + TensorFlow 2.11, which
+cannot coexist with SECS (Python 3.11-3.12 + PyTorch).
 
-## Why a separate container
-
-CASCADE pins Python 3.10 + TensorFlow 2.11 + KGCNN 2.2.1. SECS runs Python
-3.11-3.12 + PyTorch 2.10, and TF 2.11 has no Python 3.12 wheels, so the two
-cannot share an environment. This follows the same pattern as the existing
-`vectordb` and `forward_synthesis` services.
-
-## Build and run
+## Run
 
 ```bash
 docker build -t secs/cascade services/cascade
@@ -30,11 +25,9 @@ curl -s -X POST localhost:7997/ -H 'content-type: application/json' \
  "uncertainty": [[1.2, 1.1],   [0.9]]}
 ```
 
-One entry per input molecule, in input order. `null` means the molecule could
-not be embedded or predicted; `[]` means it contains no carbon. `uncertainty`
-is the 95% half-width in ppm, from the model's GPR head.
-
-## Use from SECS
+One entry per molecule, in input order. `null` = could not be predicted,
+`[]` = no carbon. `uncertainty` is the 95% half-width in ppm from the GPR
+head. Shifts are ordered by RDKit atom index over the carbons.
 
 ```python
 from secs.elucidation import HttpShiftSimulator, SimulatedShiftVerifier
@@ -45,11 +38,15 @@ verifier = SimulatedShiftVerifier(simulator, observed=peaks, tolerance_ppm=5.0)
 
 ## Notes
 
-- The model is geometry-based: each SMILES is embedded with ETKDGv3 and
-  MMFF-optimised before prediction. That conformer step, not the network,
-  dominates latency. A GA generation of ~2000 candidates is a real cost, so
-  cache by canonical SMILES if you run repeatedly.
-- Predictions are de-standardised with the constants from the upstream
-  notebook (`x * 50.484337 + 99.798111`).
-- Runs on CPU (`CUDA_VISIBLE_DEVICES=-1`), matching the upstream notebook.
-- Reported accuracy is ~0.73 ppm against experimental 13C shifts.
+- Geometry-based: each SMILES is embedded with ETKDGv3 and MMFF-optimised.
+  That step, not the network, dominates latency -- cache by canonical SMILES
+  if you re-score the same molecules.
+- Strained bridged systems ([2.2]paracyclophanes, ~2% of chemotion) are
+  infeasible for ETKDG's torsion terms. Those fall back to plain distance
+  geometry, which embeds them instantly and predicts to ~1.6 ppm rather than
+  returning nothing. `CASCADE_FALLBACK_GEOMETRY=0` disables it.
+- Predictions are de-standardised with the upstream notebook's constants
+  (`x * 50.484337 + 99.798111`), and run on CPU, as upstream does.
+- Reported accuracy is ~0.73 ppm against experimental 13C shifts. Measured
+  here at 1.71 ppm mean / 0.68 median nearest-peak error on 49 chemotion
+  molecules; see `scripts/benchmark_shift_simulators.py`.
