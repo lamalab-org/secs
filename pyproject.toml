@@ -49,7 +49,7 @@ dependencies = [
   "class-resolver==0.7.1",
   "omegaconf==2.3.0",
   "python-dotenv==1.2.2",
-  "wandb==0.25.1",
+  "wandb==0.28.2",
 ]
 
 [project.optional-dependencies]
