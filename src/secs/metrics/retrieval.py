@@ -120,22 +120,22 @@ def full_database_retrieval(
             logger.info(f"Faiss index built for {modality_1} with {index.ntotal} vectors.")
 
             # --- Querying ---
-            # D are distances (inner products), I are the 0-based indices of retrieved vectors
-            # For METRIC_INNER_PRODUCT with normalized vectors, higher D is better (closer to 1 for identical)
-            D, I = index.search(query_vectors_normalized, max_k)
+            # search returns (distances, 0-based indices of retrieved vectors); only the
+            # indices are needed here.
+            _distances, neighbour_indices = index.search(query_vectors_normalized, max_k)
 
             # --- Metric Calculation ---
             # The `compute_retrieval_metrics_from_query` function needs:
             # 1. `ids`: The ground truth ID for each query vector. In this setup,
             #    query_vectors_normalized[j] corresponds to ground_truth_ids_for_common_items[j].
-            # 2. `retrieved_indices`: The `I` from faiss.search.
+            # 2. `retrieved_indices`: the neighbour indices from faiss.search.
             # 3. `indexed_ids_map`: A list that maps the 0-based index from Faiss back to the
             #    actual string ID. This is `ground_truth_ids_for_common_items` because the i-th vector
             #    added to the index corresponds to `ground_truth_ids_for_common_items[i]`.
 
             current_metrics = compute_retrieval_metrics_from_query(
                 ids=ground_truth_ids_for_common_items,  # Ground truth ID for each query
-                retrieved_indices=I,  # Faiss indices of retrieved items
+                retrieved_indices=neighbour_indices,  # Faiss indices of retrieved items
                 indexed_ids_map=ground_truth_ids_for_common_items,  # Map Faiss index to string ID
                 top_k=top_k,
             )

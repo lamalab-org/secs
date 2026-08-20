@@ -3,6 +3,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from loguru import logger
 
 
 class FourierShiftEmbedding(nn.Module):
@@ -45,8 +46,7 @@ class PeakTokenizer(nn.Module):
 
     def forward(self, shifts, mask):  # (B,P),(B,P) -> tokens (B,P,dim)
         tok = self.pos(shifts) + self.peak_token
-        tok = tok * mask.unsqueeze(-1)  # zero out padding
-        return tok
+        return tok * mask.unsqueeze(-1)  # zero out padding
 
 
 class AttentionPool(nn.Module):
@@ -166,9 +166,9 @@ class cNmrEncoder(nn.Module):
         cleaned = {k[len("encoder.") :] if k.startswith("encoder.") else k: v for k, v in state.items()}
         missing, unexpected = self.encoder.load_state_dict(cleaned, strict=False)
         if missing:
-            print(f"[cNmrEncoder] missing keys: {len(missing)} (e.g. {missing[:3]})")
+            logger.warning(f"cNmrEncoder: {len(missing)} missing keys (e.g. {missing[:3]})")
         if unexpected:
-            print(f"[cNmrEncoder] unexpected keys: {len(unexpected)} (e.g. {unexpected[:3]})")
+            logger.warning(f"cNmrEncoder: {len(unexpected)} unexpected keys (e.g. {unexpected[:3]})")
 
     def train(self, mode: bool = True):
         super().train(mode)

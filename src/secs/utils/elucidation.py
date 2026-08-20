@@ -2,36 +2,25 @@ import re
 from collections import defaultdict
 
 import numpy as np
-import polars as pl
 from rdkit import Chem
 from rdkit.Chem import rdMolDescriptors
 from scipy.interpolate import interp1d
 
 
 def get_atom_counts_from_formula(formula_string: str) -> dict[str, int]:
-    """
-    Parses a simple molecular formula string into a dictionary of atom counts.
+    """Parses a simple molecular formula string into a dictionary of atom counts.
     Example: "C6H12O6" -> {'C': 6, 'H': 12, 'O': 6}
-    Handles elements with one or two letters and optional counts.
-    Assumes "flat" formulas (e.g., no parentheses or complex structures).
+
+    Args:
+        formula_string (str): Molecular formula
+
+    Returns:
+        dict[str, int]: Atom types and counts dictionary
     """
 
     counts = defaultdict(int)
-    # Regex: ([A-Z][a-z]?) matches an element symbol (e.g., C, Cl)
-    #        (\d*) matches an optional count number
-    pattern = re.compile(r"([A-Z][a-z]?)(\d*)")
-
-    parsed_length = 0
-    for match in pattern.finditer(formula_string):
-        if match.start() != parsed_length:
-            pass
-
-        element = match.group(1)
-        count_str = match.group(2)
-
-        count = int(count_str) if count_str else 1
-        counts[element] += count
-        parsed_length = match.end()
+    for element, count in re.findall(r"([A-Z][a-z]?)(\d*)", formula_string):
+        counts[element] += int(count) if count else 1
     return dict(counts)
 
 
@@ -46,7 +35,7 @@ def build_formula_string(atom_counts: dict) -> str:
         str: The molecular formula
     """
     others = sorted(e for e in atom_counts if e not in ("C", "H"))
-    element_order = ["C", "H"] + others
+    element_order = ["C", "H", *others]
 
     parts = []
     for element in element_order:
@@ -57,10 +46,7 @@ def build_formula_string(atom_counts: dict) -> str:
     return "".join(parts)
 
 
-from typing import Dict, List, Optional
-
-
-def _apply_deltas(base: Dict[str, int], deltas: Dict[str, int]) -> Optional[Dict[str, int]]:
+def _apply_deltas(base: dict[str, int], deltas: dict[str, int]) -> dict[str, int] | None:
     """Apply atom-count deltas; return None if any count would go negative."""
     counts = base.copy()
     for elem, d in deltas.items():
@@ -71,7 +57,7 @@ def _apply_deltas(base: Dict[str, int], deltas: Dict[str, int]) -> Optional[Dict
     return {e: c for e, c in counts.items() if c > 0}
 
 
-def _zero_out(base: Dict[str, int], elements: List[str], h_delta: int) -> Optional[Dict[str, int]]:
+def _zero_out(base: dict[str, int], elements: list[str], h_delta: int) -> dict[str, int] | None:
     """Remove given elements entirely, adjusting H. Return None if nothing changed."""
     if not any(base.get(e, 0) > 0 for e in elements):
         return None  # transformation is a no-op
@@ -82,9 +68,13 @@ def _zero_out(base: Dict[str, int], elements: List[str], h_delta: int) -> Option
     return counts
 
 
-def gen_close_molformulas_from_seed(seed_formula: str) -> List[str]:
-    """
-    Generate chemically plausible 'neighbor' molecular formulas of a seed.
+def gen_close_molformulas_from_seed(seed_formula: str) -> list[str]:
+    """Generate chemically plausible molecular formulas near a seed.
+
+    The returned list starts with the canonicalised seed formula itself,
+    followed by neighbours reachable by small atom-count edits. Callers use
+    this to restrict a candidate database, so omitting the seed would exclude
+    every molecule with the target formula.
     """
     if not seed_formula or not isinstance(seed_formula, str):
         raise ValueError(f"Invalid seed formula: {seed_formula!r}")
@@ -94,7 +84,7 @@ def gen_close_molformulas_from_seed(seed_formula: str) -> List[str]:
         raise ValueError(f"Could not parse formula: {seed_formula!r}")
 
     # Simple delta-based transformations
-    delta_sets: List[Dict[str, int]] = [
+    delta_sets: list[dict[str, int]] = [
         {"C": -3, "H": -6},
         {"C": +1, "H": +2},
         {"C": -1, "H": -2},
@@ -113,7 +103,7 @@ def gen_close_molformulas_from_seed(seed_formula: str) -> List[str]:
         {"P": -1},
     ]
 
-    candidates: List[Optional[Dict[str, int]]] = [_apply_deltas(initial, d) for d in delta_sets]
+    candidates: list[dict[str, int] | None] = [_apply_deltas(initial, d) for d in delta_sets]
 
     # Structural removals
     total_halogens = sum(initial.get(x, 0) for x in ("Cl", "Br", "F"))
@@ -121,14 +111,17 @@ def gen_close_molformulas_from_seed(seed_formula: str) -> List[str]:
     candidates.append(_zero_out(initial, ["P"], h_delta=5))
     candidates.append(_zero_out(initial, ["S"], h_delta=4))
 
+    # The seed itself comes first: for structure elucidation the target molecule
+    # has exactly this formula, so excluding it would make the correct answer
+    # unreachable from any formula-filtered candidate pool.
     seed_canonical = build_formula_string({e: c for e, c in initial.items() if c > 0})
-    seen = set()
-    results: List[str] = []
+    seen = {seed_canonical}
+    results: list[str] = [seed_canonical]
     for counts in candidates:
         if counts is None:
             continue
         formula = build_formula_string(counts)
-        if formula and formula != seed_canonical and formula not in seen:
+        if formula and formula not in seen:
             seen.add(formula)
             results.append(formula)
     return results
@@ -165,10 +158,6 @@ def reduce_resolution_by_averaging(vector: np.ndarray, window_size: int) -> np.n
     """
     Reduces the resolution of a vector by window averaging and interpolation.
 
-    This function first computes the moving average of the input vector
-    using a specified window size, which reduces its length. It then
-    interpolates the averaged data back to the original vector length.
-
     Args:
         vector (np.ndarray): The input 1D numpy array of data.
         window_size (int): The size of the averaging window. A larger
@@ -178,26 +167,16 @@ def reduce_resolution_by_averaging(vector: np.ndarray, window_size: int) -> np.n
         np.ndarray: A new vector with reduced resolution but the same
                     length as the input vector.
     """
-    if not isinstance(vector, np.ndarray):
+    if isinstance(vector, list):
         vector = np.array(vector)
 
     if window_size <= 1:
-        return vector  # No resolution change needed
+        return vector
 
-    # 1. Window Averaging (Downsampling)
-    # We use convolution for a simple moving average.
-    # The 'valid' mode means we only get points where the window fully overlaps.
     averaged_vector = np.convolve(vector, np.ones(window_size) / window_size, mode="valid")
-
-    # 2. Interpolation (Upsampling)
-    # Create the x-coordinates for the original and downsampled vectors
     original_x = np.linspace(0, 1, len(vector))
     averaged_x = np.linspace(0, 1, len(averaged_vector))
-
-    # Create an interpolation function based on the averaged data
     interp_func = interp1d(averaged_x, averaged_vector, kind="linear", fill_value="extrapolate")
 
     # Apply the interpolation function to the original x-coordinates
-    new_vector = interp_func(original_x)
-
-    return new_vector
+    return interp_func(original_x)

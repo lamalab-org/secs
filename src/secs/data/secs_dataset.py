@@ -1,18 +1,11 @@
 from functools import partial
 
 import pandas as pd
-import polars as pl
 from torch import Tensor
 from torch.utils.data import Dataset
 
-from secs.data.available import (
-    ModalityConstants,
-    NonStringModalities,
-    StringModalities,
-)
 from secs.data.components.datasets import (
     FingerprintSECSDataset,
-    GeneralDataset,
     HSQCDataset,
     IrDataset,
     MassSpecNegativeDataset,
@@ -20,6 +13,11 @@ from secs.data.components.datasets import (
     StringDataset,
     cNmrDataset,
     hNmrDataset,
+)
+from secs.data.modalities import (
+    ModalityConstants,
+    NonStringModalities,
+    StringModalities,
 )
 
 
@@ -39,13 +37,6 @@ class SECSDataset:
         self.config = config
         # "train" enables train-only augmentation (e.g. image depictions).
         self.split = kwargs.get("split", "train")
-        if "general" in self.config.data.modalities:
-            self.is_general = True
-            self.x_min_col = "x_min"
-            self.x_max_col = "x_max"
-        else:
-            self.is_general = False
-
         init_str_fn = partial(
             self._tokenize_strings,
             context_length=kwargs.get("context_length", 256),
@@ -63,7 +54,6 @@ class SECSDataset:
             ),
             NonStringModalities.C_NMR: self.build_c_nmr_dataset,
             NonStringModalities.IR: self.build_ir_dataset,
-            NonStringModalities.GENERAL: self.build_general_dataset,
             NonStringModalities.H_NMR: self.build_hnmr_cnn_dataset,
             NonStringModalities.HSQC: self.build_hsqc_dataset,
         }
@@ -86,15 +76,6 @@ class SECSDataset:
             other_modality=modality,
             central_modality_data=self._handle_central_modality_data(string_data),
             other_modality_data=other_modality_data,
-        )
-
-    def build_general_dataset(self) -> GeneralDataset:
-        modality = "general"
-        general_data = self.data[[self.central_modality, modality, self.x_min_col, self.x_max_col]].dropna()
-        return GeneralDataset(
-            data=general_data[modality].to_list(),
-            central_modality=self.central_modality,
-            central_modality_data=self._handle_central_modality_data(general_data),
         )
 
     def build_fp_dataset(self) -> FingerprintSECSDataset:
@@ -175,15 +156,10 @@ class SECSDataset:
 
     def _handle_central_modality_data(self, data_pair: pd.DataFrame):
         idx = data_pair.index.to_list()
-        out = (
+        return (
             self.central_modality_data[0][idx],
             self.central_modality_data[1][idx],
         )
-        if self.is_general:
-            x_min = Tensor(self.data.loc[idx, self.x_min_col].to_list())
-            x_max = Tensor(self.data.loc[idx, self.x_max_col].to_list())
-            out = (*out, x_min, x_max)
-        return out
 
     @staticmethod
     def _tokenize_strings(
@@ -191,7 +167,10 @@ class SECSDataset:
         context_length: int,
         modality: str,
     ) -> tuple[Tensor, Tensor]:
-        tokenized_data = ModalityConstants[modality].tokenizer(
+
+        t = ModalityConstants[modality].tokenizer
+
+        tokenized_data = t(
             dataset,
             padding="max_length",
             truncation=True,

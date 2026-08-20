@@ -348,35 +348,18 @@ def get_scaled_model(scale: str = "small", **kwargs):
 
 
 class hNmrCNNEncoder(nn.Module):
-    # --- MODIFIED: Added flag to control the initial residual connection ---
     def __init__(self, ckpt_path: str | None = None, freeze_encoder: bool = False, use_initial_residual: bool = False) -> None:
         super().__init__()
         # Pass the flag to the model factory
+
         self.encoder = get_scaled_model("xlarge", use_initial_residual=use_initial_residual)
+
+        if ckpt_path:
+            self.load_state_dict(torch.load(ckpt_path, device=self.encoder.device))
+
         if freeze_encoder:
             for param in self.encoder.parameters():
                 param.requires_grad = False
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.encoder(x)
-
-
-if __name__ == "__main__":
-    # Example usage
-    # The hNmrCNNEncoder now enables the initial residual connection by default.
-    # You can disable it by passing use_initial_residual=False
-    model = hNmrCNNEncoder(ckpt_path=None, freeze_encoder=False, use_initial_residual=True).to("cuda")
-    model.eval()
-    print(model)  # Print the model to see the new `initial_residual_processor`
-
-    input_tensor = torch.randn(4, 1, 10000)  # Batch size 4, 1 channel, length 10000
-    output = model(input_tensor.to("cuda"))
-    print(f"\nInput shape: {input_tensor.shape}")
-    print(f"Output shape: {output.shape}")  # Should be (4, 1024) for latent_dim=1024
-
-    # Example of disabling the feature
-    print("\n--- Model without initial residual connection ---")
-    model_no_residual = hNmrCNNEncoder(use_initial_residual=False).to("cuda")
-    model_no_residual.eval()
-    output_no_residual = model_no_residual(input_tensor.to("cuda"))
-    print(f"Output shape (no residual): {output_no_residual.shape}")

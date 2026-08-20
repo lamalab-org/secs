@@ -311,7 +311,7 @@ class ScalableCNNEncoder2D(nn.Module):
             x = stage_module(x)
 
         if self.use_attention and self.attention is not None:
-            B, C, H, W = x.shape
+            _batch, _channels, H, W = x.shape
             x_att = x.flatten(2).transpose(1, 2)  # (B, H*W, C)
             att_output, _ = self.attention(x_att, x_att, x_att)
             x_att = self.attention_norm(x_att + att_output)  # Post-norm
@@ -449,14 +449,3 @@ class HSQCEncoder(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # Expected input x: (Batch, 1, 512, 512)
         return self.encoder(x)
-
-
-# test the forward pass
-if __name__ == "__main__":
-    model = HSQCEncoder()
-    test_input = torch.randn(2, 1, 512, 512)  # Batch of 2, single-channel images
-    output = model(test_input)
-    print("Output shape:", output.shape)  # Should be (2, latent_dim), e.g., (2, 1024)
-    # print nr of parameters
-    num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print("Number of trainable parameters:", num_params)

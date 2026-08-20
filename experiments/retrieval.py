@@ -11,11 +11,11 @@ from dotenv import load_dotenv
 from loguru import logger
 from omegaconf import DictConfig
 
-from secs.data.analysis import aggregate_embeddings
 from secs.data.datamodule import SECSDataModule
 from secs.data.secs_dataset import SECSDataset
 from secs.metrics.retrieval import full_database_retrieval
 from secs.models.lightning_module import SECSModule
+from secs.utils.embeddings import aggregate_embeddings
 from secs.utils.utils import HANDLERS as handlers
 
 load_dotenv()
@@ -73,7 +73,7 @@ def embed(config: DictConfig):
         model=SECSModule(config),
         datamodule=datamodule,
     )
-    with open(f"{config.embeddings_path}_{RETRIEVAL_TIME}.pkl", "wb") as f:
+    with Path(f"{config.embeddings_path}_{RETRIEVAL_TIME}.pkl").open("wb") as f:
         pkl.dump(predictions, f, protocol=pkl.HIGHEST_PROTOCOL)
 
     aggregated_embeddings = aggregate_embeddings(
@@ -82,7 +82,7 @@ def embed(config: DictConfig):
         central_modality=config.data.central_modality,
     )
     # # concatenate predictions outside of this script and save predictions
-    with open(f"{config.embeddings_path}.pkl", "wb") as f:
+    with Path(f"{config.embeddings_path}.pkl").open("wb") as f:
         pkl.dump(aggregated_embeddings, f, protocol=pkl.HIGHEST_PROTOCOL)
 
     logger.info(f"Saved embeddings to {config.embeddings_path}.pkl")

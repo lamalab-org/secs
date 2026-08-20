@@ -7,8 +7,8 @@ from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader, DistributedSampler
 from torch_geometric.loader import DataLoader as GeometricDataLoader
 
-from secs.data.available import NonStringModalities
 from secs.data.components.datasets import StringDatasetEmbedding
+from secs.data.modalities import NonStringModalities
 
 
 class SECSDataModule(LightningDataModule):
@@ -75,8 +75,6 @@ class SECSDataModule(LightningDataModule):
         return dataloaders
 
     def train_dataloader(self) -> CombinedLoader:
-        # iter through train data loaders
-        # add DDPSampler to train_dataloader
         train_dataloaders = self.build_multimodal_dataloader(
             batch_size=self.dataloader_arguments["batch_size"],
             drop_last=True,
@@ -87,10 +85,6 @@ class SECSDataModule(LightningDataModule):
         return CombinedLoader(train_dataloaders, "sequential")
 
     def val_dataloader(self) -> CombinedLoader:
-        # iter through val data loaders
-        # add DDPSampler to val_dataloader
-        # for val_dataloader in [*self.val_dataloaders.values()]:
-        #     val_dataloader.sampler = DistributedSampler(val_dataloader.dataset)
         val_dataloaders = self.build_multimodal_dataloader(
             batch_size=self.dataloader_arguments["batch_size"],
             drop_last=False,
@@ -117,44 +111,33 @@ class SECSDataModule(LightningDataModule):
         num_workers: int,
         mode: str,
     ) -> dict[str, DataLoader]:
-        """
-        Build dataloaders for the predict step.
-        This function is similar to `build_multimodal_dataloader` but does not use the DistributedSampler.
-        Hence, it can be ran on a single GPU.
+        """Build per-modality dataloaders for the predict step.
 
-        After, in the `retrieval.py` script the predictions are concatenated.
+        Unlike `build_multimodal_dataloader`, no DistributedSampler is used,
+        so this can run on a single GPU. Predictions are concatenated later
+        in `retrieval.py`.
         """
+        geometric = {NonStringModalities.GRAPH, NonStringModalities.STRUCTURE}
         dataloaders = {}
-        for modality in self.datasets[mode][0]:
-            if modality == NonStringModalities.GRAPH or modality == NonStringModalities.STRUCTURE:
-                dataloaders[modality] = GeometricDataLoader(
-                    self.datasets[mode][0][modality],
-                    batch_size=batch_size,
-                    num_workers=num_workers,
-                    drop_last=False,
-                    shuffle=shuffle,
-                    prefetch_factor=num_workers,
-                )
-            else:
-                dataloaders[modality] = DataLoader(
-                    self.datasets[mode][0][modality],
-                    batch_size=batch_size,
-                    num_workers=num_workers,
-                    drop_last=False,
-                    shuffle=shuffle,
-                    prefetch_factor=num_workers,
-                )
-        # CombinedLoader does not work with DDPSampler directly
-        # So each dataloader has a DistributedSampler
+        for modality, dataset in self.datasets[mode][0].items():
+            loader_cls = GeometricDataLoader if modality in geometric else DataLoader
+            dataloaders[modality] = loader_cls(
+                dataset,
+                batch_size=batch_size[modality] if isinstance(batch_size, dict) else batch_size,
+                num_workers=num_workers,
+                drop_last=False,
+                shuffle=shuffle,
+                prefetch_factor=num_workers if num_workers > 0 else None,
+            )
         return dataloaders
 
-    def embed_dataloader(self, tokenized_data: list[list[int]]) -> StringDatasetEmbedding:
-        dataset = StringDatasetEmbedding(tokenized_data)
+    def embed_dataloader(self, tokenized_data: list[list[int]]) -> DataLoader:
+        num_workers = self.dataloader_arguments["num_workers"]
         return DataLoader(
-            dataset,
+            StringDatasetEmbedding(tokenized_data),
             batch_size=self.dataloader_arguments["batch_size"],
-            num_workers=self.dataloader_arguments["num_workers"],
+            num_workers=num_workers,
             drop_last=False,
             shuffle=False,
-            prefetch_factor=self.dataloader_arguments["num_workers"],
+            prefetch_factor=num_workers if num_workers > 0 else None,
         )

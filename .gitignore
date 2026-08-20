@@ -149,6 +149,11 @@ experiments/outputs/*
 experiments/molbind/*
 experiments/lightning_logs/*
 experiments/checkpoints/
+experiments/elucidation/
+experiments/elucidation_*/
+experiments/weight_sweep/
+experiments/vectordb/
+experiments/hose_table.json
 experiments/HUBioDataLab/*
 experiments/seyonec/*
 notebooks/*.csv
@@ -179,3 +184,5 @@ configs/local/default.yaml
 
 # Aim logging
 .aim
+experiments/vectordb/
+experiments/hose_table.json
