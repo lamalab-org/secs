@@ -51,10 +51,19 @@ class FaissCandidateSource:
         self.n_neighbours = n_neighbours
 
     @classmethod
-    def from_files(cls, index_path: str | Path, parquet_path: str | Path, n_neighbours: int = 100_000):
+    def from_files(
+        cls,
+        index_path: str | Path,
+        parquet_path: str | Path,
+        n_neighbours: int = 100_000,
+        allow_partial: bool = False,
+    ):
         """Load a FAISS index plus the parquet holding its SMILES and formulas.
 
-        Row *i* of the parquet must correspond to vector *i* in the index.
+        Row *i* of the parquet must correspond to vector *i* in the index. Set
+        `allow_partial` for an index still being built: it covers the first
+        `ntotal` rows, so the parquet is truncated to match. Anything beyond
+        that prefix is simply unreachable, not misaligned.
         """
         import faiss  # noqa: PLC0415  (heavy optional import)
         import polars as pl  # noqa: PLC0415
@@ -62,9 +71,12 @@ class FaissCandidateSource:
         table = pl.read_parquet(parquet_path, columns=["smiles", "molecular_formula"])
         index = faiss.read_index(str(index_path))
         if index.ntotal != table.height:
-            raise ValueError(
-                f"Index has {index.ntotal} vectors but {parquet_path} has {table.height} rows; they must correspond."
-            )
+            if not (allow_partial and index.ntotal < table.height):
+                raise ValueError(
+                    f"Index has {index.ntotal} vectors but {parquet_path} has {table.height} rows; they must correspond."
+                )
+            logger.warning(f"Partial index: using the first {index.ntotal:,} of {table.height:,} rows.")
+            table = table.head(index.ntotal)
         return cls(
             index=index,
             smiles=table["smiles"].to_numpy(),
