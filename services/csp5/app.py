@@ -24,6 +24,13 @@ RDLogger.DisableLog("rdApp.*")
 
 BATCH_SIZE = int(os.environ.get("CSP5_BATCH_SIZE", "64"))
 
+# CSP5 defaults to 20 embedding attempts. Molecules RDKit cannot embed --
+# bridged cyclophanes, ~2% of chemotion -- fail all 20 identically, turning a
+# 3s failure into a 69s one. Retries were measured to rescue nothing (149/150
+# molecules predicted at 1, 2 and 20 tries), so one attempt is the useful
+# budget and failures stay cheap.
+MAX_EMBED_TRIES = int(os.environ.get("CSP5_MAX_EMBED_TRIES", "1"))
+
 app = FastAPI(title="CSP5 13C shift prediction")
 
 
@@ -58,7 +65,12 @@ def predict(request: dict) -> dict:
     if not submitted:
         return {"shifts": shifts, "uncertainty": uncertainty}
 
-    result = predict_smiles(submitted, nucleus="13C", batch_size=BATCH_SIZE)
+    result = predict_smiles(
+        submitted,
+        nucleus="13C",
+        batch_size=BATCH_SIZE,
+        max_embed_tries=MAX_EMBED_TRIES,
+    )
 
     # CSP5 drops failed molecules and renumbers molecule_id over the
     # survivors, so walk the submitted list against the failure multiset to

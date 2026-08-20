@@ -109,17 +109,15 @@ class PeakSetBackbone(nn.Module):
 
     def forward(self, shifts, mask, normalize: bool = True):
         B = shifts.size(0)
-        x = self.tokenizer(shifts, mask)                                # (B, P, D)
-        x = torch.cat([self.cls_token.expand(B, -1, -1), x], dim=1)     # (B, 1+P, D)
+        x = self.tokenizer(shifts, mask)  # (B, P, D)
+        x = torch.cat([self.cls_token.expand(B, -1, -1), x], dim=1)  # (B, 1+P, D)
 
-        pad = ~mask                                                     # True = pad
-        pad = torch.cat(
-            [torch.zeros(B, 1, dtype=torch.bool, device=pad.device), pad], dim=1
-        )                                                               # CLS never padded
+        pad = ~mask  # True = pad
+        pad = torch.cat([torch.zeros(B, 1, dtype=torch.bool, device=pad.device), pad], dim=1)  # CLS never padded
 
         x = self.transformer(x, src_key_padding_mask=pad)
         x = self.encoder_norm(x)
-        x = x[:, 0]                                                     # CLS embedding
+        x = x[:, 0]  # CLS embedding
         x = self.head(x)
         if normalize:
             x = F.normalize(x, dim=-1)

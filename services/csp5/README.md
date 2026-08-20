@@ -44,6 +44,13 @@ verifier = SimulatedShiftVerifier(simulator, observed=peaks, tolerance_ppm=5.0)
 - CSP5 embeds each SMILES itself (ETKDG + force field) before prediction; no
   conformer input is needed and the bundled `CSP5-13C` weights ship inside
   the pip package (~18 MB), so the container needs no model download.
+- `CSP5_MAX_EMBED_TRIES` defaults to 1 rather than the library's 20. Roughly
+  2% of chemotion molecules -- bridged cyclophanes such as
+  `O=Cc1cc2ccc1CCc1ccc(cc1)CC2` -- cannot be embedded by ETKDGv3 at all, and
+  every retry fails the same way: 4s at one attempt, 69s at twenty, `None`
+  either way. Retries were measured to rescue nothing (149/150 molecules
+  predicted at 1, 2 and 20 tries). Raise it only with evidence that a
+  scaffold benefits.
 - Paper: [CSP5: Large-scale Neural Chemical Shift Prediction from 2.5 Million
   Experimental NMR Spectra](https://chemrxiv.org/doi/full/10.26434/chemrxiv.15001823/v1);
   reported 13C MAE 0.61 ppm on the assigned Exp22K test set.

@@ -13,6 +13,7 @@ RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/wh
 COPY app.py /app/app.py
 
 ENV CSP5_BATCH_SIZE=64 \
+    CSP5_MAX_EMBED_TRIES=1 \
     CUDA_VISIBLE_DEVICES=-1
 
 EXPOSE 7996
