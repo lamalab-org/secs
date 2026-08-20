@@ -11,6 +11,12 @@ class SimulatedShiftVerifier(Verifier):
     -1 once the mean mismatch reaches `tolerance_ppm`. Candidates the
     simulator cannot handle score `failure_penalty` rather than silently
     passing.
+
+    With `symmetric`, a perfect match scores +1 instead of 0, putting the
+    verifier on the same [-1, 1] scale as a cosine similarity. Note this is an
+    affine rescaling -- `1 - 2d` is `2 * (-d) + 1` -- so against a fixed set of
+    candidates it reorders nothing on its own; what it changes is the weight
+    this term carries inside a WeightedObjective, doubling it.
     """
 
     def __init__(
@@ -19,6 +25,7 @@ class SimulatedShiftVerifier(Verifier):
         observed: np.ndarray,
         tolerance_ppm: float = 5.0,
         failure_penalty: float = -1.0,
+        symmetric: bool = False,
         metric=hungarian_peak_distance,
         name: str | None = None,
     ) -> None:
@@ -28,6 +35,7 @@ class SimulatedShiftVerifier(Verifier):
         self.observed = np.asarray(observed, dtype=float).ravel()
         self.tolerance_ppm = tolerance_ppm
         self.failure_penalty = failure_penalty
+        self.symmetric = symmetric
         self.metric = metric
         self.name = name or f"{simulator.modality}_shift_match"
 
@@ -41,5 +49,6 @@ class SimulatedShiftVerifier(Verifier):
                 out[i] = self.failure_penalty
                 continue
             distance = self.metric(self.observed, predicted)
-            out[i] = -min(distance / self.tolerance_ppm, 1.0)
+            mismatch = min(distance / self.tolerance_ppm, 1.0)
+            out[i] = 1.0 - 2.0 * mismatch if self.symmetric else -mismatch
         return out

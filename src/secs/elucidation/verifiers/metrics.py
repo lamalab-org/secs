@@ -6,6 +6,7 @@ def hungarian_peak_distance(
     observed: np.ndarray,
     predicted: np.ndarray,
     unmatched_penalty: float = 10.0,
+    unexplained_observed_weight: float = 1.0,
 ) -> float:
     """Mean per-peak cost of the optimal one-to-one assignment, in ppm.
 
@@ -24,17 +25,15 @@ def hungarian_peak_distance(
     if observed.size == 0 or predicted.size == 0:
         return float("inf")
 
-    # Costs are capped at `unmatched_penalty`, which makes the assignment
-    # robust: a peak nothing can explain -- a solvent line, an impurity, a
-    # simulator that skips a nucleus -- costs a bounded amount instead of
-    # dominating the total. Without the cap a single DMSO peak at 40 ppm adds
-    # ~76 ppm and saturates the score for every candidate alike.
     cost = np.minimum(np.abs(observed[:, None] - predicted[None, :]), unmatched_penalty)
     rows, cols = linear_sum_assignment(cost)
 
     matched = cost[rows, cols].sum()
-    n_unmatched = (observed.size - rows.size) + (predicted.size - cols.size)
-    return float((matched + unmatched_penalty * n_unmatched) / max(observed.size, predicted.size))
+    unexplained_observed = observed.size - rows.size
+    unexplained_predicted = predicted.size - cols.size
+    surplus = unmatched_penalty * (unexplained_predicted + unexplained_observed_weight * unexplained_observed)
+    denominator = max(predicted.size, rows.size + unexplained_observed * unexplained_observed_weight)
+    return float((matched + surplus) / max(denominator, 1))
 
 
 def greedy_peak_distance(observed: np.ndarray, predicted: np.ndarray) -> float:
