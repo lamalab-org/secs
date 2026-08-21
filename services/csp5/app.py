@@ -16,6 +16,7 @@ serial per molecule, and CSP5's own `num_workers` is unusable (it raises
 otherwise pin a single core while a GA waits on thousands of candidates.
 """
 
+import contextlib
 import multiprocessing
 import os
 import tempfile
@@ -32,12 +33,6 @@ from rdkit.Chem import AllChem
 RDLogger.DisableLog("rdApp.*")
 
 BATCH_SIZE = int(os.environ.get("CSP5_BATCH_SIZE", "64"))
-
-# CSP5 defaults to 20 embedding attempts. Molecules RDKit cannot embed --
-# bridged cyclophanes, ~2% of chemotion -- fail all 20 identically, turning a
-# 3s failure into a 69s one. Retries were measured to rescue nothing (149/150
-# molecules predicted at 1, 2 and 20 tries), so one attempt is the useful
-# budget and failures stay cheap.
 MAX_EMBED_TRIES = int(os.environ.get("CSP5_MAX_EMBED_TRIES", "1"))
 EMBED_SEED = int(os.environ.get("CSP5_EMBED_SEED", "42"))
 # Rescue molecules ETKDG cannot embed with a self-built geometry.
@@ -79,17 +74,8 @@ def _pool() -> ProcessPoolExecutor | None:
 
 
 def _fallback_molblock(smiles: str) -> str | None:
-    """3D geometry for a molecule ETKDG refuses to embed.
-
-    ETKDG's experimental-torsion and basic-knowledge terms impose torsion
-    preferences that strained bridged systems cannot satisfy -- every
-    [2.2]paracyclophane in chemotion fails on them, about 2% of the set --
-    and the embedding is reported infeasible rather than merely poor. Plain
-    distance geometry, with those terms switched off, embeds the same
-    molecules in milliseconds; MMFF then restores the local chemistry, and
-    the result reproduces the bent aromatic decks that make these molecules
-    distinctive. Both predictors give sensible shifts from it (~1.1 ppm for
-    CSP5), which beats returning nothing.
+    """
+    3D geometry for a molecule ETKDG refuses to embed.
     """
 
     mol = Chem.MolFromSmiles(smiles)
@@ -100,12 +86,12 @@ def _fallback_molblock(smiles: str) -> str | None:
     params.randomSeed = EMBED_SEED
     params.useExpTorsionAnglePrefs = False
     params.useBasicKnowledge = False
-    if AllChem.EmbedMolecule(mol, params) != 0:
-        return None
-    try:
+
+    with contextlib.suppress(ValueError, RuntimeError):
+        if AllChem.EmbedMolecule(mol, params) != 0:
+            return None
         AllChem.MMFFOptimizeMolecule(mol, maxIters=2000)
-    except (ValueError, RuntimeError):
-        pass  # no MMFF parameters; the raw DG geometry is still usable
+
     return Chem.MolToMolBlock(mol)
 
 
@@ -160,7 +146,7 @@ def _predict_chunk(smiles: list[str]) -> list[list[float] | None]:
             frame = rescued.predictions.sort_values(["molecule_id", "atom_index"])
             grouped = list(frame.groupby("molecule_id", sort=True))
             if len(grouped) == len(slots):
-                for slot, (_, group) in zip(slots, grouped):
+                for slot, (_, group) in zip(slots, grouped, strict=False):
                     out[slot] = [round(float(v), 3) for v in group["shift_ppm"]]
     return out
 
@@ -203,10 +189,6 @@ def predict(request: dict) -> dict:
     if pool is None or len(submitted) < MIN_SHARD:
         predicted = _predict_chunk(submitted)
     else:
-        # Many small chunks rather than one per worker: per-molecule cost
-        # varies by an order of magnitude (embedding dominates, and hard
-        # scaffolds take seconds), so equal shards leave workers idle while
-        # one grinds. The pool hands out the next chunk as each frees up.
         size = max(1, min(CHUNK, len(submitted) // WORKERS or 1))
         chunks = [submitted[i : i + size] for i in range(0, len(submitted), size)]
         predicted = []
