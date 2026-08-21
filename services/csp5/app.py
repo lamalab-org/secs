@@ -27,6 +27,7 @@ import torch
 from csp5 import predict_smiles, predict_structures
 from fastapi import FastAPI
 from rdkit import Chem, RDLogger
+from rdkit.Chem import AllChem
 
 RDLogger.DisableLog("rdApp.*")
 
@@ -90,7 +91,6 @@ def _fallback_molblock(smiles: str) -> str | None:
     distinctive. Both predictors give sensible shifts from it (~1.1 ppm for
     CSP5), which beats returning nothing.
     """
-    from rdkit.Chem import AllChem
 
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
