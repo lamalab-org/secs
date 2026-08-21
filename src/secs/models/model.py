@@ -3,7 +3,8 @@ from loguru import logger
 from omegaconf import DictConfig
 from torch import Tensor
 
-from secs.models import ProjectionHead
+from secs.models.heads import ProjectionHead
+from secs.models.registry import resolve_encoder
 
 
 class MolBind(nn.Module):
@@ -22,7 +23,12 @@ class MolBind(nn.Module):
         for modality in [*modalities, central_modality]:
             if modality not in [*vars(ModalityConstants)]:
                 raise ValueError(f"Modality {modality} not supported yet.")
-            dict_encoders[modality] = ModalityConstants[modality].encoder(**cfg.model.encoders[modality])
+            encoder_cfg = dict(cfg.model.encoders[modality])
+            # `name` selects which backbone of this modality to build; the rest
+            # of the block is that backbone's kwargs.
+            encoder_cls = resolve_encoder(modality, encoder_cfg.pop("name", None))
+            logger.info(f"Encoder for {modality}: {encoder_cls.__name__}")
+            dict_encoders[modality] = encoder_cls(**encoder_cfg)
 
             if cfg.model.projection_heads[f"{modality}_is_on"]:
                 dict_projection_heads[modality] = ProjectionHead(**cfg.model.projection_heads[modality])
