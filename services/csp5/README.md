@@ -38,22 +38,5 @@ verifier = SimulatedShiftVerifier(simulator, observed=peaks, tolerance_ppm=5.0)
 
 ## Notes
 
-- CSP5 embeds each SMILES itself; the weights ship inside the pip package
-  (~18 MB), so the container downloads no model at build time.
-- `CSP5_MAX_EMBED_TRIES` defaults to 1, not the library's 20. Molecules
-  ETKDG cannot embed fail all 20 attempts identically -- 4s at one try, 69s
-  at twenty, `null` either way -- and retries were measured to rescue
-  nothing (149/150 predicted at 1, 2 and 20 tries).
-- Those molecules are then rescued rather than dropped. ETKDG rejects
-  strained bridged systems ([2.2]paracyclophanes, ~2% of chemotion) because
-  its torsion terms cannot be satisfied, not because the structure is hard
-  in 3D: plain distance geometry embeds them in milliseconds, and after MMFF
-  the aromatic decks show the ~0.08 A bend these molecules are known for.
-  Prediction then runs from that geometry via `predict_structures`, giving
-  ~1.1 ppm where the service previously returned nothing.
-  `CSP5_FALLBACK_GEOMETRY=0` disables it.
-- Paper: [CSP5](https://chemrxiv.org/doi/full/10.26434/chemrxiv.15001823/v1),
-  reporting 13C MAE 0.61 ppm on the assigned Exp22K test set. Measured here
-  at 1.48 ppm mean / 0.39 median nearest-peak error on 49 chemotion
-  molecules, ahead of cascade on 42 of them; see
-  `scripts/benchmark_shift_simulators.py`.
+- Parallelism & retries: Weights ship in the pip package (~18 MB, no build-time download); requests are sharded over a process pool (CSP5_WORKERS, default 8) because CSP5's own num_workers is broken in 0.2.18 — 106.6s → 14.4s on 800 GA candidates, identical predictions. CSP5_MAX_EMBED_TRIES defaults to 1 since retries rescue nothing (149/150 at 1, 2 and 20 tries) and cost 4s vs 69s.
+- Fallback & accuracy: Molecules ETKDG can't embed (strained bridged systems, ~2% of chemotion) fall back to plain distance geometry + MMFF and predict_structures, giving ~1.1 ppm where the service previously returned null (CSP5_FALLBACK_GEOMETRY=0 disables). Measured 1.48 ppm mean / 0.39 median nearest-peak error on 49 chemotion molecules — ahead of cascade on 42 — vs the paper's 0.61 ppm 13C MAE on Exp22K.

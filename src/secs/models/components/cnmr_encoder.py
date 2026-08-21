@@ -2,7 +2,6 @@ import math
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from loguru import logger
 
 
@@ -20,7 +19,7 @@ class FourierShiftEmbedding(nn.Module):
         assert dim % 2 == 0
         self.max_ppm = max_ppm
         # geometric spread of frequencies over the ppm range
-        freqs = torch.logspace(0, math.log10(max_ppm / 2.0), n_freqs)
+        freqs = torch.logspace(0, math.log10(max_ppm / 0.05), n_freqs)
         self.register_buffer("freqs", freqs * (2 * math.pi / max_ppm))  # (n_freqs,)
         self.mlp = nn.Sequential(
             nn.Linear(2 * n_freqs, dim),
@@ -54,19 +53,29 @@ class PeakSetBackbone(nn.Module):
 
     peaks (shifts, mask)
         -> continuous ppm embedding (+ peak-presence token)
-        -> prepend learned [CLS] token
-        -> transformer encoder (permutation-equivariant over peaks, padding-masked)
-        -> [CLS] embedding
-        -> projection head -> L2-normalized embedding
+        -> transformer encoder (permutation-equivariant, padding-masked)
+        -> masked mean over the real peak tokens  ->  (B, embed_dim)
 
-    The [CLS] token is never masked, so even an all-padding row stays finite
-    (CLS attends to itself).
+    The backbone stops at the pooled representation. Projection to the shared
+    contrastive space is `ProjectionHead`, configured per modality under
+    `model.projection_heads` -- keeping a second projection stack in here as
+    well meant four linear layers after pooling and two places to configure
+    the same thing. Normalisation belongs to the consumer too: InfoNCE and
+    `cosine_similarity` both normalise their inputs.
+
+    Readout is a masked mean rather than a [CLS] token or a learned query.
+    Both of those are a softmax over the set, which can saturate onto one or
+    two peaks and forces the whole spectrum through a single learned routing
+    step; for an unordered set of ~10-40 peaks where the entire distribution
+    carries the signal, the mean is the better inductive bias and costs no
+    parameters. A content-free [CLS] also looks identical in every sample, so
+    peaks attend to it as a cheap no-op and it drains attention mass from the
+    peak-peak comparisons that matter (the ViT/LLM attention-sink effect).
     """
 
     def __init__(
         self,
         embed_dim: int = 256,
-        proj_dim: int = 512,
         depth: int = 6,
         num_heads: int = 8,
         mlp_ratio: float = 4.0,
@@ -76,7 +85,6 @@ class PeakSetBackbone(nn.Module):
     ):
         super().__init__()
         self.tokenizer = PeakTokenizer(embed_dim, n_freqs=n_freqs, max_ppm=max_ppm)
-        self.cls_token = nn.Parameter(torch.randn(1, 1, embed_dim) * 0.02)
 
         enc_layer = nn.TransformerEncoderLayer(
             d_model=embed_dim,
@@ -89,12 +97,6 @@ class PeakSetBackbone(nn.Module):
         )
         self.transformer = nn.TransformerEncoder(enc_layer, num_layers=depth)
         self.encoder_norm = nn.LayerNorm(embed_dim)
-
-        self.head = nn.Sequential(
-            nn.Linear(embed_dim, proj_dim),
-            nn.GELU(),
-            nn.Linear(proj_dim, proj_dim),
-        )
         self._init_weights()
 
     def _init_weights(self):
@@ -107,21 +109,26 @@ class PeakSetBackbone(nn.Module):
                 nn.init.ones_(m.weight)
                 nn.init.zeros_(m.bias)
 
-    def forward(self, shifts, mask, normalize: bool = True):
-        B = shifts.size(0)
+    def forward(self, shifts, mask):
         x = self.tokenizer(shifts, mask)  # (B, P, D)
-        x = torch.cat([self.cls_token.expand(B, -1, -1), x], dim=1)  # (B, 1+P, D)
 
         pad = ~mask  # True = pad
-        pad = torch.cat([torch.zeros(B, 1, dtype=torch.bool, device=pad.device), pad], dim=1)  # CLS never padded
+        # A fully padded row would mask every position, and softmax over an
+        # all -inf row is NaN. The [CLS] token used to guarantee one live
+        # position; keep the first one live instead. Its value is then
+        # excluded from the mean below, so it cannot contribute.
+        empty = pad.all(dim=1)
+        if empty.any():
+            pad = pad.clone()
+            pad[empty, 0] = False
 
         x = self.transformer(x, src_key_padding_mask=pad)
         x = self.encoder_norm(x)
-        x = x[:, 0]  # CLS embedding
-        x = self.head(x)
-        if normalize:
-            x = F.normalize(x, dim=-1)
-        return x
+
+        # Masked mean over real peaks only; clamp so an empty row gives zeros
+        # rather than a division by zero.
+        keep = mask.unsqueeze(-1).to(x.dtype)  # (B, P, 1)
+        return (x * keep).sum(dim=1) / keep.sum(dim=1).clamp(min=1.0)
 
 
 class cNmrEncoder(nn.Module):
@@ -164,12 +171,12 @@ class cNmrEncoder(nn.Module):
             self.encoder.eval()
         return self
 
-    def forward(self, inputs, mask=None, normalize: bool = True):
+    def forward(self, inputs, mask=None):
         if mask is None:
             shifts, mask = inputs
         else:
             shifts = inputs
         if self.frozen:
             with torch.no_grad():
-                return self.encoder(shifts, mask, normalize=normalize)
-        return self.encoder(shifts, mask, normalize=normalize)
+                return self.encoder(shifts, mask)
+        return self.encoder(shifts, mask)

@@ -1,7 +1,9 @@
 import contextlib
+import math
 import os
 
 import torch
+import torch.nn as nn
 from info_nce import InfoNCE
 from loguru import logger
 from omegaconf import DictConfig
@@ -36,6 +38,12 @@ class SECSModule(LightningModule):
 
         self.config = cfg
         self.loss = InfoNCE(temperature=cfg.model.loss.temperature, negative_mode="unpaired")
+
+        self.learnable_temperature = bool(getattr(cfg.model.loss, "learnable_temperature", False))
+        if self.learnable_temperature:
+            self.log_inv_temperature = nn.Parameter(torch.tensor(math.log(1.0 / cfg.model.loss.temperature)))
+            self.max_inv_temperature = float(getattr(cfg.model.loss, "max_inv_temperature", 100.0))
+
         self.per_device_batch_size = cfg.data.batch_size
         self.batch_size = self.per_device_batch_size * self.world_size
         self.central_modality = cfg.data.central_modality
@@ -64,13 +72,22 @@ class SECSModule(LightningModule):
             return self.loss(z1, z2)
 
     def _multimodal_loss(self, embeddings_dict: dict[str, Tensor], prefix: str) -> float:
+        if self.learnable_temperature:
+            # InfoNCE only divides its logits by this, so handing it a tensor
+            # keeps the graph intact and the gradient reaches the parameter.
+            inv_t = self.log_inv_temperature.exp().clamp(max=self.max_inv_temperature)
+            self.loss.temperature = 1.0 / inv_t
+            self.log(f"{prefix}_temperature", 1.0 / inv_t.detach(), batch_size=self.batch_size, sync_dist=self.world_size > 1)
+
+        # modality_pair[0] is the central modality (smiles), [1] the spectral one
         modality_pair = [*embeddings_dict]
-        central_to_modality_loss = self._info_nce_loss(embeddings_dict[modality_pair[0]], embeddings_dict[modality_pair[1]])
+        # queries = spectrum, keys = smiles: same direction as retrieval at inference
+        modality_to_central_loss = self._info_nce_loss(embeddings_dict[modality_pair[1]], embeddings_dict[modality_pair[0]])
         if self.config.model.loss.symmetric:
-            modality_to_central_loss = self._info_nce_loss(embeddings_dict[modality_pair[1]], embeddings_dict[modality_pair[0]])
-            loss = (central_to_modality_loss + modality_to_central_loss) / 2
+            central_to_modality_loss = self._info_nce_loss(embeddings_dict[modality_pair[0]], embeddings_dict[modality_pair[1]])
+            loss = (modality_to_central_loss + central_to_modality_loss) / 2
         else:
-            loss = central_to_modality_loss
+            loss = modality_to_central_loss
         #  check if loss is nan
         if torch.isnan(loss):
             logger.error(f"Loss is nan for {prefix} batch.")
@@ -106,11 +123,17 @@ class SECSModule(LightningModule):
         return self.model.encode_modality(batch, self.central_modality)
 
     def configure_optimizers(self) -> Optimizer:
-        return torch.optim.AdamW(
-            self.model.parameters(),
-            lr=self.config.model.optimizer.lr,
-            weight_decay=self.config.model.optimizer.weight_decay,
-        )
+        groups = [
+            {
+                "params": list(self.model.parameters()),
+                "weight_decay": self.config.model.optimizer.weight_decay,
+            }
+        ]
+        if self.learnable_temperature:
+            # No weight decay on the temperature: decaying it pulls log(1/T)
+            # toward 0, i.e. T toward 1, which is not a neutral prior.
+            groups.append({"params": [self.log_inv_temperature], "weight_decay": 0.0})
+        return torch.optim.AdamW(groups, lr=self.config.model.optimizer.lr)
 
     def retrieval_metrics(
         self,

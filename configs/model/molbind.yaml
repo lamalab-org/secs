@@ -4,10 +4,6 @@ encoders:
     pretrained: True
     freeze_encoder: True
   c_nmr:
-    # ckpt_path: null
-    # input_dims: [512, 256, 256]
-    # output_dims: [256, 256, 512]
-    # latent_dim: 256
     freeze_encoder: False
   ir:
     freeze_encoder: False
@@ -15,6 +11,7 @@ encoders:
     freeze_encoder: False
   hsqc:
     freeze_encoder: False
+
 
 embedding_size: 512
 projection_heads:
