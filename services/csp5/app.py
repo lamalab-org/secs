@@ -21,6 +21,7 @@ import multiprocessing
 import os
 import tempfile
 from concurrent.futures import ProcessPoolExecutor
+from functools import lru_cache
 from pathlib import Path
 
 import pandas as pd
@@ -43,8 +44,6 @@ MIN_SHARD = int(os.environ.get("CSP5_MIN_SHARD", "8"))
 # Work unit handed to a worker; small enough to load-balance.
 CHUNK = int(os.environ.get("CSP5_CHUNK", "32"))
 
-_POOL: ProcessPoolExecutor | None = None
-
 
 def _init_worker() -> None:
     """One model per worker, and one thread each.
@@ -58,19 +57,15 @@ def _init_worker() -> None:
     predict_smiles(["CCO"], nucleus="13C", max_embed_tries=1)  # warm the weights
 
 
+@lru_cache(maxsize=1)
 def _pool() -> ProcessPoolExecutor | None:
-    global _POOL
     if WORKERS <= 1:
         return None
-    if _POOL is None:
-        # spawn: torch and fork in a threaded server deadlock.
-
-        _POOL = ProcessPoolExecutor(
-            max_workers=WORKERS,
-            mp_context=multiprocessing.get_context("spawn"),
-            initializer=_init_worker,
-        )
-    return _POOL
+    return ProcessPoolExecutor(
+        max_workers=WORKERS,
+        mp_context=multiprocessing.get_context("spawn"),
+        initializer=_init_worker,
+    )
 
 
 def _fallback_molblock(smiles: str) -> str | None:
