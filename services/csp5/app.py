@@ -19,6 +19,7 @@ otherwise pin a single core while a GA waits on thousands of candidates.
 import os
 from concurrent.futures import ProcessPoolExecutor
 
+import torch
 from fastapi import FastAPI
 from rdkit import Chem, RDLogger
 
@@ -50,7 +51,6 @@ def _init_worker() -> None:
     Torch would otherwise start a full thread pool per process and the
     workers would fight over the same cores, which is slower than serial.
     """
-    import torch
 
     torch.set_num_threads(1)
     from csp5 import predict_smiles

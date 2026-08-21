@@ -50,10 +50,10 @@ def train_molbind(config: DictConfig):
         config.data.dataset_path, config.data.dataset_config if hasattr(config.data, "dataset_config") else "default"
     )
     features = [*config.data.modalities, config.data.central_modality]  # , "x_min", "x_max"]
-    
+
     train_data = data["train"].to_pandas()[features]
     valid_data = data["val"].to_pandas()[features]
-    
+
     logger.info(f"Train data shape: {train_data.shape}")
     logger.info(f"Validation data shape: {valid_data.shape}")
 
