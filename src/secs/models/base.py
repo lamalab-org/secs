@@ -1,0 +1,134 @@
+"""Common API shared by every modality encoder.
+
+A modality can have several encoders (different backbones for the same kind of
+spectrum). They all look the same to `MolBind`:
+
+    encoder = SomeEncoder(ckpt_path=..., freeze_encoder=..., **backbone_kwargs)
+    embedding = encoder(batch)          # (B, output_dim)
+
+Subclasses build their backbone into `self.encoder`, set `self.output_dim`, and
+then call `self._finalize()` to get checkpoint loading and freezing for free.
+"""
+
+from abc import abstractmethod
+
+import torch
+import torch.nn as nn
+from loguru import logger
+from torch import Tensor
+from transformers import AutoModelForCausalLM
+
+
+def xavier_init(model: nn.Module) -> nn.Module:
+    for param in model.parameters():
+        if len(param.shape) > 1:
+            nn.init.xavier_uniform_(param)
+    return model
+
+
+def unwrap_state_dict(state: dict, prefixes: tuple[str, ...] = ("encoder.",)) -> dict:
+    """Pull the tensors out of a checkpoint saved by any of our training entry points.
+
+    Checkpoints come either raw or wrapped under 'state_dict'/'model'/'encoder',
+    with keys optionally carrying a module prefix.
+    """
+    for key in ("state_dict", "model", "encoder"):
+        if isinstance(state, dict) and key in state and isinstance(state[key], dict):
+            state = state[key]
+            break
+    cleaned = {}
+    for key, value in state.items():
+        for prefix in prefixes:
+            if key.startswith(prefix):
+                key = key[len(prefix) :]  # noqa: PLW2901
+                break
+        cleaned[key] = value
+    return cleaned
+
+
+class ModalityEncoder(nn.Module):
+    """Base class for all modality encoders.
+
+    Args:
+        ckpt_path: optional checkpoint for the backbone.
+        freeze_encoder: freeze the backbone parameters and keep it in eval mode.
+    """
+
+    #: dimension of the embedding returned by `forward`, before the projection head
+    output_dim: int | None = None
+
+    def __init__(self, ckpt_path: str | None = None, freeze_encoder: bool = False) -> None:
+        super().__init__()
+        self.ckpt_path = ckpt_path
+        self.frozen = freeze_encoder
+
+    def _finalize(self) -> None:
+        """Load the checkpoint and apply freezing. Call at the end of `__init__`."""
+        if self.ckpt_path is not None:
+            self.load_checkpoint(self.ckpt_path)
+        if self.frozen:
+            self.freeze()
+
+    def load_checkpoint(self, ckpt_path: str, strict: bool = False) -> None:
+        state = unwrap_state_dict(torch.load(ckpt_path, map_location="cpu"))
+        missing, unexpected = self.encoder.load_state_dict(state, strict=strict)
+        name = type(self).__name__
+        if missing:
+            logger.warning(f"{name}: {len(missing)} missing keys (e.g. {missing[:3]})")
+        if unexpected:
+            logger.warning(f"{name}: {len(unexpected)} unexpected keys (e.g. {unexpected[:3]})")
+
+    def freeze(self) -> None:
+        self.frozen = True
+        for param in self.encoder.parameters():
+            param.requires_grad = False
+        self.encoder.eval()
+
+    def train(self, mode: bool = True):
+        super().train(mode)
+        if self.frozen:
+            self.encoder.eval()
+        return self
+
+    @abstractmethod
+    def forward(self, x):
+        """Encode one batch of this modality into (B, output_dim)."""
+
+
+class HFCausalLMEncoder(ModalityEncoder):
+    """Generic HuggingFace backbone over (token_ids, attention_mask), mean pooled."""
+
+    def __init__(
+        self,
+        model_name: str,
+        freeze_encoder: bool = False,
+        pretrained: bool = True,
+    ) -> None:
+        super().__init__(freeze_encoder=freeze_encoder)
+        self.model_name = model_name
+        self.pretrained = pretrained
+        self._initialize_encoder()
+
+    def _initialize_encoder(self) -> None:
+        self.encoder = AutoModelForCausalLM.from_pretrained(self.model_name)
+        if self.pretrained:
+            if self.frozen:
+                self.freeze()
+        else:
+            self.encoder = xavier_init(self.encoder)
+
+    def forward(self, x: tuple[Tensor, Tensor]) -> Tensor:
+        token_ids, attention_mask = x
+        output = self.encoder(
+            input_ids=token_ids,
+            attention_mask=attention_mask,
+            output_hidden_states=True,
+        )
+        return self._non_pad_token_embed_averaging(output.hidden_states[-1], attention_mask)
+
+    @staticmethod
+    def _non_pad_token_embed_averaging(last_hidden_state: Tensor, attention_mask: Tensor) -> Tensor:
+        attention_mask = attention_mask.float().unsqueeze(-1)
+        sum_ = (last_hidden_state * attention_mask).sum(dim=1)
+        norm = attention_mask.squeeze(-1).sum(dim=1).unsqueeze(1)
+        return sum_ / norm
