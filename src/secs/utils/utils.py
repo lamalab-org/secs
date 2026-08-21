@@ -16,18 +16,6 @@ HANDLERS = {
 }
 
 
-def rename_keys_with_prefix(d: dict, prefix: str = "model.") -> dict:
-    new_dict = {}
-    for key, value in d.items():
-        if key.startswith(prefix):
-            # remove the prefix
-            new_key = key[len(prefix) :]
-            new_dict[new_key] = value
-        else:
-            new_dict[key] = value
-    return new_dict
-
-
 def select_device() -> str:
     """Selects the device to use for the model."""
     if torch.cuda.is_available():

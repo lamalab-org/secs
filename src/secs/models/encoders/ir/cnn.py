@@ -6,7 +6,6 @@ from omegaconf import DictConfig
 
 from secs.models.base import ModalityEncoder
 from secs.models.registry import register_encoder
-from secs.utils import rename_keys_with_prefix, select_device
 
 
 @register_encoder("ir", "cnn", default=True)
@@ -143,17 +142,10 @@ class IrCNNEncoder(ModalityEncoder):
     def _conv_out_dim(dim_in, kernel_size, stride, padding, dilation):
         return (dim_in + 2 * padding - dilation * (kernel_size - 1) - 1) // stride + 1
 
-    def load_checkpoint(self, ckpt_path: str, strict: bool = True) -> None:  # noqa: ARG002
-        # The layers live on the encoder itself here, not under `self.encoder`.
-        self.load_state_dict(rename_keys_with_prefix(torch.load(ckpt_path, map_location=select_device())["state_dict"]))
-
-    def freeze(self) -> None:
-        self.frozen = True
-        for param in self.parameters():
-            param.requires_grad = False
-
-    def train(self, mode: bool = True):
-        return nn.Module.train(self, mode and not self.frozen)
+    @property
+    def _backbone(self) -> nn.Module:
+        # The layers hang off this module directly, there is no inner `self.encoder`.
+        return self
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         for conv, norm, pool in zip(self.conv_layers, self.norm_layers, self.pool_layers, strict=False):

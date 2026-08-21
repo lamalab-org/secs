@@ -118,6 +118,7 @@ class ScalableCNN1D(nn.Module):
         residual_projection_dim: int = 128,
     ):
         super().__init__()
+        self.latent_dim = latent_dim
 
         # --- NEW: Store residual connection flag ---
         self.use_initial_residual = use_initial_residual
@@ -364,6 +365,7 @@ class HNmrCNNEncoder(ModalityEncoder):
     ) -> None:
         super().__init__(ckpt_path=ckpt_path, freeze_encoder=freeze_encoder)
         self.encoder = get_scaled_cnn_1d(scale, use_initial_residual=use_initial_residual, **backbone_kwargs)
+        self.output_dim = self.encoder.latent_dim
         self._finalize()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:

@@ -26,11 +26,12 @@ def xavier_init(model: nn.Module) -> nn.Module:
     return model
 
 
-def unwrap_state_dict(state: dict, prefixes: tuple[str, ...] = ("encoder.",)) -> dict:
-    """Pull the tensors out of a checkpoint saved by any of our training entry points.
+def unwrap_state_dict(state: dict, prefixes: tuple[str, ...] = ("model.", "encoder.")) -> dict:
+    """Pull the backbone tensors out of a checkpoint saved by any of our entry points.
 
     Checkpoints come either raw or wrapped under 'state_dict'/'model'/'encoder',
-    with keys optionally carrying a module prefix.
+    with keys carrying the module path they were saved under ("encoder." from a
+    standalone encoder run, "model.encoder." from a Lightning one).
     """
     for key in ("state_dict", "model", "encoder"):
         if isinstance(state, dict) and key in state and isinstance(state[key], dict):
@@ -38,10 +39,14 @@ def unwrap_state_dict(state: dict, prefixes: tuple[str, ...] = ("encoder.",)) ->
             break
     cleaned = {}
     for key, value in state.items():
-        for prefix in prefixes:
-            if key.startswith(prefix):
-                key = key[len(prefix) :]  # noqa: PLW2901
-                break
+        stripped = True
+        while stripped:
+            stripped = False
+            for prefix in prefixes:
+                if key.startswith(prefix):
+                    key = key[len(prefix) :]  # noqa: PLW2901
+                    stripped = True
+                    break
         cleaned[key] = value
     return cleaned
 
@@ -62,6 +67,11 @@ class ModalityEncoder(nn.Module):
         self.ckpt_path = ckpt_path
         self.frozen = freeze_encoder
 
+    @property
+    def _backbone(self) -> nn.Module:
+        """The module that checkpoints load into and that freezing applies to."""
+        return self.encoder
+
     def _finalize(self) -> None:
         """Load the checkpoint and apply freezing. Call at the end of `__init__`."""
         if self.ckpt_path is not None:
@@ -71,7 +81,7 @@ class ModalityEncoder(nn.Module):
 
     def load_checkpoint(self, ckpt_path: str, strict: bool = False) -> None:
         state = unwrap_state_dict(torch.load(ckpt_path, map_location="cpu"))
-        missing, unexpected = self.encoder.load_state_dict(state, strict=strict)
+        missing, unexpected = self._backbone.load_state_dict(state, strict=strict)
         name = type(self).__name__
         if missing:
             logger.warning(f"{name}: {len(missing)} missing keys (e.g. {missing[:3]})")
@@ -80,14 +90,18 @@ class ModalityEncoder(nn.Module):
 
     def freeze(self) -> None:
         self.frozen = True
-        for param in self.encoder.parameters():
+        for param in self._backbone.parameters():
             param.requires_grad = False
-        self.encoder.eval()
+        nn.Module.train(self._backbone, False)
 
     def train(self, mode: bool = True):
-        super().train(mode)
+        # A frozen backbone stays in eval: BatchNorm and dropout must not keep
+        # drifting while the weights they belong to are fixed. Called through
+        # `nn.Module` directly so an encoder whose `_backbone` is itself does
+        # not recurse.
+        nn.Module.train(self, mode)
         if self.frozen:
-            self.encoder.eval()
+            nn.Module.train(self._backbone, False)
         return self
 
     @abstractmethod

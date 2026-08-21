@@ -149,6 +149,7 @@ class ScalableCNN2D(nn.Module):
         block_expansion: int = 4,  # Expansion factor for residual blocks
     ):
         super().__init__()
+        self.latent_dim = latent_dim
 
         if compound_coeff > 0:
             width_mult *= 1.1**compound_coeff
@@ -448,6 +449,7 @@ class HsqcCNNEncoder(ModalityEncoder):
             input_channels=input_channels,
             **backbone_kwargs,
         )
+        self.output_dim = self.encoder.latent_dim
         self._finalize()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
