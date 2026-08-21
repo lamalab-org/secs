@@ -16,10 +16,15 @@ serial per molecule, and CSP5's own `num_workers` is unusable (it raises
 otherwise pin a single core while a GA waits on thousands of candidates.
 """
 
+import multiprocessing
 import os
+import tempfile
 from concurrent.futures import ProcessPoolExecutor
+from pathlib import Path
 
+import pandas as pd
 import torch
+from csp5 import predict_smiles, predict_structures
 from fastapi import FastAPI
 from rdkit import Chem, RDLogger
 
@@ -53,7 +58,6 @@ def _init_worker() -> None:
     """
 
     torch.set_num_threads(1)
-    from csp5 import predict_smiles
 
     predict_smiles(["CCO"], nucleus="13C", max_embed_tries=1)  # warm the weights
 
@@ -64,7 +68,6 @@ def _pool() -> ProcessPoolExecutor | None:
         return None
     if _POOL is None:
         # spawn: torch and fork in a threaded server deadlock.
-        import multiprocessing
 
         _POOL = ProcessPoolExecutor(
             max_workers=WORKERS,
@@ -114,11 +117,6 @@ def _predict_chunk(smiles: list[str]) -> list[list[float] | None]:
     over the survivors, and that bookkeeping only makes sense next to the
     call that produced it.
     """
-    import tempfile
-    from pathlib import Path
-
-    import pandas as pd
-    from csp5 import predict_smiles, predict_structures
 
     out: list[list[float] | None] = [None] * len(smiles)
     result = predict_smiles(smiles, nucleus="13C", batch_size=BATCH_SIZE, max_embed_tries=MAX_EMBED_TRIES)
@@ -143,7 +141,7 @@ def _predict_chunk(smiles: list[str]) -> list[list[float] | None]:
     frame = result.predictions.sort_values(["molecule_id", "atom_index"])
     grouped = list(frame.groupby("molecule_id", sort=True))
     if len(grouped) == len(surviving):
-        for slot, (_, rows) in zip(surviving, grouped):
+        for slot, (_, rows) in zip(surviving, grouped, strict=False):
             out[slot] = [round(float(v), 3) for v in rows["shift_ppm"]]
 
     if rescue and FALLBACK_GEOMETRY:
@@ -215,7 +213,7 @@ def predict(request: dict) -> dict:
         for part in pool.map(_predict_chunk, [c for c in chunks if c]):
             predicted.extend(part)
 
-    for slot, values in zip(slots, predicted):
+    for slot, values in zip(slots, predicted, strict=False):
         shifts[slot] = values
 
     return {"shifts": shifts, "uncertainty": uncertainty}
