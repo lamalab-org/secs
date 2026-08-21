@@ -1,8 +1,6 @@
 # HOSE shift prediction service
 
-Serves the HOSE lookup table (`secs.elucidation.verifiers.hose`) with the
-same contract as the cascade and csp5 services, so the three are
-interchangeable.
+Serves the HOSE lookup table (`secs.elucidation.verifiers.hose`).
 
 ## Run
 

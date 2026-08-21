@@ -21,7 +21,7 @@ class FourierShiftEmbedding(nn.Module):
         assert dim % 2 == 0
         self.max_ppm = max_ppm
         # geometric spread of frequencies over the ppm range
-        freqs = torch.logspace(0, math.log10(max_ppm / 0.05), n_freqs)
+        freqs = torch.logspace(0, math.log10(max_ppm / 0.5), n_freqs)
         self.register_buffer("freqs", freqs * (2 * math.pi / max_ppm))  # (n_freqs,)
         self.mlp = nn.Sequential(
             nn.Linear(2 * n_freqs, dim),

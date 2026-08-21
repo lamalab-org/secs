@@ -1,8 +1,6 @@
 # CSP5 shift prediction service
 
-Wraps [CSP5](https://github.com/Goodman-lab/CSP5) (Goodman lab, trained on
-~2.5M experimental NMR spectra) with the same contract as the cascade and
-hose services, so the three are interchangeable.
+Wraps [CSP5](https://github.com/Goodman-lab/CSP5)
 
 ## Run
 
