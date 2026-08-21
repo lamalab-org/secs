@@ -1,4 +1,3 @@
-import contextlib
 import math
 import os
 
@@ -18,7 +17,7 @@ from torchmetrics.retrieval import (
 )
 
 from secs.models.model import MolBind
-from secs.utils import rename_keys_with_prefix, select_device
+from secs.utils import select_device
 
 
 class SECSModule(LightningModule):
@@ -26,16 +25,6 @@ class SECSModule(LightningModule):
         super().__init__()
         self.model = MolBind(cfg=cfg)
         self.world_size = int(os.environ.get("WORLD_SIZE", cfg.trainer.gpus_per_node * cfg.trainer.num_nodes))
-        if hasattr(cfg, "ckpt_path") and cfg.ckpt_path is not None:
-            with contextlib.suppress(FileNotFoundError):
-                self.model.load_state_dict(
-                    rename_keys_with_prefix(torch.load(cfg.ckpt_path)["state_dict"]),
-                    strict=False,
-                )
-                logger.info(f"Successfully loaded model from checkpoint: {cfg.ckpt_path}")
-        else:
-            logger.info("No checkpoint path found. Training from scratch.")
-
         self.config = cfg
         self.loss = InfoNCE(temperature=cfg.model.loss.temperature, negative_mode="unpaired")
 
@@ -50,6 +39,33 @@ class SECSModule(LightningModule):
 
         logger.info(f"Per device batch size: {self.per_device_batch_size}")
         logger.info(f"Loss batch size: {self.batch_size}")
+
+        # Last, so that every parameter the checkpoint might carry (the
+        # temperature included) already exists.
+        self._load_checkpoint(getattr(cfg, "ckpt_path", None))
+
+    def _load_checkpoint(self, ckpt_path: str | None) -> None:
+        """Resume from a checkpoint written by this same LightningModule.
+
+        Its keys are already relative to `self` ("model.<...>"), so loading into
+        `self` rather than into `self.model` needs no key rewriting.
+        """
+        # Hydra configs spell "no checkpoint" as a bare `None`, which YAML reads
+        # as the string "None" rather than as null.
+        if ckpt_path is None or str(ckpt_path).strip().lower() in {"", "none", "null"}:
+            logger.info("No checkpoint path found. Training from scratch.")
+            return
+        try:
+            state_dict = torch.load(ckpt_path, map_location="cpu")["state_dict"]
+        except FileNotFoundError:
+            logger.warning(f"Checkpoint {ckpt_path} not found. Training from scratch.")
+            return
+        missing, unexpected = self.load_state_dict(state_dict, strict=False)
+        logger.info(f"Successfully loaded model from checkpoint: {ckpt_path}")
+        if missing:
+            logger.warning(f"Checkpoint is missing {len(missing)} keys (e.g. {missing[:3]})")
+        if unexpected:
+            logger.warning(f"Checkpoint carries {len(unexpected)} unexpected keys (e.g. {unexpected[:3]})")
 
     def forward(self, batch: tuple[Data] | dict) -> dict:
         if isinstance(batch, tuple) and isinstance(batch[0], Data):

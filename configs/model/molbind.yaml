@@ -1,15 +1,22 @@
 # model architecture
+# `name` picks which backbone of that modality to build; see
+# `secs.models.registry.available_encoders()` for what is registered.
 encoders:
   smiles:
+    name: molformer
     pretrained: True
     freeze_encoder: True
   c_nmr:
+    name: transformer
     freeze_encoder: False
   ir:
+    name: cnn
     freeze_encoder: False
   h_nmr:
+    name: cnn
     freeze_encoder: False
   hsqc:
+    name: cnn
     freeze_encoder: False
 
 

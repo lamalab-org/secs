@@ -1,21 +1,30 @@
-from secs.models.components.base_encoder import BaseModalityEncoder, FingerprintEncoder
-from secs.models.components.cnmr_encoder import cNmrEncoder
-from secs.models.components.custom_encoders import IrCNNEncoder, SmilesEncoder
-from secs.models.components.head import ProjectionHead
-from secs.models.components.hnmr_encoder import hNmrCNNEncoder
-from secs.models.components.hsqc_encoder import HSQCEncoder
+from secs.models.base import HFCausalLMEncoder, ModalityEncoder
+from secs.models.encoders import (
+    CNmrTransformerEncoder,
+    FingerprintVAEEncoder,
+    HNmrCNNEncoder,
+    HsqcCNNEncoder,
+    IrCNNEncoder,
+    MolformerEncoder,
+)
+from secs.models.heads import ProjectionHead
 from secs.models.lightning_module import SECSModule
 from secs.models.model import MolBind
+from secs.models.registry import available_encoders, register_encoder, resolve_encoder
 
 __all__ = [
-    "BaseModalityEncoder",
-    "FingerprintEncoder",
-    "HSQCEncoder",
+    "CNmrTransformerEncoder",
+    "FingerprintVAEEncoder",
+    "HFCausalLMEncoder",
+    "HNmrCNNEncoder",
+    "HsqcCNNEncoder",
     "IrCNNEncoder",
+    "ModalityEncoder",
     "MolBind",
+    "MolformerEncoder",
     "ProjectionHead",
     "SECSModule",
-    "SmilesEncoder",
-    "cNmrEncoder",
-    "hNmrCNNEncoder",
+    "available_encoders",
+    "register_encoder",
+    "resolve_encoder",
 ]

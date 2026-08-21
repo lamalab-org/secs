@@ -1,6 +1,5 @@
 import datetime
 import os
-import re
 from pathlib import Path
 
 import hydra
@@ -30,9 +29,7 @@ TRAIN_DATE = datetime.datetime.now().strftime("%Y%m%d_%H%M")
 def train_molbind(config: DictConfig):
     # define the run_id based on the config name and the date
     run_id = config.run_id + "_" + TRAIN_DATE if hasattr(config, "run_id") else TRAIN_DATE
-    # set wandb mode to offline if no WANDB_API_KEY is set
-    # if not os.getenv("WANDB_API_KEY"):
-    # os.environ["WANDB_MODE"] = "online"
+
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     try:
         # set PYTORCH_ALLOC_CONF to avoid memory fragmentation
@@ -52,9 +49,11 @@ def train_molbind(config: DictConfig):
         config.data.dataset_path, config.data.dataset_config if hasattr(config.data, "dataset_config") else "default"
     )
     features = [*config.data.modalities, config.data.central_modality]  # , "x_min", "x_max"]
+
     train_data = data["train"].to_pandas()[features]
-    logger.info(f"Train data shape: {train_data.shape}")
     valid_data = data["val"].to_pandas()[features]
+
+    logger.info(f"Train data shape: {train_data.shape}")
     logger.info(f"Validation data shape: {valid_data.shape}")
 
     train_shuffled_data = train_data.sort_values(by=config.data.central_modality).reset_index(drop=True)
@@ -126,10 +125,7 @@ def train_molbind(config: DictConfig):
         model=SECSModule(config),
         datamodule=datamodule,
     )
-    # copy the best model under the name "best_model"
-    best_model_path = Path(config.callbacks.model_checkpoint.dirpath) / Path(run_id) / "best_model.ckpt"
-    os.system(f"cp {best_model_path} {Path(config.callbacks.model_checkpoint.dirpath) / Path(run_id) / 'best_model.ckpt'}")
-    logger.info(f"Best model saved at {best_model_path}")
+
     logger.info("Training complete")
     logger.info("Exiting")
 

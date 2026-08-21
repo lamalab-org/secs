@@ -3,40 +3,17 @@ import torch.nn as nn
 import torch.nn.functional as F
 from loguru import logger
 from omegaconf import DictConfig
-from torch import Tensor
-from transformers import AutoModel
 
-from secs.models.components.base_encoder import BaseModalityEncoder
-from secs.utils import rename_keys_with_prefix, select_device
+from secs.models.base import ModalityEncoder
+from secs.models.registry import register_encoder
 
 
-class SmilesEncoder(BaseModalityEncoder):
-    def __init__(self, freeze_encoder: bool = False, pretrained: bool = True, **kwargs) -> None:
-        super().__init__("ibm-research/MoLFormer-XL-both-10pct", freeze_encoder, pretrained, **kwargs)
+@register_encoder("ir", "cnn", default=True)
+class IrCNNEncoder(ModalityEncoder):
+    """1D CNN over a 1600-bin IR spectrum."""
 
-    def _initialize_encoder(self):
-        self.encoder = AutoModel.from_pretrained(
-            self.model_name,
-            trust_remote_code=True,
-            revision="7b12d946c181a37f6012b9dc3b002275de070314",
-            deterministic_eval=True,
-        )
-        if self.freeze_encoder:
-            for param in self.encoder.parameters():
-                param.requires_grad = False
-
-    def forward(self, x: tuple[Tensor, ...]) -> Tensor:
-        token_ids, attention_mask = x[0], x[1]
-        output = self.encoder(
-            input_ids=token_ids,
-            attention_mask=attention_mask,
-        )
-        return output.pooler_output
-
-
-class IrCNNEncoder(nn.Module):
     def __init__(self, ckpt_path: str | None = None, freeze_encoder: bool = False) -> None:
-        super().__init__()
+        super().__init__(ckpt_path=ckpt_path, freeze_encoder=freeze_encoder)
 
         cfg = DictConfig(
             {
@@ -135,8 +112,8 @@ class IrCNNEncoder(nn.Module):
             fc_in_dim = fc_out_dim
         self.fc_layers.append(nn.Linear(fc_in_dim, cfg.latent_dim))
 
-        self._load_checkpoint(ckpt_path)
-        self._set_freeze_encoder(freeze_encoder)
+        self.output_dim = cfg.latent_dim
+        self._finalize()
 
     def _calculate_out_dims(self):
         out_dims = [self.cfg.length_in]
@@ -165,14 +142,10 @@ class IrCNNEncoder(nn.Module):
     def _conv_out_dim(dim_in, kernel_size, stride, padding, dilation):
         return (dim_in + 2 * padding - dilation * (kernel_size - 1) - 1) // stride + 1
 
-    def _load_checkpoint(self, ckpt_path):
-        if ckpt_path:
-            self.load_state_dict(rename_keys_with_prefix(torch.load(ckpt_path, map_location=select_device())["state_dict"]))
-
-    def _set_freeze_encoder(self, freeze_encoder):
-        if freeze_encoder:
-            for param in self.parameters():
-                param.requires_grad = False
+    @property
+    def _backbone(self) -> nn.Module:
+        # The layers hang off this module directly, there is no inner `self.encoder`.
+        return self
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         for conv, norm, pool in zip(self.conv_layers, self.norm_layers, self.pool_layers, strict=False):

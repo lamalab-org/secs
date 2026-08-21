@@ -8,8 +8,8 @@ from torch import Tensor
 from tqdm import tqdm
 
 from secs.data.modalities import ModalityConstants
+from secs.elucidation.embedding import load_model
 from secs.models import MolBind
-from secs.utils import rename_keys_with_prefix
 
 torch.manual_seed(42)
 torch.cuda.manual_seed_all(42)
@@ -21,13 +21,7 @@ tqdm.pandas()
 
 def read_weights(config) -> MolBind:
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = MolBind(config).to(device)
-    model.load_state_dict(
-        rename_keys_with_prefix(torch.load(config.ckpt_path, map_location=torch.device(device))["state_dict"]),
-        strict=True,
-    )
-    model.eval()
-    return model
+    return load_model(config, device)
 
 
 def load_models_dict(configs_path: str, experiments_dict: dict[str, str | None]) -> dict[str, MolBind | None]:

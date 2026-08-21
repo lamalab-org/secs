@@ -4,17 +4,23 @@ import torch
 from hydra import compose, initialize_config_dir
 from loguru import logger
 from torch import Tensor
+from torch.nn.modules.utils import consume_prefix_in_state_dict_if_present
 
 from secs.data.modalities import ModalityConstants
 from secs.models import MolBind
-from secs.utils import rename_keys_with_prefix, select_device
+from secs.utils import select_device
 
 LIGHTNING_ONLY_PREFIXES = ("reference_encoder.", "reference_proj.")
 
 
 def molbind_state_dict(state_dict: dict) -> dict:
-    """Reduce a SECSModule checkpoint to just the MolBind weights."""
-    renamed = rename_keys_with_prefix(state_dict)
+    """Reduce a SECSModule checkpoint to just the MolBind weights.
+
+    The checkpoint keys are relative to the LightningModule ("model.<...>");
+    MolBind is that `model` attribute, so the prefix has to come off.
+    """
+    renamed = dict(state_dict)
+    consume_prefix_in_state_dict_if_present(renamed, "model.")
     return {k: v for k, v in renamed.items() if not k.startswith(LIGHTNING_ONLY_PREFIXES)}
 
 

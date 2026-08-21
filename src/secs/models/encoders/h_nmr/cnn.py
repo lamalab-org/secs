@@ -1,6 +1,9 @@
 import torch
 import torch.nn as nn
 
+from secs.models.base import ModalityEncoder
+from secs.models.registry import register_encoder
+
 
 class ResidualBlock1D(nn.Module):
     """Enhanced 1D Residual block with configurable expansion"""
@@ -88,7 +91,7 @@ class ResidualBlock1D(nn.Module):
         return self.act_fn(out)
 
 
-class ScalableCNNEncoder(nn.Module):
+class ScalableCNN1D(nn.Module):
     """Highly scalable CNN encoder with compound scaling and an optional initial residual connection."""
 
     def __init__(
@@ -115,6 +118,7 @@ class ScalableCNNEncoder(nn.Module):
         residual_projection_dim: int = 128,
     ):
         super().__init__()
+        self.latent_dim = latent_dim
 
         # --- NEW: Store residual connection flag ---
         self.use_initial_residual = use_initial_residual
@@ -276,7 +280,7 @@ class ScalableCNNEncoder(nn.Module):
 
 
 # Predefined scaling configurations
-def get_scaled_model(scale: str = "small", **kwargs):
+def get_scaled_cnn_1d(scale: str = "small", **kwargs):
     """Get predefined scaled models"""
 
     configs = {
@@ -344,22 +348,25 @@ def get_scaled_model(scale: str = "small", **kwargs):
     config = configs.get(scale, configs["medium"])
     config.update(kwargs)
 
-    return ScalableCNNEncoder(**config)
+    return ScalableCNN1D(**config)
 
 
-class hNmrCNNEncoder(nn.Module):
-    def __init__(self, ckpt_path: str | None = None, freeze_encoder: bool = False, use_initial_residual: bool = False) -> None:
-        super().__init__()
-        # Pass the flag to the model factory
+@register_encoder("h_nmr", "cnn", default=True)
+class HNmrCNNEncoder(ModalityEncoder):
+    """Scalable 1D residual CNN over a binned 1H spectrum."""
 
-        self.encoder = get_scaled_model("xlarge", use_initial_residual=use_initial_residual)
-
-        if ckpt_path:
-            self.load_state_dict(torch.load(ckpt_path, device=self.encoder.device))
-
-        if freeze_encoder:
-            for param in self.encoder.parameters():
-                param.requires_grad = False
+    def __init__(
+        self,
+        ckpt_path: str | None = None,
+        freeze_encoder: bool = False,
+        scale: str = "xlarge",
+        use_initial_residual: bool = False,
+        **backbone_kwargs,
+    ) -> None:
+        super().__init__(ckpt_path=ckpt_path, freeze_encoder=freeze_encoder)
+        self.encoder = get_scaled_cnn_1d(scale, use_initial_residual=use_initial_residual, **backbone_kwargs)
+        self.output_dim = self.encoder.latent_dim
+        self._finalize()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.encoder(x)

@@ -78,10 +78,6 @@ where = ["src"]
 [tool.setuptools.package-data]
 secs = ["py.typed"]
 
-[tool.pyright]
-include = ["src/secs"]
-exclude = ["**/__pycache__"]
-
 [tool.pytest.ini_options]
 minversion = "6.0"
 addopts = ["-p no:warnings", "--import-mode=importlib"]

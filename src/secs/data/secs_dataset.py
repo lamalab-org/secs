@@ -1,19 +1,8 @@
-from functools import partial
-
 import pandas as pd
+from loguru import logger
 from torch import Tensor
 from torch.utils.data import Dataset
 
-from secs.data.components.datasets import (
-    FingerprintSECSDataset,
-    HSQCDataset,
-    IrDataset,
-    MassSpecNegativeDataset,
-    MassSpecPositiveDataset,
-    StringDataset,
-    cNmrDataset,
-    hNmrDataset,
-)
 from secs.data.modalities import (
     ModalityConstants,
     NonStringModalities,
@@ -28,149 +17,75 @@ class SECSDataset:
         central_modality: StringModalities | NonStringModalities,
         other_modalities: list[str],
         config: dict | None = None,
-        **kwargs,
+        context_length: int = 256,
+        split: str = "train",
     ) -> None:
-        """Dataset for multimodal data."""
-        self.data = data
-        self.central_modality = central_modality
-        self.central_modality_data_type = ModalityConstants[central_modality].data_type
-        self.config = config
-        # "train" enables train-only augmentation (e.g. image depictions).
-        self.split = kwargs.get("split", "train")
-        init_str_fn = partial(
-            self._tokenize_strings,
-            context_length=kwargs.get("context_length", 256),
-            modality=central_modality,
-        )
-        self.central_modality_handlers = {
-            StringModalities.SMILES: init_str_fn,
-        }
-
-        self.dataset_builders = {
-            StringModalities.SMILES: partial(
-                self.build_string_dataset,
-                modality=StringModalities.SMILES,
-                context_length=kwargs.get("context_length", 256),
-            ),
-            NonStringModalities.C_NMR: self.build_c_nmr_dataset,
-            NonStringModalities.IR: self.build_ir_dataset,
-            NonStringModalities.H_NMR: self.build_hnmr_cnn_dataset,
-            NonStringModalities.HSQC: self.build_hsqc_dataset,
-        }
         self.data = data.reset_index(drop=True)
-        # central modality data
-        self.central_modality_data = self.central_modality_handlers[central_modality](self.data[central_modality].to_list())
-
+        self.central_modality = central_modality
         self.other_modalities = other_modalities
-
-    def build_string_dataset(self, modality: str, context_length: int = 256) -> StringDataset:
-        string_data = self.data[[self.central_modality, modality]].dropna()
-        other_modality_data = self._tokenize_strings(
-            string_data[modality].to_list(),
-            context_length=context_length,
-            modality=modality,
-        )
-
-        return StringDataset(
-            central_modality=self.central_modality,
-            other_modality=modality,
-            central_modality_data=self._handle_central_modality_data(string_data),
-            other_modality_data=other_modality_data,
-        )
-
-    def build_fp_dataset(self) -> FingerprintSECSDataset:
-        modality = "fingerprint"
-        fp_data = self.data[[self.central_modality, modality]].dropna()
-        # perform fingerprint operations
-        return FingerprintSECSDataset(
-            central_modality=self.central_modality,
-            fingerprint_data=fp_data[modality].to_list(),
-            central_modality_data=self._handle_central_modality_data(fp_data),
-        )
-
-    def build_c_nmr_dataset(self) -> cNmrDataset:
-        modality = "c_nmr"
-        c_nmr_data = self.data[[self.central_modality, modality]].dropna()
-        return cNmrDataset(
-            data=c_nmr_data[modality].to_list(),
-            central_modality=self.central_modality,
-            central_modality_data=self._handle_central_modality_data(c_nmr_data),
-        )
-
-    def build_ir_dataset(self) -> IrDataset:
-        modality = "ir"
-        ir_data = self.data[[self.central_modality, modality]].dropna()
-        return IrDataset(
-            data=ir_data[modality].to_list(),
-            central_modality=self.central_modality,
-            central_modality_data=self._handle_central_modality_data(ir_data),
-        )
-
-    def build_mass_spec_positive_dataset(self) -> MassSpecPositiveDataset:
-        modality = "mass_spec_positive"
-        mass_spec_data = self.data[[self.central_modality, modality]].dropna()
-        return MassSpecPositiveDataset(
-            data=mass_spec_data[modality].to_list(),
-            central_modality=self.central_modality,
-            central_modality_data=self._handle_central_modality_data(mass_spec_data),
-        )
-
-    def build_mass_spec_negative_dataset(self) -> MassSpecNegativeDataset:
-        modality = "mass_spec_negative"
-        mass_spec_data = self.data[[self.central_modality, modality]].dropna()
-        return MassSpecNegativeDataset(
-            data=mass_spec_data[modality].to_list(),
-            central_modality=self.central_modality,
-            central_modality_data=self._handle_central_modality_data(mass_spec_data),
-        )
-
-    def build_hnmr_cnn_dataset(self) -> hNmrDataset:
-        modality = "h_nmr"
-        h_nmr_cnn_data = self.data[[self.central_modality, modality]].dropna()
-        return hNmrDataset(
-            data=h_nmr_cnn_data[modality].to_list(),
-            augment=self.config.data.h_nmr.augment if self.config else False,
-            vec_size=self.config.data.h_nmr.vec_size if hasattr(self.config.data.h_nmr, "vec_size") else 10_000,
-            central_modality=self.central_modality,
-            central_modality_data=self._handle_central_modality_data(h_nmr_cnn_data),
-        )
-
-    def build_hsqc_dataset(self) -> HSQCDataset:
-        modality = "hsqc"
-        hsqc_data = self.data[[self.central_modality, modality]].dropna()
-        return HSQCDataset(
-            data=hsqc_data[modality].to_list(),
-            central_modality=self.central_modality,
-            central_modality_data=self._handle_central_modality_data(hsqc_data),
-        )
+        self.config = config
+        self.context_length = context_length
+        # "train" enables train-only augmentation (e.g. image depictions).
+        self.split = split
+        self.central_modality_data = self._encode_central_modality()
 
     def build_datasets_for_modalities(self) -> dict[str, Dataset]:
+        """One Dataset per requested modality that the dataframe actually carries.
+
+        CombinedLoader does not work with DDPSampler directly, so the sampler is
+        added to the dataloaders in the datamodule rather than here.
+        """
         datasets = {}
         for modality in self.other_modalities:
-            if modality in self.data.columns:
-                dataset = self.dataset_builders[modality]()
-                datasets[modality] = dataset
-        # CombinedLoader does not work with DDPSampler directly
-        # Thus this ^ is added to the dataloaders in the datamodule
+            if modality not in self.data.columns:
+                logger.warning(f"Modality {modality} requested but missing from the dataframe; skipping.")
+                continue
+            datasets[modality] = self._build_dataset(modality)
         return datasets
 
-    def _handle_central_modality_data(self, data_pair: pd.DataFrame):
-        idx = data_pair.index.to_list()
-        return (
-            self.central_modality_data[0][idx],
-            self.central_modality_data[1][idx],
+    def _build_dataset(self, modality: str) -> Dataset:
+        spec = ModalityConstants[modality]
+        paired = self.data[[self.central_modality, modality]].dropna()
+        central_data = self._select_central_modality_rows(paired.index)
+
+        if spec.data_type is str:
+            return spec.dataset(
+                central_modality=self.central_modality,
+                central_modality_data=central_data,
+                other_modality=modality,
+                other_modality_data=self._tokenize_strings(paired[modality].to_list(), modality, self.context_length),
+            )
+        return spec.dataset(
+            data=paired[modality].to_list(),
+            central_modality=self.central_modality,
+            central_modality_data=central_data,
+            **self._dataset_kwargs(modality),
         )
 
+    def _dataset_kwargs(self, modality: str) -> dict:
+        """Per-modality knobs read off the experiment config, if it carries them."""
+        if modality == NonStringModalities.H_NMR:
+            h_nmr_cfg = getattr(getattr(self.config, "data", None), "h_nmr", None)
+            return {
+                "augment": getattr(h_nmr_cfg, "augment", False),
+                "vec_size": getattr(h_nmr_cfg, "vec_size", 10_000),
+            }
+        return {}
+
+    def _encode_central_modality(self) -> tuple[Tensor, Tensor]:
+        values = self.data[self.central_modality].to_list()
+        if ModalityConstants[self.central_modality].data_type is not str:
+            raise ValueError(f"Central modality {self.central_modality} is not supported yet.")
+        return self._tokenize_strings(values, self.central_modality, self.context_length)
+
+    def _select_central_modality_rows(self, index: pd.Index) -> tuple[Tensor, Tensor]:
+        rows = index.to_list()
+        return self.central_modality_data[0][rows], self.central_modality_data[1][rows]
+
     @staticmethod
-    def _tokenize_strings(
-        dataset: list[str],
-        context_length: int,
-        modality: str,
-    ) -> tuple[Tensor, Tensor]:
-
-        t = ModalityConstants[modality].tokenizer
-
-        tokenized_data = t(
+    def _tokenize_strings(dataset: list[str], modality: str, context_length: int) -> tuple[Tensor, Tensor]:
+        tokenizer = ModalityConstants[modality].tokenizer
+        tokenized_data = tokenizer(
             dataset,
             padding="max_length",
             truncation=True,

@@ -1,6 +1,9 @@
 import torch
 import torch.nn as nn
 
+from secs.models.base import ModalityEncoder
+from secs.models.registry import register_encoder
+
 
 class ResidualBlock2D(nn.Module):
     """Enhanced 2D Residual block with configurable expansion"""
@@ -120,7 +123,7 @@ class ResidualBlock2D(nn.Module):
         return self.final_act_fn(out)
 
 
-class ScalableCNNEncoder2D(nn.Module):
+class ScalableCNN2D(nn.Module):
     """Highly scalable 2D CNN encoder with compound scaling"""
 
     def __init__(
@@ -146,6 +149,7 @@ class ScalableCNNEncoder2D(nn.Module):
         block_expansion: int = 4,  # Expansion factor for residual blocks
     ):
         super().__init__()
+        self.latent_dim = latent_dim
 
         if compound_coeff > 0:
             width_mult *= 1.1**compound_coeff
@@ -322,7 +326,7 @@ class ScalableCNNEncoder2D(nn.Module):
         return self.head(x)
 
 
-def get_scaled_model_2d(scale: str = "small", **kwargs):
+def get_scaled_cnn_2d(scale: str = "small", **kwargs):
     configs = {
         "tiny": {
             "width_mult": 0.5,
@@ -420,32 +424,33 @@ def get_scaled_model_2d(scale: str = "small", **kwargs):
     if "input_width" not in final_config:
         final_config["input_width"] = 512
 
-    return ScalableCNNEncoder2D(**final_config)
+    return ScalableCNN2D(**final_config)
 
 
-class HSQCEncoder(nn.Module):
-    def __init__(self, ckpt_path: str | None = None, freeze_encoder: bool = False):
-        super().__init__()
-        self.encoder = get_scaled_model_2d(
-            scale="large",
-            input_height=512,
-            input_width=512,
-            input_channels=1,  # For a single-channel 512x512 image
+@register_encoder("hsqc", "cnn", default=True)
+class HsqcCNNEncoder(ModalityEncoder):
+    """Scalable 2D residual CNN over an HSQC map, expected as (B, 1, 512, 512)."""
+
+    def __init__(
+        self,
+        ckpt_path: str | None = None,
+        freeze_encoder: bool = False,
+        scale: str = "large",
+        input_height: int = 512,
+        input_width: int = 512,
+        input_channels: int = 1,
+        **backbone_kwargs,
+    ) -> None:
+        super().__init__(ckpt_path=ckpt_path, freeze_encoder=freeze_encoder)
+        self.encoder = get_scaled_cnn_2d(
+            scale=scale,
+            input_height=input_height,
+            input_width=input_width,
+            input_channels=input_channels,
+            **backbone_kwargs,
         )
-        if freeze_encoder:
-            for param in self.encoder.parameters():
-                param.requires_grad = False
-        if ckpt_path:
-            # map_location='cpu' is safer for loading then moving to device
-            state_dict = torch.load(ckpt_path, map_location="cpu")
-            # Check if state_dict is nested (e.g. under "state_dict" or "model")
-            if "state_dict" in state_dict:
-                state_dict = state_dict["state_dict"]
-            elif "model" in state_dict:
-                state_dict = state_dict["model"]
-
-            self.encoder.load_state_dict(state_dict, strict=False)
+        self.output_dim = self.encoder.latent_dim
+        self._finalize()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # Expected input x: (Batch, 1, 512, 512)
         return self.encoder(x)

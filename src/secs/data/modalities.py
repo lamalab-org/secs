@@ -5,19 +5,17 @@ from transformers import PreTrainedTokenizerBase
 
 from secs.data import HSQCDataset, IrDataset, StringDataset, cNmrDataset, hNmrDataset
 from secs.data.components.secs_tokenizers import SMILES_TOKENIZER
-from secs.models import (
-    HSQCEncoder,
-    IrCNNEncoder,
-    SmilesEncoder,
-    cNmrEncoder,
-    hNmrCNNEncoder,
-)
 
 
 class ModalitySpec(NamedTuple):
+    """Data-side description of a modality.
+
+    Which encoder a modality uses is not fixed here: several backbones can serve
+    the same modality, and the config picks one through `secs.models.registry`.
+    """
+
     data_type: type
     dataset: type
-    encoder: type
     tokenizer: PreTrainedTokenizerBase | None = None
 
 
@@ -36,14 +34,14 @@ class NonStringModalities(StrEnum):
 
 class ModalityConstants(Enum):
     """
-    ModalityConstants[modality]: (data_type, dataset, encoder, tokenizer)
+    ModalityConstants[modality]: (data_type, dataset, tokenizer)
     """
 
-    c_nmr = ModalitySpec(list, cNmrDataset, cNmrEncoder)
-    h_nmr = ModalitySpec(list, hNmrDataset, hNmrCNNEncoder)
-    ir = ModalitySpec(list, IrDataset, IrCNNEncoder)
-    smiles = ModalitySpec(str, StringDataset, SmilesEncoder, SMILES_TOKENIZER)
-    hsqc = ModalitySpec(list, HSQCDataset, HSQCEncoder)
+    c_nmr = ModalitySpec(list, cNmrDataset)
+    h_nmr = ModalitySpec(list, hNmrDataset)
+    ir = ModalitySpec(list, IrDataset)
+    smiles = ModalitySpec(str, StringDataset, SMILES_TOKENIZER)
+    hsqc = ModalitySpec(list, HSQCDataset)
 
     @property
     def data_type(self):
@@ -54,9 +52,5 @@ class ModalityConstants(Enum):
         return self.value[1]
 
     @property
-    def encoder(self):
-        return self.value[2]
-
-    @property
     def tokenizer(self):
-        return self.value[3]
+        return self.value[2]

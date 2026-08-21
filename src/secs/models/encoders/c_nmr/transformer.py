@@ -2,7 +2,9 @@ import math
 
 import torch
 import torch.nn as nn
-from loguru import logger
+
+from secs.models.base import ModalityEncoder
+from secs.models.registry import register_encoder
 
 
 class FourierShiftEmbedding(nn.Module):
@@ -48,7 +50,7 @@ class PeakTokenizer(nn.Module):
         return tok * mask.unsqueeze(-1)  # zero out padding
 
 
-class PeakSetBackbone(nn.Module):
+class PeakSetTransformer(nn.Module):
     """Set-transformer style encoder over 13C peaks for contrastive alignment.
 
     peaks (shifts, mask)
@@ -84,6 +86,7 @@ class PeakSetBackbone(nn.Module):
         max_ppm: float = 218.0,
     ):
         super().__init__()
+        self.embed_dim = embed_dim
         self.tokenizer = PeakTokenizer(embed_dim, n_freqs=n_freqs, max_ppm=max_ppm)
 
         enc_layer = nn.TransformerEncoderLayer(
@@ -131,45 +134,15 @@ class PeakSetBackbone(nn.Module):
         return (x * keep).sum(dim=1) / keep.sum(dim=1).clamp(min=1.0)
 
 
-class cNmrEncoder(nn.Module):
-    """API-compatible wrapper. forward takes (shifts, mask).
-
-    Args:
-        ckpt_path:      optional checkpoint (raw state_dict or wrapped in
-                        'state_dict'/'model'/'encoder'; leading 'encoder.'
-                        prefix stripped).
-        freeze_encoder: freeze backbone params and keep it in eval mode.
-    """
+@register_encoder("c_nmr", "transformer", default=True)
+class CNmrTransformerEncoder(ModalityEncoder):
+    """Set-transformer encoder over a 13C peak list. forward takes (shifts, mask)."""
 
     def __init__(self, ckpt_path: str | None = None, freeze_encoder: bool = False, **backbone_kwargs) -> None:
-        super().__init__()
-        self.encoder = PeakSetBackbone(**backbone_kwargs)
-        self.frozen = freeze_encoder
-        if ckpt_path is not None:
-            self._load_ckpt(ckpt_path)
-        if freeze_encoder:
-            for p in self.encoder.parameters():
-                p.requires_grad = False
-            self.encoder.eval()
-
-    def _load_ckpt(self, ckpt_path: str) -> None:
-        state = torch.load(ckpt_path, map_location="cpu")
-        for key in ("state_dict", "model", "encoder"):
-            if isinstance(state, dict) and key in state and isinstance(state[key], dict):
-                state = state[key]
-                break
-        cleaned = {k[len("encoder.") :] if k.startswith("encoder.") else k: v for k, v in state.items()}
-        missing, unexpected = self.encoder.load_state_dict(cleaned, strict=False)
-        if missing:
-            logger.warning(f"cNmrEncoder: {len(missing)} missing keys (e.g. {missing[:3]})")
-        if unexpected:
-            logger.warning(f"cNmrEncoder: {len(unexpected)} unexpected keys (e.g. {unexpected[:3]})")
-
-    def train(self, mode: bool = True):
-        super().train(mode)
-        if self.frozen:
-            self.encoder.eval()
-        return self
+        super().__init__(ckpt_path=ckpt_path, freeze_encoder=freeze_encoder)
+        self.encoder = PeakSetTransformer(**backbone_kwargs)
+        self.output_dim = self.encoder.embed_dim
+        self._finalize()
 
     def forward(self, inputs, mask=None):
         if mask is None:

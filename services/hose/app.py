@@ -24,9 +24,8 @@ import os
 from pathlib import Path
 
 from fastapi import FastAPI
-from rdkit import Chem, RDLogger
-
 from hose import HoseShiftTable
+from rdkit import Chem, RDLogger
 
 RDLogger.DisableLog("rdApp.*")
 
