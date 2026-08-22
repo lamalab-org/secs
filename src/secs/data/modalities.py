@@ -62,3 +62,15 @@ class ModalityConstants(Enum):
         The DataLoader class this modality's samples collate with.
         """
         return GeometricDataLoader if self.data_type is Data else DataLoader
+
+
+def loader_for(*modalities: str) -> type:
+    """
+    The loader a sample pairing these modalities needs.
+
+    A sample carries both sides of the pair, so one graph anywhere in it
+    decides for the whole thing: the default collater cannot stack a `Data`,
+    while the geometric one handles plain tensors perfectly well.
+    """
+    loaders = {ModalityConstants[modality].loader for modality in modalities}
+    return GeometricDataLoader if GeometricDataLoader in loaders else DataLoader

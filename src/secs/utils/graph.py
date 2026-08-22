@@ -11,15 +11,25 @@ from copy import deepcopy
 
 import numpy as np
 import torch
+from loguru import logger
 from rdkit import Chem
 from torch_geometric.data import Data
 
+# These four vocabularies are not ours to grow: they are the rows of MolCLR's
+# pretrained embedding tables (119 atoms, 3 chiral tags, 5 bond types with the
+# last reserved for self-loops, 3 bond directions). Real molecules carry
+# features outside them -- dative bonds, dummy atoms, square-planar chirality --
+# so anything unlisted maps onto the nearest row that exists instead of growing
+# the table, which would strand the checkpoint.
 ATOM_LIST = list(range(1, 119))
+#: Only the three tags MolCLR's table has rows for. Upstream MolCLR lists a
+#: fourth (CHI_OTHER) while sizing the table at three, so a molecule carrying it
+#: indexes out of bounds at forward; everything past these three folds into
+#: CHI_UNSPECIFIED here.
 CHIRALITY_LIST = [
     Chem.rdchem.ChiralType.CHI_UNSPECIFIED,
     Chem.rdchem.ChiralType.CHI_TETRAHEDRAL_CW,
     Chem.rdchem.ChiralType.CHI_TETRAHEDRAL_CCW,
-    Chem.rdchem.ChiralType.CHI_OTHER,
 ]
 BOND_LIST = [
     Chem.rdchem.BondType.SINGLE,
@@ -33,8 +43,27 @@ BONDDIR_LIST = [
     Chem.rdchem.BondDir.ENDDOWNRIGHT,
 ]
 
-#: index the encoder's atom embedding reserves for a masked atom
+
 MASK_ATOM_INDEX = len(ATOM_LIST)
+
+_ATOM_FALLBACK = (MASK_ATOM_INDEX, "the reserved unknown-atom row")
+_CHIRALITY_FALLBACK = (0, "CHI_UNSPECIFIED")
+_BOND_FALLBACK = (BOND_LIST.index(Chem.rdchem.BondType.SINGLE), "SINGLE")
+_BONDDIR_FALLBACK = (0, "BondDir.NONE")
+
+_WARNED_UNSUPPORTED: set = set()
+
+
+def _index_or(vocabulary: list, value, fallback: tuple[int, str], what: str) -> int:
+    """Row for `value`, or the named `fallback` row if the table has none for it."""
+    try:
+        return vocabulary.index(value)
+    except ValueError:
+        index, name = fallback
+        if value not in _WARNED_UNSUPPORTED:
+            _WARNED_UNSUPPORTED.add(value)
+            logger.warning(f"{what} {value} is outside MolCLR's vocabulary; mapping it to {name}.")
+        return index
 
 
 def mol_to_graph_tensors(mol: Chem.Mol) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -46,15 +75,18 @@ def mol_to_graph_tensors(mol: Chem.Mol) -> tuple[torch.Tensor, torch.Tensor, tor
     """
     type_idx, chirality_idx = [], []
     for atom in mol.GetAtoms():
-        type_idx.append(ATOM_LIST.index(atom.GetAtomicNum()))
-        chirality_idx.append(CHIRALITY_LIST.index(atom.GetChiralTag()))
+        type_idx.append(_index_or(ATOM_LIST, atom.GetAtomicNum(), _ATOM_FALLBACK, "Atomic number"))
+        chirality_idx.append(_index_or(CHIRALITY_LIST, atom.GetChiralTag(), _CHIRALITY_FALLBACK, "Chiral tag"))
 
     x = torch.tensor([type_idx, chirality_idx], dtype=torch.long).t().contiguous()
 
     row, col, edge_feat = [], [], []
     for bond in mol.GetBonds():
         start, end = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
-        feat = [BOND_LIST.index(bond.GetBondType()), BONDDIR_LIST.index(bond.GetBondDir())]
+        feat = [
+            _index_or(BOND_LIST, bond.GetBondType(), _BOND_FALLBACK, "Bond type"),
+            _index_or(BONDDIR_LIST, bond.GetBondDir(), _BONDDIR_FALLBACK, "Bond direction"),
+        ]
         row += [start, end]
         col += [end, start]
         edge_feat += [feat, feat]

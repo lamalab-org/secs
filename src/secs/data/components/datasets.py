@@ -1,12 +1,9 @@
-from io import BytesIO
-
 import numpy as np
 import torch
-from loguru import logger
 from torch import Tensor
 from torch.utils.data import Dataset
-from torch_geometric.data import Data
 
+from secs.data.components.central import CentralModalityData
 from secs.data.components.hnmr import augment
 from secs.utils import generate_hsqc_matrix
 from secs.utils.elucidation import reduce_resolution_by_averaging
@@ -16,7 +13,7 @@ from secs.utils.graph import smiles_to_graph_data
 class StringDataset(Dataset):
     def __init__(
         self,
-        central_modality_data: tuple[Tensor, Tensor],
+        central_modality_data: CentralModalityData,
         other_modality_data: tuple[Tensor, Tensor],
         central_modality: str,
         other_modality: str,
@@ -24,33 +21,25 @@ class StringDataset(Dataset):
         """Dataset for string modalities.
 
         Args:
-            central_modality_data (tuple[Tensor, Tensor]): pair of (central_modality, tokenized_central_modality)
+            central_modality_data (CentralModalityData): row-addressable central modality
             other_modality_data (tuple[Tensor, Tensor]): pair of (other_modality, tokenized_other_modality)
             central_modality (str): name of central modality as found in ModalityConstants
             other_modality (str): name of other modality as found in ModalityConstants
         """
-        from secs.data.modalities import ModalityConstants
-
         # modality pair definition
         self.central_modality = central_modality
         self.other_modality = other_modality
         # modality pair data
         self.central_modality_data = central_modality_data
         self.other_modality_data = other_modality_data
-        self.central_modality_data_type = ModalityConstants[central_modality].data_type
-        self.other_modality_data_type = ModalityConstants[other_modality].data_type
 
     def __len__(self):
         return len(self.other_modality_data[0])
 
     def __getitem__(self, idx):
         return {
-            self.central_modality: tuple([i[idx] for i in self.central_modality_data])
-            if self.central_modality_data_type is str
-            else Tensor(self.central_modality_data[idx]),
-            self.other_modality: tuple([i[idx] for i in self.other_modality_data])
-            if self.other_modality_data_type is str
-            else Tensor(self.other_modality_data)[idx],
+            self.central_modality: self.central_modality_data[idx],
+            self.other_modality: tuple(column[idx] for column in self.other_modality_data),
         }
 
 
@@ -94,7 +83,7 @@ class cNmrDataset(Dataset):
                 keep.append(i)
 
         # filter central modality in lockstep so indices stay aligned
-        self.central_modality_data = [[col[i] for i in keep] for col in central_data]
+        self.central_modality_data = central_data.select(keep)
 
         # --- precompute padded tensors once ---
         N = len(cleaned)
@@ -110,7 +99,7 @@ class cNmrDataset(Dataset):
 
     def __getitem__(self, index: int) -> dict:
         return {
-            self.central_modality: [col[index] for col in self.central_modality_data],
+            self.central_modality: self.central_modality_data[index],
             "c_nmr": (self.shifts[index], self.mask[index]),
         }
 
@@ -135,7 +124,7 @@ class IrDataset(Dataset):
         # convert to tensor
         ir = torch.tensor(self.ir[index], dtype=torch.float32)[100:1700].unsqueeze(0)
         return {
-            self.central_modality: [i[index] for i in self.central_modality_data],
+            self.central_modality: self.central_modality_data[index],
             self.other_modality: ir,
         }
 
@@ -160,7 +149,7 @@ class MassSpecDataset(Dataset):
 
     def __getitem__(self, index: int) -> dict:
         return {
-            self.central_modality: [i[index] for i in self.central_modality_data],
+            self.central_modality: self.central_modality_data[index],
             self.other_modality: self.mass_to_spec(self.mass_spec[index]),
         }
 
@@ -220,7 +209,7 @@ class hNmrDataset(Dataset):
 
     def __getitem__(self, index: int) -> dict:
         return {
-            self.central_modality: [i[index] for i in self.central_modality_data],
+            self.central_modality: self.central_modality_data[index],
             self.other_modality: self.hnmr_to_vec(self.h_nmr[index]),
         }
 
@@ -282,7 +271,7 @@ class HSQCDataset(Dataset):
         # input shape (512, 512) with 1 channel
         image = generate_hsqc_matrix(self.hsqc[index])
         return {
-            self.central_modality: [i[index] for i in self.central_modality_data],
+            self.central_modality: self.central_modality_data[index],
             self.other_modality: torch.tensor(image, dtype=torch.float32).unsqueeze(0),
         }
 
@@ -299,13 +288,13 @@ class GraphDataset(Dataset):
 
         keep = [i for i, smiles in enumerate(data) if smiles_to_graph_data(smiles) is not None]
         self.smiles = [data[i] for i in keep]
-        self.central_modality_data = [col[keep] for col in kwargs["central_modality_data"]]
+        self.central_modality_data = kwargs["central_modality_data"].select(keep)
 
     def __len__(self) -> int:
         return len(self.smiles)
 
     def __getitem__(self, index: int) -> dict:
         return {
-            self.central_modality: [col[index] for col in self.central_modality_data],
+            self.central_modality: self.central_modality_data[index],
             self.other_modality: smiles_to_graph_data(self.smiles[index]),
         }

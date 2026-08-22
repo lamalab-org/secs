@@ -2,34 +2,44 @@ import pandas as pd
 from loguru import logger
 from torch import Tensor
 from torch.utils.data import Dataset
+from torch_geometric.data import Data
 
+from secs.data.components.central import (
+    CentralModalityData,
+    GraphCentralModality,
+    TokenizedCentralModality,
+)
 from secs.data.modalities import (
     ModalityConstants,
     NonStringModalities,
     StringModalities,
 )
 
-DERIVED_FROM_CENTRAL = (NonStringModalities.GRAPH,)
+DERIVED_FROM: dict[str, str] = {NonStringModalities.GRAPH: StringModalities.SMILES}
+
+
+def source_column(modality: str) -> str:
+    """The frame column a modality is read from, itself unless it is derived."""
+    return DERIVED_FROM.get(modality, modality)
+
 
 def columns_to_read(modalities: list[str], central_modality: str) -> list[str]:
     """The frame columns a run actually has to load for these modalities."""
-    return [*dict.fromkeys([m for m in modalities if m not in DERIVED_FROM_CENTRAL] + [central_modality])]
+    wanted = [DERIVED_FROM.get(modality, modality) for modality in [*modalities, central_modality]]
+    return [*dict.fromkeys(wanted)]
 
 
 def derive_modality_columns(data: pd.DataFrame, modalities: list[str], central_modality: str) -> pd.DataFrame:
-    """Fill in modalities computed from the central one instead of stored.
-
-    Graphs are built from the central SMILES, so no dataset ships a `graph`
-    column; requesting the modality is enough. Returns a copy, so callers that
-    also score retrieval over the frame (`experiments/retrieval.py`) see the
-    same columns the datasets were built from.
-    """
-    derived = [m for m in modalities if m in DERIVED_FROM_CENTRAL and m not in data.columns]
-    if not derived:
-        return data
-    if ModalityConstants[central_modality].data_type is not str:
-        raise ValueError(f"Modalities {derived} are derived from a string central modality, not from {central_modality}.")
-    return data.assign(**{modality: data[central_modality] for modality in derived})
+    """Fill in modalities read off another column instead of stored."""
+    derived = {
+        modality: DERIVED_FROM[modality]
+        for modality in [*modalities, central_modality]
+        if modality in DERIVED_FROM and modality not in data.columns
+    }
+    missing = {modality: source for modality, source in derived.items() if source not in data.columns}
+    if missing:
+        raise ValueError(f"Cannot build {sorted(missing)}: the frame has no {sorted(set(missing.values()))} column.")
+    return data.assign(**{modality: data[source] for modality, source in derived.items()}) if derived else data
 
 
 class SECSDataset:
@@ -95,15 +105,17 @@ class SECSDataset:
             }
         return {}
 
-    def _encode_central_modality(self) -> tuple[Tensor, Tensor]:
+    def _encode_central_modality(self) -> CentralModalityData:
+        """Prepare the central modality for row-by-row pairing."""
         values = self.data[self.central_modality].to_list()
-        if ModalityConstants[self.central_modality].data_type is not str:
-            raise ValueError(f"Central modality {self.central_modality} is not supported yet.")
-        return self._tokenize_strings(values, self.central_modality, self.context_length)
+        data_type = ModalityConstants[self.central_modality].data_type
+        if data_type is str:
+            return TokenizedCentralModality(*self._tokenize_strings(values, self.central_modality, self.context_length))
+        if data_type is Data:
+            return GraphCentralModality(values)
 
-    def _select_central_modality_rows(self, index: pd.Index) -> tuple[Tensor, Tensor]:
-        rows = index.to_list()
-        return self.central_modality_data[0][rows], self.central_modality_data[1][rows]
+    def _select_central_modality_rows(self, index: pd.Index) -> CentralModalityData:
+        return self.central_modality_data.select(index.to_list())
 
     @staticmethod
     def _tokenize_strings(dataset: list[str], modality: str, context_length: int) -> tuple[Tensor, Tensor]:

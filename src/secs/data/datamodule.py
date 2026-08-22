@@ -7,7 +7,7 @@ from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader, DistributedSampler
 
 from secs.data.components.datasets import StringDatasetEmbedding
-from secs.data.modalities import ModalityConstants
+from secs.data.modalities import loader_for
 
 
 class SECSDataModule(LightningDataModule):
@@ -37,17 +37,17 @@ class SECSDataModule(LightningDataModule):
     ) -> CombinedLoader:
         dataloaders = {}
 
-        for modality in self.datasets[mode]:
+        for modality, dataset in self.datasets[mode].items():
             if self.distributed:
                 distributed_sampler = DistributedSampler(
-                    self.datasets[mode][modality],
+                    dataset,
                     shuffle=shuffle,
                 )
                 shuffle = None
             else:
                 distributed_sampler = None
-            dataloaders[modality] = ModalityConstants[modality].loader(
-                self.datasets[mode][modality],
+            dataloaders[modality] = loader_for(dataset.central_modality, dataset.other_modality)(
+                dataset,
                 batch_size=batch_size,
                 num_workers=num_workers,
                 drop_last=drop_last,
@@ -101,7 +101,7 @@ class SECSDataModule(LightningDataModule):
         """Build per-modality dataloaders for the predict step."""
         dataloaders = {}
         for modality, dataset in self.datasets[mode][0].items():
-            dataloaders[modality] = ModalityConstants[modality].loader(
+            dataloaders[modality] = loader_for(dataset.central_modality, dataset.other_modality)(
                 dataset,
                 batch_size=batch_size[modality] if isinstance(batch_size, dict) else batch_size,
                 num_workers=num_workers,
