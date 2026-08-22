@@ -112,8 +112,11 @@ def test_central_modality_is_tokenized_once_for_the_whole_frame():
         other_modalities=["c_nmr"],
         context_length=CONTEXT_LENGTH,
     )
-    input_ids, attention_mask = dataset.central_modality_data
-    assert input_ids.shape == attention_mask.shape == (len(SMILES), CONTEXT_LENGTH)
+    central = dataset.central_modality_data
+    assert central.input_ids.shape == central.attention_mask.shape == (len(SMILES), CONTEXT_LENGTH)
+    # rows come back as the pair the encoder takes
+    input_ids, attention_mask = central[0]
+    assert input_ids.shape == attention_mask.shape == (CONTEXT_LENGTH,)
 
 
 def test_non_string_central_modality_is_refused():

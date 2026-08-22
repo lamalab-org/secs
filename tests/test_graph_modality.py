@@ -9,24 +9,30 @@ import pandas as pd
 import pytest
 import torch
 from omegaconf import OmegaConf
+from rdkit import Chem
 from torch.utils.data import DataLoader as TorchDataLoader
 from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader as GeometricDataLoader
 
 from secs.models import GraphGINEncoder, SECSModule
-from secs.models.encoders.graph.molclr import GINet
+from secs.models.encoders.graph.molclr import (
+    GINet,
+    num_atom_type,
+    num_bond_direction,
+    num_bond_type,
+    num_chirality_tag,
+)
 from secs.utils.graph import (
     ATOM_LIST,
+    BOND_LIST,
+    CHIRALITY_LIST,
     MASK_ATOM_INDEX,
     smiles_to_graph_data,
     smiles_to_masked_graph_views,
 )
 
-try:
-    from secs.data.modalities import ModalityConstants
-    from secs.data.secs_dataset import SECSDataset, columns_to_read
-except Exception as exc:  # the SMILES tokenizer is fetched from the Hub
-    pytest.skip(f"MoLFormer tokenizer unavailable: {exc}", allow_module_level=True)
+from secs.data.modalities import ModalityConstants, loader_for
+from secs.data.secs_dataset import SECSDataset, columns_to_read
 
 SMILES = ["CCO", "c1ccccc1O", "CC(=O)Nc1ccccc1", "CCN(CC)CC"]
 CONTEXT_LENGTH = 16
@@ -65,6 +71,45 @@ def test_bondless_molecule_still_has_the_shapes_the_encoder_expects():
     assert graph.edge_attr.shape == (0, 2)
 
 
+@pytest.mark.parametrize(
+    ("label", "smiles"),
+    [
+        ("dative bond", "[NH3]->[Pt](<-[NH3])(Cl)Cl"),
+        ("dummy atom", "*CCO"),
+        ("square-planar chirality", "C[Pt@SP1](Cl)(Br)N"),
+        ("octahedral chirality", "C[Co@OH1](Cl)(Br)(N)(O)F"),
+        ("directional double bond", r"C/C=C/C"),
+    ],
+)
+def test_features_outside_molclr_vocabulary_fold_into_it(label, smiles):
+    """Real molecules carry features the pretrained tables have no row for.
+
+    Growing the tables would strand the checkpoint, so these map onto the
+    nearest existing row instead. What must never happen is an index past the
+    end of an embedding table, which is a crash at forward rather than at
+    featurisation.
+    """
+    graph = smiles_to_graph_data(smiles)
+    assert graph is not None, label
+    assert graph.x[:, 0].max() < num_atom_type
+    assert graph.x[:, 1].max() < num_chirality_tag
+    if graph.edge_attr.numel():
+        # the last bond row is reserved for the self-loops the encoder adds
+        assert graph.edge_attr[:, 0].max() < num_bond_type - 1
+        assert graph.edge_attr[:, 1].max() < num_bond_direction
+
+
+def test_a_dative_bond_is_read_as_a_single_bond():
+    """DATIVE is still a two-centre sigma bond, and SINGLE is the nearest row."""
+    single = BOND_LIST.index(Chem.rdchem.BondType.SINGLE)
+    assert smiles_to_graph_data("O->[Cu]").edge_attr[:, 0].tolist() == [single, single]
+
+
+def test_chirality_vocabulary_matches_the_encoder_table():
+    """Upstream MolCLR lists four tags but sizes the table at three."""
+    assert len(CHIRALITY_LIST) == num_chirality_tag
+
+
 def test_unparseable_smiles_returns_none_rather_than_raising():
     assert smiles_to_graph_data("banana-not-a-smiles") is None
 
@@ -83,10 +128,40 @@ def test_masked_views_keep_the_atoms_and_drop_whole_bonds():
 # --- dataset and collation -------------------------------------------------
 
 
-def test_graph_column_is_derived_from_the_central_smiles():
+def test_graph_column_is_derived_from_smiles():
     """No dataset ships a `graph` column; asking for the modality is enough."""
-    assert columns_to_read(["graph", "c_nmr"], "smiles") == ["c_nmr", "smiles"]
+    assert columns_to_read(["graph", "c_nmr"], "smiles") == ["smiles", "c_nmr"]
+    # graph as the central modality still only needs the smiles column
+    assert columns_to_read(["c_nmr"], "graph") == ["c_nmr", "smiles"]
     assert len(graph_dataset()) == len(SMILES)
+
+
+def test_graph_can_be_the_central_modality():
+    """c_nmr <-> graph directly: two encoders, no SMILES in the model at all."""
+    frame = pd.DataFrame({"smiles": SMILES, "c_nmr": [[20.0, 60.0]] * len(SMILES)})
+    dataset = SECSDataset(
+        data=frame,
+        central_modality="graph",
+        other_modalities=["c_nmr"],
+        context_length=CONTEXT_LENGTH,
+    ).build_datasets_for_modalities()["c_nmr"]
+
+    sample = dataset[0]
+    assert set(sample) == {"graph", "c_nmr"}
+    assert isinstance(sample["graph"], Data)
+    shifts, mask = sample["c_nmr"]
+    assert shifts.ndim == mask.ndim == 1
+
+    # the pair needs the geometric collater even though c_nmr is the named modality
+    batch = next(iter(loader_for("graph", "c_nmr")(dataset, batch_size=3)))
+    assert batch["graph"].batch.max() == 2
+    assert batch["c_nmr"][0].shape[0] == 3
+
+
+def test_a_pair_with_a_graph_on_either_side_takes_the_geometric_loader():
+    assert loader_for("graph", "c_nmr") is GeometricDataLoader
+    assert loader_for("c_nmr", "graph") is GeometricDataLoader
+    assert loader_for("c_nmr", "smiles") is TorchDataLoader
 
 
 def test_samples_look_like_every_other_modality_with_a_graph_inside():

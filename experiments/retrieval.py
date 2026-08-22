@@ -21,7 +21,7 @@ from secs.utils.utils import HANDLERS as handlers
 load_dotenv()
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 
-RETRIEVAL_TIME = datetime.datetime.now().strftime("%Y%m%d_%H%M") # set an unique identifier for the retrieval run
+RETRIEVAL_TIME = datetime.datetime.now().strftime("%Y%m%d_%H%M")  # set an unique identifier for the retrieval run
 
 
 def embed(config: DictConfig):
@@ -47,9 +47,7 @@ def embed(config: DictConfig):
 
     # Split the data into validation and training datasets
     valid_shuffled_data = shuffled_data.tail(int(config.data.valid_frac * dataset_length))
-    valid_shuffled_data = derive_modality_columns(
-        valid_shuffled_data, config.data.modalities, config.data.central_modality
-    )
+    valid_shuffled_data = derive_modality_columns(valid_shuffled_data, config.data.modalities, config.data.central_modality)
 
     # set up the dataloaders
     valid_datasets = (

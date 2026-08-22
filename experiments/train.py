@@ -16,7 +16,7 @@ from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from pytorch_lightning.strategies.ddp import DDPStrategy
 
 from secs.data.datamodule import SECSDataModule
-from secs.data.secs_dataset import SECSDataset, columns_to_read
+from secs.data.secs_dataset import SECSDataset, columns_to_read, source_column
 from secs.models.lightning_module import SECSModule
 
 load_dotenv()
@@ -57,7 +57,7 @@ def train_molbind(config: DictConfig):
     logger.info(f"Train data shape: {train_data.shape}")
     logger.info(f"Validation data shape: {valid_data.shape}")
 
-    train_shuffled_data = train_data.sort_values(by=config.data.central_modality).reset_index(drop=True)
+    train_shuffled_data = train_data.sort_values(by=source_column(config.data.central_modality)).reset_index(drop=True)
     valid_shuffled_data = valid_data.copy()
 
     # set up the dataloaders
