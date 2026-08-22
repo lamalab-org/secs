@@ -1,6 +1,6 @@
 import torch
 
-from secs.utils import select_device
+from secs.utils.utils import select_device
 
 
 def aggregate_embeddings(

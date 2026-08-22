@@ -57,22 +57,6 @@ class PeakSetTransformer(nn.Module):
         -> continuous ppm embedding (+ peak-presence token)
         -> transformer encoder (permutation-equivariant, padding-masked)
         -> masked mean over the real peak tokens  ->  (B, embed_dim)
-
-    The backbone stops at the pooled representation. Projection to the shared
-    contrastive space is `ProjectionHead`, configured per modality under
-    `model.projection_heads` -- keeping a second projection stack in here as
-    well meant four linear layers after pooling and two places to configure
-    the same thing. Normalisation belongs to the consumer too: InfoNCE and
-    `cosine_similarity` both normalise their inputs.
-
-    Readout is a masked mean rather than a [CLS] token or a learned query.
-    Both of those are a softmax over the set, which can saturate onto one or
-    two peaks and forces the whole spectrum through a single learned routing
-    step; for an unordered set of ~10-40 peaks where the entire distribution
-    carries the signal, the mean is the better inductive bias and costs no
-    parameters. A content-free [CLS] also looks identical in every sample, so
-    peaks attend to it as a cheap no-op and it drains attention mass from the
-    peak-peak comparisons that matter (the ViT/LLM attention-sink effect).
     """
 
     def __init__(
@@ -116,10 +100,7 @@ class PeakSetTransformer(nn.Module):
         x = self.tokenizer(shifts, mask)  # (B, P, D)
 
         pad = ~mask  # True = pad
-        # A fully padded row would mask every position, and softmax over an
-        # all -inf row is NaN. The [CLS] token used to guarantee one live
-        # position; keep the first one live instead. Its value is then
-        # excluded from the mean below, so it cannot contribute.
+
         empty = pad.all(dim=1)
         if empty.any():
             pad = pad.clone()

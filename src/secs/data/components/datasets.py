@@ -2,12 +2,15 @@ from io import BytesIO
 
 import numpy as np
 import torch
+from loguru import logger
 from torch import Tensor
 from torch.utils.data import Dataset
+from torch_geometric.data import Data
 
 from secs.data.components.hnmr import augment
 from secs.utils import generate_hsqc_matrix
 from secs.utils.elucidation import reduce_resolution_by_averaging
+from secs.utils.graph import smiles_to_graph_data
 
 
 class StringDataset(Dataset):
@@ -48,37 +51,6 @@ class StringDataset(Dataset):
             self.other_modality: tuple([i[idx] for i in self.other_modality_data])
             if self.other_modality_data_type is str
             else Tensor(self.other_modality_data)[idx],
-        }
-
-
-class FingerprintSECSDataset(Dataset):
-    def __init__(
-        self,
-        central_modality_data: tuple[Tensor, Tensor],
-        fingerprint_data: list[list[int]],
-        central_modality: str,
-    ) -> None:
-        """Dataset for fingerprints.
-
-        Args:
-            central_modality_data (tuple[Tensor, Tensor]): pair of (central_modality, tokenized_central_modality)
-            fingerprint_data (Tensor): fingerprint data
-            central_modality (str): name of central modality as found in ModalityConstants
-        Returns:
-            None
-        """
-        self.central_modality_data = central_modality_data
-        self.central_modality = central_modality
-        self.other_modality = "fingerprint"
-        self.fingerprints = fingerprint_data
-
-    def __len__(self):
-        return len(self.fingerprints)
-
-    def __getitem__(self, idx: int) -> dict:
-        return {
-            self.central_modality: [i[idx] for i in self.central_modality_data],
-            self.other_modality: Tensor(self.fingerprints[idx]),
         }
 
 
@@ -312,4 +284,28 @@ class HSQCDataset(Dataset):
         return {
             self.central_modality: [i[index] for i in self.central_modality_data],
             self.other_modality: torch.tensor(image, dtype=torch.float32).unsqueeze(0),
+        }
+
+
+class GraphDataset(Dataset):
+    """
+    Molecular graphs dataset created at training time from SMILES
+    strings.
+    """
+
+    def __init__(self, data: list[str], **kwargs) -> None:
+        self.central_modality = kwargs["central_modality"]
+        self.other_modality = "graph"
+
+        keep = [i for i, smiles in enumerate(data) if smiles_to_graph_data(smiles) is not None]
+        self.smiles = [data[i] for i in keep]
+        self.central_modality_data = [col[keep] for col in kwargs["central_modality_data"]]
+
+    def __len__(self) -> int:
+        return len(self.smiles)
+
+    def __getitem__(self, index: int) -> dict:
+        return {
+            self.central_modality: [col[index] for col in self.central_modality_data],
+            self.other_modality: smiles_to_graph_data(self.smiles[index]),
         }

@@ -18,6 +18,14 @@ encoders:
   hsqc:
     name: cnn
     freeze_encoder: False
+  graph:
+    name: molclr
+    freeze_encoder: False
+    num_layer: 5
+    emb_dim: 300
+    feat_dim: 512
+    drop_ratio: 0.0
+    pool: mean
 
 
 embedding_size: 512
@@ -28,12 +36,14 @@ projection_heads:
   ir_is_on: True
   h_nmr_is_on: True
   hsqc_is_on: True
+  graph_is_on: True
   # freeze projection heads
   c_nmr_freeze: True
   ir_freeze: True
   smiles_freeze: True
   h_nmr_freeze: False
   hsqc_freeze: False
+  graph_freeze: False
   # default projection heads for each modality
   smiles:
     dims: [768, "${model.embedding_size}"]
@@ -49,6 +59,9 @@ projection_heads:
     activation: LeakyReLU
   hsqc:
     dims: [1024, "${model.embedding_size}"]
+    activation: LeakyReLU
+  graph:
+    dims: [512, "${model.embedding_size}"]
     activation: LeakyReLU
 
 optimizer:

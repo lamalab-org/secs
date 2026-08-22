@@ -9,6 +9,28 @@ from secs.data.modalities import (
     StringModalities,
 )
 
+DERIVED_FROM_CENTRAL = (NonStringModalities.GRAPH,)
+
+def columns_to_read(modalities: list[str], central_modality: str) -> list[str]:
+    """The frame columns a run actually has to load for these modalities."""
+    return [*dict.fromkeys([m for m in modalities if m not in DERIVED_FROM_CENTRAL] + [central_modality])]
+
+
+def derive_modality_columns(data: pd.DataFrame, modalities: list[str], central_modality: str) -> pd.DataFrame:
+    """Fill in modalities computed from the central one instead of stored.
+
+    Graphs are built from the central SMILES, so no dataset ships a `graph`
+    column; requesting the modality is enough. Returns a copy, so callers that
+    also score retrieval over the frame (`experiments/retrieval.py`) see the
+    same columns the datasets were built from.
+    """
+    derived = [m for m in modalities if m in DERIVED_FROM_CENTRAL and m not in data.columns]
+    if not derived:
+        return data
+    if ModalityConstants[central_modality].data_type is not str:
+        raise ValueError(f"Modalities {derived} are derived from a string central modality, not from {central_modality}.")
+    return data.assign(**{modality: data[central_modality] for modality in derived})
+
 
 class SECSDataset:
     def __init__(
@@ -27,6 +49,7 @@ class SECSDataset:
         self.context_length = context_length
         # "train" enables train-only augmentation (e.g. image depictions).
         self.split = split
+        self.data = derive_modality_columns(self.data, other_modalities, central_modality)
         self.central_modality_data = self._encode_central_modality()
 
     def build_datasets_for_modalities(self) -> dict[str, Dataset]:
