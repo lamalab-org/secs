@@ -1,6 +1,7 @@
 from secs.models.base import HFCausalLMEncoder, ModalityEncoder
 from secs.models.encoders import (
     CNmrTransformerEncoder,
+    GraphGCNEncoder,
     GraphGINEncoder,
     HNmrCNNEncoder,
     HsqcCNNEncoder,
@@ -14,6 +15,7 @@ from secs.models.registry import available_encoders, register_encoder, resolve_e
 
 __all__ = [
     "CNmrTransformerEncoder",
+    "GraphGCNEncoder",
     "GraphGINEncoder",
     "HFCausalLMEncoder",
     "HNmrCNNEncoder",

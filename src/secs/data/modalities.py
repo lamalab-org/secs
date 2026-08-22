@@ -65,12 +65,6 @@ class ModalityConstants(Enum):
 
 
 def loader_for(*modalities: str) -> type:
-    """
-    The loader a sample pairing these modalities needs.
-
-    A sample carries both sides of the pair, so one graph anywhere in it
-    decides for the whole thing: the default collater cannot stack a `Data`,
-    while the geometric one handles plain tensors perfectly well.
-    """
+    """The loader a sample pairing these modalities needs."""
     loaders = {ModalityConstants[modality].loader for modality in modalities}
     return GeometricDataLoader if GeometricDataLoader in loaders else DataLoader

@@ -113,6 +113,7 @@ class SECSDataset:
             return TokenizedCentralModality(*self._tokenize_strings(values, self.central_modality, self.context_length))
         if data_type is Data:
             return GraphCentralModality(values)
+        raise ValueError(f"Central modality {self.central_modality} is not supported yet.")
 
     def _select_central_modality_rows(self, index: pd.Index) -> CentralModalityData:
         return self.central_modality_data.select(index.to_list())

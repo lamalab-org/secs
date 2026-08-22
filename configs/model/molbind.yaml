@@ -19,7 +19,7 @@ encoders:
     name: cnn
     freeze_encoder: False
   graph:
-    name: molclr
+    name: molclr_gin
     freeze_encoder: False
     num_layer: 5
     emb_dim: 300

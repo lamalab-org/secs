@@ -137,7 +137,7 @@ class GINet(nn.Module):
         return h if self.out_lin is None else self.out_lin(h)
 
 
-@register_encoder("graph", "molclr", default=True)
+@register_encoder("graph", "molclr_gin", default=True)
 class GraphGINEncoder(ModalityEncoder):
     """MolCLR GIN over a batched molecular graph. forward takes a PyG `Data`/`Batch`."""
 

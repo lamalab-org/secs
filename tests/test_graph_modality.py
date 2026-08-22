@@ -14,8 +14,11 @@ from torch.utils.data import DataLoader as TorchDataLoader
 from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader as GeometricDataLoader
 
-from secs.models import GraphGINEncoder, SECSModule
-from secs.models.encoders.graph.molclr import (
+from secs.data.modalities import ModalityConstants, loader_for
+from secs.data.secs_dataset import SECSDataset, columns_to_read
+from secs.models import GraphGCNEncoder, GraphGINEncoder, SECSModule
+from secs.models.encoders.graph.molclr_gcn import GCNet
+from secs.models.encoders.graph.molclr_gin import (
     GINet,
     num_atom_type,
     num_bond_direction,
@@ -30,9 +33,6 @@ from secs.utils.graph import (
     smiles_to_graph_data,
     smiles_to_masked_graph_views,
 )
-
-from secs.data.modalities import ModalityConstants, loader_for
-from secs.data.secs_dataset import SECSDataset, columns_to_read
 
 SMILES = ["CCO", "c1ccccc1O", "CC(=O)Nc1ccccc1", "CCN(CC)CC"]
 CONTEXT_LENGTH = 16
@@ -301,6 +301,43 @@ def test_unknown_backbone_options_are_reported(kwarg, value):
         GINet(**{**BACKBONE, kwarg: value})
 
 
+# --- the GCN backbone ------------------------------------------------------
+
+
+def test_gcn_backbone_matches_the_gin_encoder_contract():
+    """The second MolCLR backbone is swappable: same readout shapes, same pooling."""
+    encoder = GraphGCNEncoder(**BACKBONE).eval()
+    assert encoder.output_dim == BACKBONE["feat_dim"]
+    with torch.no_grad():
+        together = encoder(graphs_of(SMILES))
+        alone = encoder(graphs_of(["CC(=O)Nc1ccccc1"]))
+    assert together.shape == (len(SMILES), encoder.output_dim)
+    assert torch.allclose(alone[0], together[SMILES.index("CC(=O)Nc1ccccc1")], atol=1e-5)
+
+
+def test_gcn_bondless_molecule_survives_the_encoder():
+    encoder = GraphGCNEncoder(**BACKBONE).eval()
+    with torch.no_grad():
+        embedding = encoder(graphs_of(["[Na+]", "CCO"]))
+    assert torch.isfinite(embedding).all()
+
+
+def test_gcn_feat_readout_builds_no_unused_parameters():
+    encoder = GraphGCNEncoder(**BACKBONE)
+    encoder(graphs_of()).sum().backward()
+    assert all(p.grad is not None for p in encoder.parameters())
+
+
+def test_gcn_molclr_pth_loads(tmp_path):
+    pretrained = GCNet(readout="projected", **BACKBONE)
+    ckpt = tmp_path / "molclr_gcn.pth"
+    torch.save(pretrained.state_dict(), ckpt)
+
+    encoder = GraphGCNEncoder(ckpt_path=str(ckpt), **BACKBONE)
+    assert torch.equal(encoder.encoder.gnns[0].weight, pretrained.gnns[0].weight)
+    assert torch.equal(encoder.encoder.feat_lin.weight, pretrained.feat_lin.weight)
+
+
 # --- the whole path, as the LightningModule sees it ------------------------
 
 
@@ -311,7 +348,7 @@ def graph_config(stub_encoder_cls):
             "data": {"central_modality": "smiles", "modalities": ["graph"], "batch_size": len(SMILES)},
             "trainer": {"gpus_per_node": 1, "num_nodes": 1},
             "model": {
-                "encoders": {"smiles": {"name": "stub"}, "graph": {"name": "molclr", **BACKBONE}},
+                "encoders": {"smiles": {"name": "stub"}, "graph": {"name": "molclr_gin", **BACKBONE}},
                 "projection_heads": {
                     "smiles_is_on": True,
                     "graph_is_on": True,
