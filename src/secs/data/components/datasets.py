@@ -59,7 +59,7 @@ class cNmrDataset(Dataset):
         data: list[list[float]],
         max_peaks: int = 128,
         min_value: float = -5.0,
-        max_value: float = 230.0,
+        max_value: float = 218.0,
         augment: bool = False,
         **kwargs,
     ) -> None:

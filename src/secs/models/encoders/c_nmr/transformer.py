@@ -68,10 +68,18 @@ class PeakSetTransformer(nn.Module):
         dropout: float = 0.1,
         n_freqs: int = 64,
         max_ppm: float = 218.0,
+        pool: str = "mean",
     ):
         super().__init__()
+        if pool not in ("mean", "sum", "attention"):
+            raise ValueError(f"pool must be one of mean/sum/attention, got {pool!r}")
         self.embed_dim = embed_dim
+        self.pool = pool
         self.tokenizer = PeakTokenizer(embed_dim, n_freqs=n_freqs, max_ppm=max_ppm)
+        self.pool_attn = (
+            nn.MultiheadAttention(embed_dim, num_heads, dropout=dropout, batch_first=True) if pool == "attention" else None
+        )
+        self.pool_query = nn.Parameter(torch.randn(1, 1, embed_dim) * 0.02) if pool == "attention" else None
 
         enc_layer = nn.TransformerEncoderLayer(
             d_model=embed_dim,
@@ -109,10 +117,20 @@ class PeakSetTransformer(nn.Module):
         x = self.transformer(x, src_key_padding_mask=pad)
         x = self.encoder_norm(x)
 
-        # Masked mean over real peaks only; clamp so an empty row gives zeros
-        # rather than a division by zero.
+        if self.pool == "attention":
+            query = self.pool_query.expand(x.shape[0], -1, -1)
+            pooled, _ = self.pool_attn(query, x, x, key_padding_mask=pad, need_weights=False)
+            return pooled.squeeze(1)
+
         keep = mask.unsqueeze(-1).to(x.dtype)  # (B, P, 1)
-        return (x * keep).sum(dim=1) / keep.sum(dim=1).clamp(min=1.0)
+        total = (x * keep).sum(dim=1)
+        if self.pool == "sum":
+            # Mean pooling divides the peak count straight back out, and the peak
+            # count is nearly the number of distinct carbons -- the strongest
+            # single scalar about the molecule. Summing keeps it in the norm.
+            return total
+        # Masked mean; clamp so an empty row gives zeros rather than a 0/0.
+        return total / keep.sum(dim=1).clamp(min=1.0)
 
 
 @register_encoder("c_nmr", "transformer", default=True)
