@@ -50,6 +50,8 @@ dependencies = [
   "omegaconf==2.3.0",
   "python-dotenv==1.2.2",
   "wandb==0.25.1",
+  "ipykernel>=7.3.0",
+  "matplotlib>=3.11.1",
 ]
 
 [project.optional-dependencies]

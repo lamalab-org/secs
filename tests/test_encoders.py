@@ -3,11 +3,17 @@
 import pytest
 import torch
 
-from secs.models import CNmrTransformerEncoder, HNmrCNNEncoder, HsqcCNNEncoder, IrCNNEncoder
+from secs.models import (
+    CNmrTransformerEncoder,
+    HNmrCNNEncoder,
+    HNmrConvAttentionEncoder,
+    HNmrDilatedCNNEncoder,
+    HsqcCNNEncoder,
+    IrCNNEncoder,
+)
 from secs.models.base import ModalityEncoder, unwrap_state_dict
+from secs.models.encoders.h_nmr.dilated_cnn import CumulativeIntegral
 
-# Keep the CNNs at their smallest scale: these tests are about the shared API,
-# not about the capacity of any particular backbone.
 ENCODERS = {
     "c_nmr": (
         lambda **kw: CNmrTransformerEncoder(embed_dim=16, depth=1, num_heads=2, **kw),
@@ -16,6 +22,16 @@ ENCODERS = {
     "h_nmr": (
         lambda **kw: HNmrCNNEncoder(scale="tiny", **kw),
         lambda: torch.randn(2, 1, 2048),
+    ),
+    "h_nmr_conv_attention": (
+        lambda **kw: HNmrConvAttentionEncoder(
+            embed_dim=32, channels=(8, 16, 32), blocks_per_stage=1, dim=32, depth=1, n_heads=4, n_freqs=8, **kw
+        ),
+        lambda: torch.rand(2, 1, 2048),
+    ),
+    "h_nmr_dilated": (
+        lambda **kw: HNmrDilatedCNNEncoder(embed_dim=32, channels=(8, 16, 32), blocks_per_stage=1, **kw),
+        lambda: torch.rand(2, 1, 2048),
     ),
     "hsqc": (
         lambda **kw: HsqcCNNEncoder(scale="tiny", input_height=64, input_width=64, **kw),
@@ -121,3 +137,15 @@ def test_c_nmr_encoder_survives_a_fully_padded_row():
         embedding = encoder((shifts, mask))
     assert torch.isfinite(embedding).all()
     assert torch.count_nonzero(embedding[1]) == 0
+
+
+def test_dilated_hnmr_cumulative_channel_is_scale_invariant_and_safe():
+    """The integral channel carries proton fractions: monotone, ends at 1, and
+    unchanged by intensity rescaling -- that is the point of adding it."""
+    x = torch.rand(3, 1, 500)
+    out = CumulativeIntegral()(x)
+    assert out.shape == (3, 2, 500)
+    assert torch.allclose(out[:, 1, -1], torch.ones(3))
+    assert (out[:, 1].diff(dim=-1) >= 0).all()
+    assert torch.allclose(out[:, 1], CumulativeIntegral()(x * 7.3)[:, 1], atol=1e-6)
+    assert torch.isfinite(CumulativeIntegral()(torch.zeros(1, 1, 100))).all()
