@@ -12,8 +12,6 @@ from secs.models import MolBind
 from secs.utils import select_device
 from secs.utils.graph import smiles_to_graph_data
 
-LIGHTNING_ONLY_PREFIXES = ("reference_encoder.", "reference_proj.")
-
 
 def molbind_state_dict(state_dict: dict) -> dict:
     """Reduce a SECSModule checkpoint to just the MolBind weights.
@@ -23,7 +21,7 @@ def molbind_state_dict(state_dict: dict) -> dict:
     """
     renamed = dict(state_dict)
     consume_prefix_in_state_dict_if_present(renamed, "model.")
-    return {k: v for k, v in renamed.items() if not k.startswith(LIGHTNING_ONLY_PREFIXES)}
+    return {k: v for k, v in renamed.items()}
 
 
 def load_model(config, device: str) -> MolBind:
