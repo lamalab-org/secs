@@ -1,15 +1,3 @@
-"""Realistic augmentation of idealised 1H NMR stick spectra.
-
-The augmentation pipeline takes a clean spectrum sampled on a fixed ppm grid,
-detects its peaks and re-synthesises them with experimentally motivated
-artefacts: pseudo-Voigt line shapes, J-coupling multiplets, phase errors,
-13C satellites, residual solvent and water peaks, impurities, baseline drift
-and noise.
-
-All randomness flows through a single :class:`numpy.random.Generator`, which
-can be supplied to :func:`augment` for reproducible output.
-"""
-
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -67,8 +55,10 @@ WATER_PEAKS = {
     "CDCl3": {"ppm": 1.56, "width_factor": 2.0, "lorentz_factor": 2.5},
     "DMSO-d6": {"ppm": 3.33, "width_factor": 2.5, "lorentz_factor": 3.0},
 }
-# Water intensity is a wide random range, not a fixed factor.
-WATER_INTENSITY_FACTOR_RANGE = (0.01, 1.0)
+# Water intensity is drawn log-uniformly: most samples show a small water line,
+# a wet one occasionally dominates. (A uniform draw made water the tallest feature
+# in a third of all CDCl3 spectra.)
+WATER_INTENSITY_FACTOR_RANGE = (0.005, 0.8)
 WATER_PROBABILITY = 0.65  # Increased probability, as water is very common
 
 # 13C satellite parameters (more likely to appear in good S/N spectra)
@@ -77,15 +67,81 @@ C13_COUPLING_1JCH_HZ_RANGE = (115.0, 160.0)
 C13_SATELLITE_PROBABILITY = 0.6  # Increased probability
 
 # Impurity peak parameters (more likely to have impurities)
-IMPURITY_PROBABILITY = 0.40  # Increased probability
+IMPURITY_PROBABILITY = 0.15  # Unknown junk only; known contaminants are drawn from H_IMPURITIES
 NUM_IMPURITY_PEAKS_MAX = 4
 IMPURITY_INTENSITY_MAX_FRAC = 0.08
 IMPURITY_WIDTH_FACTOR_RANGE = (0.8, 1.8)  # Wider range for varied impurity shapes
 
 # Phase error parameters (allowing for more severe errors)
 PHASE_ERROR_PROBABILITY = 0.6
-MAX_ZERO_ORDER_PHASE_DEG = 25.0
-MAX_FIRST_ORDER_PHASE_DEG_PER_PPM = 3.0
+# Published SI spectra are phased by hand; residual errors are a few degrees, and
+# the dispersive tails of a tall peak cluster become a visible baseline roll well
+# before 20 degrees (checked visually on corpus renders).
+MAX_ZERO_ORDER_PHASE_DEG = 12.0
+MAX_FIRST_ORDER_PHASE_DEG_PER_PPM = 1.5
+
+# Reference compound (TMS at 0 ppm)
+TMS_PROBABILITY = 0.35
+TMS_INTENSITY_RANGE = (0.01, 0.2)
+
+# Known contaminants at their literature 1H shifts (Gottlieb 1997; Fulmer 2010),
+# as (probability, {solvent: [(ppm, relative area), ...]}). A contaminant contributes
+# all of its lines or none of them. The random-position impurity stage below stays,
+# at reduced probability, for the junk no table covers.
+H_IMPURITIES = {
+    "grease": (0.35, {"CDCl3": [(0.86, 0.5), (1.26, 1.0)], "DMSO-d6": [(0.82, 0.5), (1.24, 1.0)]}),
+    "ethyl_acetate": (
+        0.12,
+        {"CDCl3": [(1.26, 3.0), (2.05, 3.0), (4.12, 2.0)], "DMSO-d6": [(1.17, 3.0), (1.99, 3.0), (4.03, 2.0)]},
+    ),
+    "acetone": (0.12, {"CDCl3": [(2.17, 1.0)], "DMSO-d6": [(2.09, 1.0)]}),
+    "dcm": (0.10, {"CDCl3": [(5.30, 1.0)], "DMSO-d6": [(5.76, 1.0)]}),
+    "methanol": (0.08, {"CDCl3": [(3.49, 1.0)], "DMSO-d6": [(3.16, 1.0)]}),
+    "ethanol": (0.06, {"CDCl3": [(1.25, 3.0), (3.72, 2.0)], "DMSO-d6": [(1.06, 3.0), (3.44, 2.0)]}),
+    "diethyl_ether": (0.05, {"CDCl3": [(1.21, 6.0), (3.48, 4.0)], "DMSO-d6": [(1.09, 6.0), (3.38, 4.0)]}),
+    "dmf": (0.05, {"CDCl3": [(2.88, 3.0), (2.96, 3.0), (8.02, 1.0)], "DMSO-d6": [(2.73, 3.0), (2.89, 3.0), (7.95, 1.0)]}),
+    "dmso": (0.05, {"CDCl3": [(2.62, 1.0)], "DMSO-d6": [(2.54, 1.0)]}),
+    "thf": (0.04, {"CDCl3": [(1.85, 4.0), (3.76, 4.0)], "DMSO-d6": [(1.76, 4.0), (3.60, 4.0)]}),
+}
+KNOWN_IMPURITY_SCALE_RANGE = (0.005, 0.10)
+
+# Shimming / B0 inhomogeneity: an exponential tail on one side of every line
+SHIM_ASYMMETRY_PROBABILITY = 0.35
+SHIM_TAIL_PPM_RANGE = (0.003, 0.02)
+SHIM_TAIL_FRACTION_RANGE = (0.05, 0.30)
+
+# Spinning sidebands at +- the spinning rate around every peak
+SPINNING_SIDEBAND_PROBABILITY = 0.2
+SPINNING_RATE_HZ_RANGE = (12.0, 25.0)
+SPINNING_SIDEBAND_FRACTION_RANGE = (0.002, 0.02)
+
+# Truncation (sinc) wiggles from a too-short FID
+TRUNCATION_PROBABILITY = 0.12
+TRUNCATION_PERIOD_PPM_RANGE = (0.004, 0.015)
+TRUNCATION_AMPLITUDE_RANGE = (0.03, 0.15)
+
+# Solvent-suppression notch over the water region, with locally boosted noise.
+# Only where people actually suppress water: samples in protic/hygroscopic
+# solvents. Nobody runs presaturation on a CDCl3 sample.
+SUPPRESSION_PROBABILITY = 0.15
+SUPPRESSION_SOLVENTS = ("DMSO-d6",)
+SUPPRESSION_DEPTH_RANGE = (0.4, 0.95)
+SUPPRESSION_WIDTH_PPM_RANGE = (0.05, 0.3)
+SUPPRESSION_NOISE_BOOST_RANGE = (2.0, 8.0)
+
+# Noise texture: correlation length of the baseline noise (apodization smooths
+# noise together with the signal), and scan-to-scan instability that converts
+# signal into noise localized at the peaks.
+NOISE_CORRELATION_SIGMA_POINTS = (0.0, 2.5)
+SIGNAL_JITTER_PROBABILITY = 0.5
+AMP_JITTER_RANGE = (0.002, 0.02)
+FREQ_JITTER_POINTS_RANGE = (0.05, 0.6)
+
+# Receiver-side baseline: slow sinusoidal ripple (clipped-FID signature) and DC offset
+BASELINE_RIPPLE_PROBABILITY = 0.15
+BASELINE_RIPPLE_AMPLITUDE_RANGE = (0.002, 0.02)
+BASELINE_RIPPLE_PERIODS_RANGE = (1.0, 6.0)
+BASELINE_DC_OFFSET_SIGMA = 0.003
 
 # Intensity below which a peak or line shape is treated as numerically zero.
 _EPS = 1e-9
@@ -115,6 +171,13 @@ class _Grid:
             return 0 if ppm_val <= self.ppm_min else self.num_points - 1
         ppm_val = np.clip(ppm_val, self.ppm_min, self.ppm_max)
         return int(((ppm_val - self.ppm_min) / (self.ppm_max - self.ppm_min)) * (self.num_points - 1))
+
+    def ppm_to_pos(self, ppm_val: float) -> float:
+        """Like ppm_to_idx but fractional, for line shapes placed between grid points."""
+        if self.num_points <= 1 or self.ppm_max == self.ppm_min:
+            return 0.0
+        ppm_val = np.clip(ppm_val, self.ppm_min, self.ppm_max)
+        return ((ppm_val - self.ppm_min) / (self.ppm_max - self.ppm_min)) * (self.num_points - 1)
 
     def idx_to_ppm(self, idx: int) -> float:
         if self.num_points <= 1:
@@ -150,7 +213,7 @@ class _Phase:
     def dispersive_fraction(self, ppm_value: float) -> float:
         """Fraction of dispersive line shape mixed into an absorption peak at `ppm_value`."""
         phase_rad = self.phi0_rad + self.phi1_rad_per_ppm * (ppm_value - self.ppm_pivot)
-        return float(np.clip(np.tan(phase_rad), -5, 5))  # Cap effect
+        return float(np.clip(np.tan(phase_rad), -1.5, 1.5))  # Cap effect
 
 
 # --- Line shapes ---
@@ -378,14 +441,25 @@ def _add_c13_satellites(
 
 
 def _add_solvent_and_water_peaks(
-    spectrum: np.ndarray, grid: _Grid, rng: np.random.Generator, phase: _Phase, max_intensity: float
+    spectrum: np.ndarray,
+    grid: _Grid,
+    rng: np.random.Generator,
+    phase: _Phase,
+    max_intensity: float,
+    solvent_name: str | None = None,
 ) -> np.ndarray:
-    """Adds a residual solvent peak and, with some probability, the matching water peak."""
+    """Adds a residual solvent peak and, with some probability, the matching water peak.
+
+    Args:
+        solvent_name: Key of SOLVENT_PEAKS to use (resolved by `apply_instrument_artifacts`);
+            if None or unknown, one is drawn at random.
+    """
     if rng.random() > SOLVENT_PROBABILITY:
         return spectrum
 
-    solvent_names = list(SOLVENT_PEAKS)
-    solvent_name = solvent_names[rng.integers(len(solvent_names))]
+    if solvent_name not in SOLVENT_PEAKS:
+        solvent_names = list(SOLVENT_PEAKS)
+        solvent_name = solvent_names[rng.integers(len(solvent_names))]
     solvent_info = SOLVENT_PEAKS[solvent_name]
 
     intensity_scale = max_intensity if max_intensity > 0 else 1.0
@@ -400,12 +474,13 @@ def _add_solvent_and_water_peaks(
 
     if rng.random() < WATER_PROBABILITY and solvent_name in WATER_PEAKS:
         water_info = WATER_PEAKS[solvent_name]
+        lo, hi = WATER_INTENSITY_FACTOR_RANGE
         spectrum = spectrum + _peak_at_ppm(
             grid,
             rng,
             phase,
             water_info["ppm"] + rng.uniform(-0.05, 0.05),  # Water peaks can shift more
-            intensity_scale * rng.uniform(*WATER_INTENSITY_FACTOR_RANGE),
+            intensity_scale * float(np.exp(rng.uniform(np.log(lo), np.log(hi)))),
             _mean_widths(water_info["width_factor"], water_info["lorentz_factor"]),
         )
     return spectrum
@@ -423,7 +498,7 @@ def _add_impurity_peaks(
             grid,
             rng,
             phase,
-            rng.uniform(PPM_MIN, PPM_MAX),
+            rng.uniform(grid.ppm_min, grid.ppm_max),
             rng.uniform(0.001, IMPURITY_INTENSITY_MAX_FRAC) * max_intensity,
             _sample_widths(rng, width_factor=rng.uniform(*IMPURITY_WIDTH_FACTOR_RANGE)),
         )
@@ -475,7 +550,216 @@ def _apply_global_broadening(spectrum: np.ndarray, grid: _Grid, rng: np.random.G
     return gaussian_filter1d(spectrum, sigma=sigma_points, mode="reflect")
 
 
-def augment(h_nmr: np.ndarray, spectrometer_freq_hz: float | None = None, rng: np.random.Generator | None = None) -> np.ndarray:
+def _rolled(spectrum: np.ndarray, shift_idx: int) -> np.ndarray:
+    """np.roll with the wrapped edge zero-filled instead of cycled."""
+    out = np.roll(spectrum, shift_idx)
+    if shift_idx > 0:
+        out[:shift_idx] = 0
+    elif shift_idx < 0:
+        out[shift_idx:] = 0
+    return out
+
+
+def _add_reference_peak(
+    spectrum: np.ndarray, grid: _Grid, rng: np.random.Generator, phase: _Phase, max_intensity: float
+) -> np.ndarray:
+    """TMS at 0 ppm; most literature spectra are referenced to it and many still show it."""
+    if rng.random() > TMS_PROBABILITY:
+        return spectrum
+    intensity = rng.uniform(*TMS_INTENSITY_RANGE) * max_intensity
+    return spectrum + _peak_at_ppm(grid, rng, phase, rng.uniform(-0.01, 0.01), intensity, _sample_widths(rng))
+
+
+def _add_known_impurities(
+    spectrum: np.ndarray, grid: _Grid, rng: np.random.Generator, phase: _Phase, max_intensity: float, solvent_name: str
+) -> np.ndarray:
+    """Common lab contaminants at their tabulated shifts for this solvent, all lines or none."""
+    addition = np.zeros(grid.num_points)
+    for prob, lines_by_solvent in H_IMPURITIES.values():
+        lines = lines_by_solvent.get(solvent_name)
+        if not lines or rng.random() > prob:
+            continue
+        scale = rng.uniform(*KNOWN_IMPURITY_SCALE_RANGE) * max_intensity
+        largest_area = max(area for _, area in lines)
+        for ppm, area in lines:
+            addition += _peak_at_ppm(
+                grid, rng, phase, ppm + rng.uniform(-0.02, 0.02), scale * area / largest_area, _sample_widths(rng)
+            )
+    return spectrum + addition
+
+
+def _add_spinning_sidebands(
+    spectrum: np.ndarray, grid: _Grid, rng: np.random.Generator, spectrometer_freq_hz: float
+) -> np.ndarray:
+    """Small mirror images of every peak at +- the spinning rate, from magnet/tube inhomogeneity."""
+    if rng.random() > SPINNING_SIDEBAND_PROBABILITY:
+        return spectrum
+    offset_idx = round(_hz_to_ppm(rng.uniform(*SPINNING_RATE_HZ_RANGE), spectrometer_freq_hz) * grid.points_per_ppm)
+    if offset_idx < 1:
+        return spectrum
+    up = rng.uniform(*SPINNING_SIDEBAND_FRACTION_RANGE)
+    down = rng.uniform(*SPINNING_SIDEBAND_FRACTION_RANGE)  # the two sides need not match
+    return spectrum + up * _rolled(spectrum, offset_idx) + down * _rolled(spectrum, -offset_idx)
+
+
+def _apply_solvent_suppression(
+    spectrum: np.ndarray, grid: _Grid, rng: np.random.Generator, solvent_name: str, max_intensity: float
+) -> np.ndarray:
+    """A suppression notch over the water region: attenuated signal, locally boosted noise."""
+    if solvent_name not in SUPPRESSION_SOLVENTS or solvent_name not in WATER_PEAKS or rng.random() > SUPPRESSION_PROBABILITY:
+        return spectrum
+    center_idx = grid.ppm_to_pos(WATER_PEAKS[solvent_name]["ppm"])
+    width_points = rng.uniform(*SUPPRESSION_WIDTH_PPM_RANGE) * grid.points_per_ppm
+    profile = np.exp(-0.5 * ((grid.axis - center_idx) / max(width_points, 1.0)) ** 2)
+    spectrum = spectrum * (1 - rng.uniform(*SUPPRESSION_DEPTH_RANGE) * profile)
+    noise_level = np.mean(INTENSITY_NOISE_FACTOR_RANGE) * max_intensity * rng.uniform(*SUPPRESSION_NOISE_BOOST_RANGE)
+    return spectrum + profile * rng.normal(0, noise_level, grid.num_points)
+
+
+def _apply_shim_asymmetry(spectrum: np.ndarray, grid: _Grid, rng: np.random.Generator) -> np.ndarray:
+    """Bad shimming: every line grows an exponential tail on one side of the axis."""
+    if rng.random() > SHIM_ASYMMETRY_PROBABILITY:
+        return spectrum
+    tau = rng.uniform(*SHIM_TAIL_PPM_RANGE) * grid.points_per_ppm / 3.0
+    half = int(6 * tau)
+    if half < 1 or tau <= 0:
+        return spectrum
+    kernel = np.zeros(2 * half + 1)
+    kernel[half] = 1.0
+    tail = rng.uniform(*SHIM_TAIL_FRACTION_RANGE) * np.exp(-np.arange(1, half + 1) / tau)
+    if rng.random() < 0.5:
+        kernel[half + 1 :] = tail
+    else:
+        kernel[:half] = tail[::-1]
+    return np.convolve(spectrum, kernel / kernel.sum(), mode="same")
+
+
+def _apply_truncation_wiggles(spectrum: np.ndarray, grid: _Grid, rng: np.random.Generator) -> np.ndarray:
+    """Sinc ringing around every line, from Fourier-transforming a truncated FID."""
+    if rng.random() > TRUNCATION_PROBABILITY:
+        return spectrum
+    period = rng.uniform(*TRUNCATION_PERIOD_PPM_RANGE) * grid.points_per_ppm
+    half = int(6 * period)
+    if half < 2:
+        return spectrum
+    n = np.arange(-half, half + 1, dtype=float)
+    kernel = rng.uniform(*TRUNCATION_AMPLITUDE_RANGE) * np.sinc(n / period) * np.exp(-np.abs(n) / (4 * period))
+    kernel[half] = 1.0
+    return np.convolve(spectrum, kernel / kernel.sum(), mode="same")
+
+
+def _add_correlated_noise(spectrum: np.ndarray, rng: np.random.Generator, max_intensity: float) -> np.ndarray:
+    """Baseline noise with a finite correlation length.
+
+    Added BEFORE the final broadening and drawn smooth: apodization filters the
+    noise together with the signal, so strictly white per-pixel noise is a
+    synthetic fingerprint a model can key on.
+    """
+    noise_factor = rng.uniform(*INTENSITY_NOISE_FACTOR_RANGE)
+    level = noise_factor * max_intensity if max_intensity > 0 else noise_factor
+    noise = rng.normal(0, 1.0, len(spectrum))
+    sigma = rng.uniform(*NOISE_CORRELATION_SIGMA_POINTS)
+    if sigma >= 0.3:
+        noise = gaussian_filter1d(noise, sigma)
+    std = noise.std()
+    return spectrum + noise * (level / std) if std > _EPS else spectrum
+
+
+def _add_signal_jitter_noise(spectrum: np.ndarray, grid: _Grid, rng: np.random.Generator) -> np.ndarray:
+    """Scan-to-scan instability: noise proportional to the signal, localized at the peaks.
+
+    Amplitude jitter between co-added scans multiplies the signal by a slowly
+    varying factor; frequency jitter adds derivative-shaped noise, the fuzz seen
+    on the flanks of tall solvent lines (the 1D analogue of t1-noise).
+    """
+    if rng.random() > SIGNAL_JITTER_PROBABILITY:
+        return spectrum
+    slow = gaussian_filter1d(rng.normal(0, 1.0, grid.num_points), 5.0)
+    std = slow.std()
+    if std > _EPS:
+        spectrum = spectrum * (1 + rng.uniform(*AMP_JITTER_RANGE) * slow / std)
+    kappa = rng.uniform(*FREQ_JITTER_POINTS_RANGE)
+    return spectrum + kappa * rng.normal(0, 1.0, grid.num_points) * np.gradient(spectrum)
+
+
+def _add_baseline_ripple(spectrum: np.ndarray, rng: np.random.Generator, max_intensity: float) -> np.ndarray:
+    """Receiver-side baseline: a small DC offset always, and the slow sinusoidal roll
+    of a clipped FID with some probability."""
+    spectrum = spectrum + rng.normal(0, BASELINE_DC_OFFSET_SIGMA) * max_intensity
+    if rng.random() > BASELINE_RIPPLE_PROBABILITY:
+        return spectrum
+    x = np.linspace(0, 1, len(spectrum))
+    amplitude = rng.uniform(*BASELINE_RIPPLE_AMPLITUDE_RANGE) * max_intensity
+    periods = rng.uniform(*BASELINE_RIPPLE_PERIODS_RANGE)
+    return spectrum + amplitude * np.sin(2 * np.pi * periods * x + rng.uniform(0, 2 * np.pi))
+
+
+def apply_instrument_artifacts(
+    spectrum: np.ndarray,
+    grid: _Grid,
+    rng: np.random.Generator,
+    phase: _Phase,
+    spectrometer_freq_hz: float,
+    solvent_name: str | None = None,
+    drift_amplitude: float = BASELINE_DRIFT_AMPLITUDE,
+    clip_negative: bool = True,
+) -> np.ndarray:
+    """Everything the tube, magnet, and receiver do to a rendered spectrum.
+
+    The shared back half of both augmentation paths (`augment` on rasterised
+    spectra, `multiplets_to_spectrum` on reported multiplet lists): solvent and
+    contaminant peaks, spinning sidebands, suppression, lineshape defects,
+    referencing error, and the noise model. Every stage draws from `rng` only,
+    so a seeded generator reproduces the spectrum bit for bit.
+
+    Args:
+        solvent_name: Key of SOLVENT_PEAKS; if None or unknown, one is drawn at random.
+        drift_amplitude: Scale of the polynomial baseline roll.
+        clip_negative: Clip the result at zero. Pass False to keep the negative
+            baseline excursions and dispersive lobes a real spectrum has.
+    """
+    if solvent_name not in SOLVENT_PEAKS:
+        solvent_names = list(SOLVENT_PEAKS)
+        solvent_name = solvent_names[rng.integers(len(solvent_names))]
+
+    max_intensity = (np.max(spectrum) if spectrum.size > 0 else 0.0) or 1e-5
+
+    # Things in the tube besides the analyte
+    spectrum = _add_solvent_and_water_peaks(spectrum, grid, rng, phase, max_intensity, solvent_name)
+    spectrum = _add_reference_peak(spectrum, grid, rng, phase, max_intensity)
+    spectrum = _add_known_impurities(spectrum, grid, rng, phase, max_intensity, solvent_name)
+    spectrum = _add_impurity_peaks(spectrum, grid, rng, phase, max_intensity)
+
+    # Instrument response, applied to everything at once
+    spectrum = _add_spinning_sidebands(spectrum, grid, rng, spectrometer_freq_hz)
+    spectrum = _apply_solvent_suppression(spectrum, grid, rng, solvent_name, max_intensity)
+    spectrum = _apply_shim_asymmetry(spectrum, grid, rng)
+    spectrum = _apply_truncation_wiggles(spectrum, grid, rng)
+    spectrum = _apply_global_shift(spectrum, grid, rng)
+
+    # Noise before the final broadening, so apodization smooths signal and noise together
+    scale = (np.max(spectrum) if spectrum.size > 0 else 0.0) or max_intensity
+    spectrum = _add_correlated_noise(spectrum, rng, scale)
+    spectrum = _apply_global_broadening(spectrum, grid, rng)
+    spectrum = _add_signal_jitter_noise(spectrum, grid, rng)
+
+    spectrum = _add_baseline_drift(spectrum, rng, drift_amplitude, scale)
+    spectrum = _add_baseline_ripple(spectrum, rng, scale)
+
+    if clip_negative:
+        spectrum = np.maximum(spectrum, 0)
+    if rng.random() < 0.2:
+        spectrum = spectrum * rng.uniform(0.85, 1.15)
+    return spectrum
+
+
+def augment(
+    h_nmr: np.ndarray,
+    spectrometer_freq_hz: float | None = None,
+    rng: np.random.Generator | None = None,
+    solvent: str | None = None,
+    clip_negative: bool = True,
+) -> np.ndarray:
     """
     Augments an NMR spectrum with realistic effects, including variable
     spectrometer frequencies and diverse water peak intensities.
@@ -486,13 +770,17 @@ def augment(h_nmr: np.ndarray, spectrometer_freq_hz: float | None = None, rng: n
             If None, a random frequency from COMMON_SPECTROMETER_FREQS_HZ is chosen.
         rng (np.random.Generator, optional): Source of randomness. If None, a freshly
             seeded generator is used, which keeps forked dataloader workers independent.
+        solvent (str, optional): Key of SOLVENT_PEAKS steering the residual solvent,
+            water, and known-contaminant peaks; if None or unknown, one is drawn at random.
+        clip_negative (bool): Clip the result at zero (the default). Pass False to keep
+            the negative baseline excursions and dispersive lobes a real spectrum has.
 
     Returns:
-        np.ndarray: The augmented NMR spectrum, clipped to non-negative intensities.
+        np.ndarray: The augmented NMR spectrum.
     """
     if rng is None:
         rng = np.random.default_rng()
-    if spectrometer_freq_hz is None:
+    if spectrometer_freq_hz is None or spectrometer_freq_hz <= 0:
         spectrometer_freq_hz = COMMON_SPECTROMETER_FREQS_HZ[rng.integers(len(COMMON_SPECTROMETER_FREQS_HZ))]
 
     num_points = len(h_nmr)
@@ -513,17 +801,6 @@ def augment(h_nmr: np.ndarray, spectrometer_freq_hz: float | None = None, rng: n
     max_intensity_for_additions = max_signal_intensity or max_intensity_input or 1e-5
 
     spectrum = _add_c13_satellites(spectrum, peaks, grid, rng, phase, max_intensity_for_additions, spectrometer_freq_hz)
-    spectrum = _add_solvent_and_water_peaks(spectrum, grid, rng, phase, max_intensity_for_additions)
-    spectrum = _add_impurity_peaks(spectrum, grid, rng, phase, max_intensity_for_additions)
-
-    spectrum = _apply_global_shift(spectrum, grid, rng)
-    spectrum = _apply_global_broadening(spectrum, grid, rng)
-
-    scale_for_baseline = (np.max(spectrum) if spectrum.size > 0 else 0.0) or max_intensity_input or 1e-5
-    spectrum = _add_baseline_noise(spectrum, rng, scale_for_baseline)
-    spectrum = _add_baseline_drift(spectrum, rng, BASELINE_DRIFT_AMPLITUDE, scale_for_baseline)
-    spectrum = np.maximum(spectrum, 0)
-
-    if rng.random() < 0.2:
-        spectrum = spectrum * rng.uniform(0.85, 1.15)
-    return spectrum
+    return apply_instrument_artifacts(
+        spectrum, grid, rng, phase, spectrometer_freq_hz, solvent_name=solvent, clip_negative=clip_negative
+    )

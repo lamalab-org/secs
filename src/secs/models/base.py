@@ -80,18 +80,10 @@ class ModalityEncoder(nn.Module):
             self.freeze()
 
     def load_checkpoint(self, ckpt_path: str, strict: bool = False) -> None:
-        """Load a backbone checkpoint, raw `.pth` state dict or Lightning `.ckpt` alike.
-
-        Loading is non-strict, so a checkpoint may carry heads this backbone does
-        not build (a MolCLR `.pth` brings its contrastive `out_lin` along). What
-        it may not do is match *nothing*: that leaves a randomly initialised
-        backbone behind a config that says "pretrained", which is a whole
-        training run wasted on a silent typo.
+        """
+        Load a backbone checkpoint, raw `.pth` state dict or Lightning `.ckpt` alike.
         """
         state = unwrap_state_dict(torch.load(ckpt_path, map_location="cpu"))
-        # Counted by hand rather than from `missing`: BatchNorm keeps
-        # `num_batches_tracked` out of the missing list, which would make a
-        # checkpoint that matched nothing look like it matched one key per norm.
         backbone_state = self._backbone.state_dict()
         loaded = sum(1 for key, value in state.items() if getattr(backbone_state.get(key), "shape", None) == value.shape)
         missing, unexpected = self._backbone.load_state_dict(state, strict=strict)
@@ -115,10 +107,6 @@ class ModalityEncoder(nn.Module):
         nn.Module.train(self._backbone, False)
 
     def train(self, mode: bool = True):
-        # A frozen backbone stays in eval: BatchNorm and dropout must not keep
-        # drifting while the weights they belong to are fixed. Called through
-        # `nn.Module` directly so an encoder whose `_backbone` is itself does
-        # not recurse.
         nn.Module.train(self, mode)
         if self.frozen:
             nn.Module.train(self._backbone, False)

@@ -5,10 +5,12 @@ from hydra import compose, initialize_config_dir
 from loguru import logger
 from torch import Tensor
 from torch.nn.modules.utils import consume_prefix_in_state_dict_if_present
+from torch_geometric.data import Batch
 
 from secs.data.modalities import ModalityConstants
 from secs.models import MolBind
 from secs.utils import select_device
+from secs.utils.graph import smiles_to_graph_data
 
 LIGHTNING_ONLY_PREFIXES = ("reference_encoder.", "reference_proj.")
 
@@ -67,8 +69,11 @@ def load_models(
 class SmilesEmbedder:
     """Encodes SMILES into each modality's shared embedding space.
 
-    One MolBind per modality, all encoding through the *smiles* tower, so a
-    candidate structure can be compared against a target spectrum embedding.
+    One MolBind per modality. Each model is entered through its own *central*
+    tower -- the MolFormer SMILES encoder for a smiles-central model, the MolCLR
+    GIN over the RDKit graph for a graph-central one -- so a candidate structure
+    can be compared against a target spectrum embedding whichever way the model
+    was trained. Callers only ever hand over SMILES strings.
     """
 
     def __init__(
@@ -83,6 +88,11 @@ class SmilesEmbedder:
         self.context_length = context_length
         self.chunk_size = chunk_size
         self._tokenizer = ModalityConstants["smiles"].tokenizer
+        unsupported = {
+            m: model.central_modality for m, model in models.items() if model.central_modality not in ("smiles", "graph")
+        }
+        if unsupported:
+            raise ValueError(f"Unsupported central modality for candidate encoding: {unsupported}")
 
     @property
     def modalities(self) -> list[str]:
@@ -98,15 +108,35 @@ class SmilesEmbedder:
         )
         return tokens["input_ids"], tokens["attention_mask"]
 
-    def _encode_batch(self, smiles: list[str]) -> dict[str, Tensor]:
+    def _encode_smiles_central(self, model: MolBind, smiles: list[str]) -> Tensor:
         input_ids, attention_mask = self.tokenize(smiles)
-        input_ids = input_ids.to(self.device)
-        attention_mask = attention_mask.to(self.device)
+        return model.encode_modality((input_ids.to(self.device), attention_mask.to(self.device)), modality="smiles")
 
+    def _encode_graph_central(self, model: MolBind, smiles: list[str]) -> Tensor:
+        """Graph tower: RDKit graphs batched with torch_geometric.
+
+        Candidates a generator proposes are not all parseable. Those get a zero
+        embedding (cosine similarity 0) rather than breaking the batch; the
+        validity penalty is what actually punishes them.
+        """
+        graphs = [smiles_to_graph_data(s) for s in smiles]
+        valid = [i for i, g in enumerate(graphs) if g is not None]
+        # Encode methane when nothing parses, purely to learn the embedding width.
+        batch_graphs = [graphs[i] for i in valid] if valid else [smiles_to_graph_data("C")]
+        encoded = model.encode_modality(Batch.from_data_list(batch_graphs).to(self.device), modality="graph")
+        out = torch.zeros(len(smiles), encoded.shape[-1], device=encoded.device, dtype=encoded.dtype)
+        if valid:
+            out[valid] = encoded
+        return out
+
+    def _encode_batch(self, smiles: list[str]) -> dict[str, Tensor]:
         embeddings: dict[str, Tensor] = {}
         with torch.inference_mode():
             for modality, model in self.models.items():
-                embeddings[modality] = model.encode_modality((input_ids, attention_mask), modality="smiles")
+                if model.central_modality == "graph":
+                    embeddings[modality] = self._encode_graph_central(model, smiles)
+                else:
+                    embeddings[modality] = self._encode_smiles_central(model, smiles)
         return embeddings
 
     def encode(self, smiles: list[str]) -> dict[str, Tensor]:
