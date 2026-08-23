@@ -21,7 +21,7 @@ def molbind_state_dict(state_dict: dict) -> dict:
     """
     renamed = dict(state_dict)
     consume_prefix_in_state_dict_if_present(renamed, "model.")
-    return {k: v for k, v in renamed.items()}
+    return renamed
 
 
 def load_model(config, device: str) -> MolBind:
