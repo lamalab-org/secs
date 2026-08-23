@@ -16,7 +16,7 @@ from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from pytorch_lightning.strategies.ddp import DDPStrategy
 
 from secs.data.datamodule import SECSDataModule
-from secs.data.secs_dataset import SECSDataset
+from secs.data.secs_dataset import SECSDataset, columns_to_read, source_column
 from secs.models.lightning_module import SECSModule
 
 load_dotenv()
@@ -48,7 +48,8 @@ def train_molbind(config: DictConfig):
     data = load_dataset(
         config.data.dataset_path, config.data.dataset_config if hasattr(config.data, "dataset_config") else "default"
     )
-    features = [*config.data.modalities, config.data.central_modality]  # , "x_min", "x_max"]
+    # `graph` has no column of its own: it is built from the central SMILES.
+    features = columns_to_read(config.data.modalities, config.data.central_modality)
 
     train_data = data["train"].to_pandas()[features]
     valid_data = data["val"].to_pandas()[features]
@@ -56,7 +57,7 @@ def train_molbind(config: DictConfig):
     logger.info(f"Train data shape: {train_data.shape}")
     logger.info(f"Validation data shape: {valid_data.shape}")
 
-    train_shuffled_data = train_data.sort_values(by=config.data.central_modality).reset_index(drop=True)
+    train_shuffled_data = train_data.sort_values(by=source_column(config.data.central_modality)).reset_index(drop=True)
     valid_shuffled_data = valid_data.copy()
 
     # set up the dataloaders

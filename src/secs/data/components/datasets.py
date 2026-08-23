@@ -1,19 +1,19 @@
-from io import BytesIO
-
 import numpy as np
 import torch
 from torch import Tensor
 from torch.utils.data import Dataset
 
+from secs.data.components.central import CentralModalityData
 from secs.data.components.hnmr import augment
 from secs.utils import generate_hsqc_matrix
 from secs.utils.elucidation import reduce_resolution_by_averaging
+from secs.utils.graph import smiles_to_graph_data
 
 
 class StringDataset(Dataset):
     def __init__(
         self,
-        central_modality_data: tuple[Tensor, Tensor],
+        central_modality_data: CentralModalityData,
         other_modality_data: tuple[Tensor, Tensor],
         central_modality: str,
         other_modality: str,
@@ -21,64 +21,25 @@ class StringDataset(Dataset):
         """Dataset for string modalities.
 
         Args:
-            central_modality_data (tuple[Tensor, Tensor]): pair of (central_modality, tokenized_central_modality)
+            central_modality_data (CentralModalityData): row-addressable central modality
             other_modality_data (tuple[Tensor, Tensor]): pair of (other_modality, tokenized_other_modality)
             central_modality (str): name of central modality as found in ModalityConstants
             other_modality (str): name of other modality as found in ModalityConstants
         """
-        from secs.data.modalities import ModalityConstants
-
         # modality pair definition
         self.central_modality = central_modality
         self.other_modality = other_modality
         # modality pair data
         self.central_modality_data = central_modality_data
         self.other_modality_data = other_modality_data
-        self.central_modality_data_type = ModalityConstants[central_modality].data_type
-        self.other_modality_data_type = ModalityConstants[other_modality].data_type
 
     def __len__(self):
         return len(self.other_modality_data[0])
 
     def __getitem__(self, idx):
         return {
-            self.central_modality: tuple([i[idx] for i in self.central_modality_data])
-            if self.central_modality_data_type is str
-            else Tensor(self.central_modality_data[idx]),
-            self.other_modality: tuple([i[idx] for i in self.other_modality_data])
-            if self.other_modality_data_type is str
-            else Tensor(self.other_modality_data)[idx],
-        }
-
-
-class FingerprintSECSDataset(Dataset):
-    def __init__(
-        self,
-        central_modality_data: tuple[Tensor, Tensor],
-        fingerprint_data: list[list[int]],
-        central_modality: str,
-    ) -> None:
-        """Dataset for fingerprints.
-
-        Args:
-            central_modality_data (tuple[Tensor, Tensor]): pair of (central_modality, tokenized_central_modality)
-            fingerprint_data (Tensor): fingerprint data
-            central_modality (str): name of central modality as found in ModalityConstants
-        Returns:
-            None
-        """
-        self.central_modality_data = central_modality_data
-        self.central_modality = central_modality
-        self.other_modality = "fingerprint"
-        self.fingerprints = fingerprint_data
-
-    def __len__(self):
-        return len(self.fingerprints)
-
-    def __getitem__(self, idx: int) -> dict:
-        return {
-            self.central_modality: [i[idx] for i in self.central_modality_data],
-            self.other_modality: Tensor(self.fingerprints[idx]),
+            self.central_modality: self.central_modality_data[idx],
+            self.other_modality: tuple(column[idx] for column in self.other_modality_data),
         }
 
 
@@ -98,7 +59,7 @@ class cNmrDataset(Dataset):
         data: list[list[float]],
         max_peaks: int = 128,
         min_value: float = -5.0,
-        max_value: float = 230.0,
+        max_value: float = 218.0,
         augment: bool = False,
         **kwargs,
     ) -> None:
@@ -122,7 +83,7 @@ class cNmrDataset(Dataset):
                 keep.append(i)
 
         # filter central modality in lockstep so indices stay aligned
-        self.central_modality_data = [[col[i] for i in keep] for col in central_data]
+        self.central_modality_data = central_data.select(keep)
 
         # --- precompute padded tensors once ---
         N = len(cleaned)
@@ -138,7 +99,7 @@ class cNmrDataset(Dataset):
 
     def __getitem__(self, index: int) -> dict:
         return {
-            self.central_modality: [col[index] for col in self.central_modality_data],
+            self.central_modality: self.central_modality_data[index],
             "c_nmr": (self.shifts[index], self.mask[index]),
         }
 
@@ -163,7 +124,7 @@ class IrDataset(Dataset):
         # convert to tensor
         ir = torch.tensor(self.ir[index], dtype=torch.float32)[100:1700].unsqueeze(0)
         return {
-            self.central_modality: [i[index] for i in self.central_modality_data],
+            self.central_modality: self.central_modality_data[index],
             self.other_modality: ir,
         }
 
@@ -188,7 +149,7 @@ class MassSpecDataset(Dataset):
 
     def __getitem__(self, index: int) -> dict:
         return {
-            self.central_modality: [i[index] for i in self.central_modality_data],
+            self.central_modality: self.central_modality_data[index],
             self.other_modality: self.mass_to_spec(self.mass_spec[index]),
         }
 
@@ -248,26 +209,21 @@ class hNmrDataset(Dataset):
 
     def __getitem__(self, index: int) -> dict:
         return {
-            self.central_modality: [i[index] for i in self.central_modality_data],
+            self.central_modality: self.central_modality_data[index],
             self.other_modality: self.hnmr_to_vec(self.h_nmr[index]),
         }
 
     def hnmr_to_vec(self, nmr_shifts: list[list[float]]) -> Tensor:
         nmr_array = np.array(nmr_shifts) / np.max(nmr_shifts)
         if self.augment:
+            # A fresh generator per call keeps forked dataloader workers independent.
+            rng = np.random.default_rng()
             resolutions_available = [500, 1000, 2000, 3000, 5000, 10000]
-            self.vec_size = np.random.choice(resolutions_available, p=[0.05, 0.15, 0.2, 0.2, 0.2, 0.2])
-            augment_prob = np.random.rand()
-            if augment_prob > 0.1:
-                nmr_array = augment(nmr_array)
+            self.vec_size = rng.choice(resolutions_available, p=[0.05, 0.15, 0.2, 0.2, 0.2, 0.2])
+            if rng.random() > 0.1:
+                nmr_array = augment(nmr_array, rng=rng)
                 # resolution to 2000 (but still in a vector of 10_000)
                 nmr_array = reduce_resolution_by_averaging(nmr_array, window_size=int(10_000 / self.vec_size))
-        else:
-            # just add random noise
-            noise = np.random.normal(0, 0.01, nmr_array.shape)
-            # nmr_array = nmr_array + noise
-            # nmr_array = reduce_resolution_by_averaging(nmr_array, window_size=int(10_000 / self.vec_size))
-        # nmr_array = np.cumsum(nmr_array, axis=0)
         nmr_array = nmr_array / np.max(nmr_array)
         return torch.tensor(
             nmr_array,
@@ -310,6 +266,30 @@ class HSQCDataset(Dataset):
         # input shape (512, 512) with 1 channel
         image = generate_hsqc_matrix(self.hsqc[index])
         return {
-            self.central_modality: [i[index] for i in self.central_modality_data],
+            self.central_modality: self.central_modality_data[index],
             self.other_modality: torch.tensor(image, dtype=torch.float32).unsqueeze(0),
+        }
+
+
+class GraphDataset(Dataset):
+    """
+    Molecular graphs dataset created at training time from SMILES
+    strings.
+    """
+
+    def __init__(self, data: list[str], **kwargs) -> None:
+        self.central_modality = kwargs["central_modality"]
+        self.other_modality = "graph"
+
+        keep = [i for i, smiles in enumerate(data) if smiles_to_graph_data(smiles) is not None]
+        self.smiles = [data[i] for i in keep]
+        self.central_modality_data = kwargs["central_modality_data"].select(keep)
+
+    def __len__(self) -> int:
+        return len(self.smiles)
+
+    def __getitem__(self, index: int) -> dict:
+        return {
+            self.central_modality: self.central_modality_data[index],
+            self.other_modality: smiles_to_graph_data(self.smiles[index]),
         }

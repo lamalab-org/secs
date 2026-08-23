@@ -12,7 +12,7 @@ from loguru import logger
 from omegaconf import DictConfig
 
 from secs.data.datamodule import SECSDataModule
-from secs.data.secs_dataset import SECSDataset
+from secs.data.secs_dataset import SECSDataset, derive_modality_columns
 from secs.metrics.retrieval import full_database_retrieval
 from secs.models.lightning_module import SECSModule
 from secs.utils.embeddings import aggregate_embeddings
@@ -20,8 +20,8 @@ from secs.utils.utils import HANDLERS as handlers
 
 load_dotenv()
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
-# set an unique identifier for the retrieval run
-RETRIEVAL_TIME = datetime.datetime.now().strftime("%Y%m%d_%H%M")
+
+RETRIEVAL_TIME = datetime.datetime.now().strftime("%Y%m%d_%H%M")  # set an unique identifier for the retrieval run
 
 
 def embed(config: DictConfig):
@@ -47,6 +47,7 @@ def embed(config: DictConfig):
 
     # Split the data into validation and training datasets
     valid_shuffled_data = shuffled_data.tail(int(config.data.valid_frac * dataset_length))
+    valid_shuffled_data = derive_modality_columns(valid_shuffled_data, config.data.modalities, config.data.central_modality)
 
     # set up the dataloaders
     valid_datasets = (

@@ -5,10 +5,9 @@ from lightning.pytorch.utilities.combined_loader import CombinedLoader
 from loguru import logger
 from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader, DistributedSampler
-from torch_geometric.loader import DataLoader as GeometricDataLoader
 
 from secs.data.components.datasets import StringDatasetEmbedding
-from secs.data.modalities import NonStringModalities
+from secs.data.modalities import loader_for
 
 
 class SECSDataModule(LightningDataModule):
@@ -38,37 +37,25 @@ class SECSDataModule(LightningDataModule):
     ) -> CombinedLoader:
         dataloaders = {}
 
-        for modality in self.datasets[mode]:
+        for modality, dataset in self.datasets[mode].items():
             if self.distributed:
                 distributed_sampler = DistributedSampler(
-                    self.datasets[mode][modality],
+                    dataset,
                     shuffle=shuffle,
                 )
                 shuffle = None
             else:
                 distributed_sampler = None
-            if modality == NonStringModalities.GRAPH or modality == NonStringModalities.STRUCTURE:
-                dataloaders[modality] = GeometricDataLoader(
-                    self.datasets[mode][modality],
-                    batch_size=batch_size,
-                    num_workers=num_workers,
-                    drop_last=drop_last,
-                    sampler=distributed_sampler,
-                    shuffle=shuffle,
-                    prefetch_factor=num_workers,
-                    persistent_workers=True,
-                )
-            else:
-                dataloaders[modality] = DataLoader(
-                    self.datasets[mode][modality],
-                    batch_size=batch_size,
-                    num_workers=num_workers,
-                    drop_last=drop_last,
-                    sampler=distributed_sampler,
-                    shuffle=shuffle,
-                    prefetch_factor=num_workers,
-                    persistent_workers=True,
-                )
+            dataloaders[modality] = loader_for(dataset.central_modality, dataset.other_modality)(
+                dataset,
+                batch_size=batch_size,
+                num_workers=num_workers,
+                drop_last=drop_last,
+                sampler=distributed_sampler,
+                shuffle=shuffle,
+                prefetch_factor=num_workers,
+                persistent_workers=True,
+            )
         # CombinedLoader does not work with DDPSampler directly
         # So each dataloader has a DistributedSampler
         logger.info(f"Nr of dataloaders: {len(dataloaders)}")
@@ -111,17 +98,10 @@ class SECSDataModule(LightningDataModule):
         num_workers: int,
         mode: str,
     ) -> dict[str, DataLoader]:
-        """Build per-modality dataloaders for the predict step.
-
-        Unlike `build_multimodal_dataloader`, no DistributedSampler is used,
-        so this can run on a single GPU. Predictions are concatenated later
-        in `retrieval.py`.
-        """
-        geometric = {NonStringModalities.GRAPH, NonStringModalities.STRUCTURE}
+        """Build per-modality dataloaders for the predict step."""
         dataloaders = {}
         for modality, dataset in self.datasets[mode][0].items():
-            loader_cls = GeometricDataLoader if modality in geometric else DataLoader
-            dataloaders[modality] = loader_cls(
+            dataloaders[modality] = loader_for(dataset.central_modality, dataset.other_modality)(
                 dataset,
                 batch_size=batch_size[modality] if isinstance(batch_size, dict) else batch_size,
                 num_workers=num_workers,

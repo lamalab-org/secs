@@ -57,22 +57,6 @@ class PeakSetTransformer(nn.Module):
         -> continuous ppm embedding (+ peak-presence token)
         -> transformer encoder (permutation-equivariant, padding-masked)
         -> masked mean over the real peak tokens  ->  (B, embed_dim)
-
-    The backbone stops at the pooled representation. Projection to the shared
-    contrastive space is `ProjectionHead`, configured per modality under
-    `model.projection_heads` -- keeping a second projection stack in here as
-    well meant four linear layers after pooling and two places to configure
-    the same thing. Normalisation belongs to the consumer too: InfoNCE and
-    `cosine_similarity` both normalise their inputs.
-
-    Readout is a masked mean rather than a [CLS] token or a learned query.
-    Both of those are a softmax over the set, which can saturate onto one or
-    two peaks and forces the whole spectrum through a single learned routing
-    step; for an unordered set of ~10-40 peaks where the entire distribution
-    carries the signal, the mean is the better inductive bias and costs no
-    parameters. A content-free [CLS] also looks identical in every sample, so
-    peaks attend to it as a cheap no-op and it drains attention mass from the
-    peak-peak comparisons that matter (the ViT/LLM attention-sink effect).
     """
 
     def __init__(
@@ -84,10 +68,18 @@ class PeakSetTransformer(nn.Module):
         dropout: float = 0.1,
         n_freqs: int = 64,
         max_ppm: float = 218.0,
+        pool: str = "mean",
     ):
         super().__init__()
+        if pool not in ("mean", "sum", "attention"):
+            raise ValueError(f"pool must be one of mean/sum/attention, got {pool!r}")
         self.embed_dim = embed_dim
+        self.pool = pool
         self.tokenizer = PeakTokenizer(embed_dim, n_freqs=n_freqs, max_ppm=max_ppm)
+        self.pool_attn = (
+            nn.MultiheadAttention(embed_dim, num_heads, dropout=dropout, batch_first=True) if pool == "attention" else None
+        )
+        self.pool_query = nn.Parameter(torch.randn(1, 1, embed_dim) * 0.02) if pool == "attention" else None
 
         enc_layer = nn.TransformerEncoderLayer(
             d_model=embed_dim,
@@ -116,10 +108,7 @@ class PeakSetTransformer(nn.Module):
         x = self.tokenizer(shifts, mask)  # (B, P, D)
 
         pad = ~mask  # True = pad
-        # A fully padded row would mask every position, and softmax over an
-        # all -inf row is NaN. The [CLS] token used to guarantee one live
-        # position; keep the first one live instead. Its value is then
-        # excluded from the mean below, so it cannot contribute.
+
         empty = pad.all(dim=1)
         if empty.any():
             pad = pad.clone()
@@ -128,10 +117,20 @@ class PeakSetTransformer(nn.Module):
         x = self.transformer(x, src_key_padding_mask=pad)
         x = self.encoder_norm(x)
 
-        # Masked mean over real peaks only; clamp so an empty row gives zeros
-        # rather than a division by zero.
+        if self.pool == "attention":
+            query = self.pool_query.expand(x.shape[0], -1, -1)
+            pooled, _ = self.pool_attn(query, x, x, key_padding_mask=pad, need_weights=False)
+            return pooled.squeeze(1)
+
         keep = mask.unsqueeze(-1).to(x.dtype)  # (B, P, 1)
-        return (x * keep).sum(dim=1) / keep.sum(dim=1).clamp(min=1.0)
+        total = (x * keep).sum(dim=1)
+        if self.pool == "sum":
+            # Mean pooling divides the peak count straight back out, and the peak
+            # count is nearly the number of distinct carbons -- the strongest
+            # single scalar about the molecule. Summing keeps it in the norm.
+            return total
+        # Masked mean; clamp so an empty row gives zeros rather than a 0/0.
+        return total / keep.sum(dim=1).clamp(min=1.0)
 
 
 @register_encoder("c_nmr", "transformer", default=True)

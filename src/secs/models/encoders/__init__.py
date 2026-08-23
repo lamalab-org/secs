@@ -5,16 +5,22 @@ pretrained models, after the model itself ("molformer"). Importing this package
 populates the encoder registry.
 """
 
+from secs.models.encoders.c_nmr.raster_cnn import CNmrRasterCNNEncoder
+from secs.models.encoders.c_nmr.relative import CNmrRelativeTransformerEncoder
 from secs.models.encoders.c_nmr.transformer import CNmrTransformerEncoder
-from secs.models.encoders.fingerprint.vae import FingerprintVAEEncoder
+from secs.models.encoders.graph.molclr_gcn import GraphGCNEncoder
+from secs.models.encoders.graph.molclr_gin import GraphGINEncoder
 from secs.models.encoders.h_nmr.cnn import HNmrCNNEncoder
 from secs.models.encoders.hsqc.cnn import HsqcCNNEncoder
 from secs.models.encoders.ir.cnn import IrCNNEncoder
 from secs.models.encoders.smiles.molformer import MolformerEncoder
 
 __all__ = [
+    "CNmrRasterCNNEncoder",
+    "CNmrRelativeTransformerEncoder",
     "CNmrTransformerEncoder",
-    "FingerprintVAEEncoder",
+    "GraphGCNEncoder",
+    "GraphGINEncoder",
     "HNmrCNNEncoder",
     "HsqcCNNEncoder",
     "IrCNNEncoder",

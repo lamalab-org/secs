@@ -1,17 +1,18 @@
 from enum import Enum, StrEnum
 from typing import NamedTuple
 
+from torch.utils.data import DataLoader
+from torch_geometric.data import Data
+from torch_geometric.loader import DataLoader as GeometricDataLoader
 from transformers import PreTrainedTokenizerBase
 
-from secs.data import HSQCDataset, IrDataset, StringDataset, cNmrDataset, hNmrDataset
+from secs.data import GraphDataset, HSQCDataset, IrDataset, StringDataset, cNmrDataset, hNmrDataset
 from secs.data.components.secs_tokenizers import SMILES_TOKENIZER
 
 
 class ModalitySpec(NamedTuple):
-    """Data-side description of a modality.
-
-    Which encoder a modality uses is not fixed here: several backbones can serve
-    the same modality, and the config picks one through `secs.models.registry`.
+    """
+    Data-side description of a modality.
     """
 
     data_type: type
@@ -29,7 +30,6 @@ class NonStringModalities(StrEnum):
     IR = "ir"
     HSQC = "hsqc"
     GRAPH = "graph"
-    STRUCTURE = "structure"
 
 
 class ModalityConstants(Enum):
@@ -42,6 +42,7 @@ class ModalityConstants(Enum):
     ir = ModalitySpec(list, IrDataset)
     smiles = ModalitySpec(str, StringDataset, SMILES_TOKENIZER)
     hsqc = ModalitySpec(list, HSQCDataset)
+    graph = ModalitySpec(Data, GraphDataset)
 
     @property
     def data_type(self):
@@ -54,3 +55,16 @@ class ModalityConstants(Enum):
     @property
     def tokenizer(self):
         return self.value[2]
+
+    @property
+    def loader(self) -> type:
+        """
+        The DataLoader class this modality's samples collate with.
+        """
+        return GeometricDataLoader if self.data_type is Data else DataLoader
+
+
+def loader_for(*modalities: str) -> type:
+    """The loader a sample pairing these modalities needs."""
+    loaders = {ModalityConstants[modality].loader for modality in modalities}
+    return GeometricDataLoader if GeometricDataLoader in loaders else DataLoader

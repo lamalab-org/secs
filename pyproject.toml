@@ -164,7 +164,7 @@ extend-exclude = [
   "resources_ee",
   "notebooks",
   "app",
-  "data",
+  "data/**",
   "configs",
 ]
 

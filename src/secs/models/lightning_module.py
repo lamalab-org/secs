@@ -10,7 +10,6 @@ from pytorch_lightning import LightningModule
 from torch import Tensor
 from torch.nn.functional import cosine_similarity
 from torch.optim import Optimizer
-from torch_geometric.data import Data
 from torchmetrics.retrieval import (
     RetrievalMRR,
     RetrievalRecall,
@@ -40,19 +39,11 @@ class SECSModule(LightningModule):
         logger.info(f"Per device batch size: {self.per_device_batch_size}")
         logger.info(f"Loss batch size: {self.batch_size}")
 
-        # Last, so that every parameter the checkpoint might carry (the
-        # temperature included) already exists.
         self._load_checkpoint(getattr(cfg, "ckpt_path", None))
 
     def _load_checkpoint(self, ckpt_path: str | None) -> None:
-        """Resume from a checkpoint written by this same LightningModule.
-
-        Its keys are already relative to `self` ("model.<...>"), so loading into
-        `self` rather than into `self.model` needs no key rewriting.
-        """
-        # Hydra configs spell "no checkpoint" as a bare `None`, which YAML reads
-        # as the string "None" rather than as null.
-        if ckpt_path is None or str(ckpt_path).strip().lower() in {"", "none", "null"}:
+        """Loads a checkpoint."""
+        if not ckpt_path or ckpt_path.strip().lower() in {"none", "null"}:
             logger.info("No checkpoint path found. Training from scratch.")
             return
         try:
@@ -61,19 +52,13 @@ class SECSModule(LightningModule):
             logger.warning(f"Checkpoint {ckpt_path} not found. Training from scratch.")
             return
         missing, unexpected = self.load_state_dict(state_dict, strict=False)
-        logger.info(f"Successfully loaded model from checkpoint: {ckpt_path}")
-        if missing:
-            logger.warning(f"Checkpoint is missing {len(missing)} keys (e.g. {missing[:3]})")
-        if unexpected:
-            logger.warning(f"Checkpoint carries {len(unexpected)} unexpected keys (e.g. {unexpected[:3]})")
+        logger.info(f"Loaded checkpoint: {ckpt_path}")
+        for name, keys in (("missing", missing), ("unexpected", unexpected)):
+            if keys:
+                logger.warning(f"Checkpoint has {len(keys)} {name} keys (e.g. {keys[:3]})")
 
-    def forward(self, batch: tuple[Data] | dict) -> dict:
-        if isinstance(batch, tuple) and isinstance(batch[0], Data):
-            dict_input_data = self._treat_graph_batch(batch[0])
-            forward_pass = self.model(dict_input_data)
-        else:
-            forward_pass = self.model(batch)
-        return forward_pass
+    def forward(self, batch: tuple | dict) -> dict:
+        return self.model(batch)
 
     def _info_nce_loss(self, z1: Tensor, z2: Tensor) -> float:
         if self.world_size > 1:
@@ -89,8 +74,6 @@ class SECSModule(LightningModule):
 
     def _multimodal_loss(self, embeddings_dict: dict[str, Tensor], prefix: str) -> float:
         if self.learnable_temperature:
-            # InfoNCE only divides its logits by this, so handing it a tensor
-            # keeps the graph intact and the gradient reaches the parameter.
             inv_t = self.log_inv_temperature.exp().clamp(max=self.max_inv_temperature)
             self.loss.temperature = 1.0 / inv_t
             self.log(f"{prefix}_temperature", 1.0 / inv_t.detach(), batch_size=self.batch_size, sync_dist=self.world_size > 1)
@@ -146,8 +129,6 @@ class SECSModule(LightningModule):
             }
         ]
         if self.learnable_temperature:
-            # No weight decay on the temperature: decaying it pulls log(1/T)
-            # toward 0, i.e. T toward 1, which is not a neutral prior.
             groups.append({"params": [self.log_inv_temperature], "weight_decay": 0.0})
         return torch.optim.AdamW(groups, lr=self.config.model.optimizer.lr)
 
@@ -161,33 +142,10 @@ class SECSModule(LightningModule):
         prefix: str,
     ) -> None:
         """
-        Example:
-
-        .unsqueeze(1) modality 1 embeddings of shape (Batch_Size, Embedding_Size) is equivalent
-        to Tensor[:, None, :].
-        .unsqueeze(0) modality 2 embeddings of shape (Batch_Size, Embedding_Size) is equivalent
-        to Tensor[None, :, :].
-
         This allows to compute the matrix of cosine similarities between all pairs of embeddings
         across two tensors containing embeddings for different modalities.
 
         preds, targets, indexes are tensors of shape (Batch_Size*Batch_size)
-
-        Example on a 2x2 matrix
-
-        >>> metric = RetrievalMRR(top_k=1)
-        >>> preds = torch.tensor([0.56, 0.3, 0.2, 0.7])
-        >>> preds = torch.tensor([[0.56, 0.3], [0.2, 0.7]]).flatten()
-        >>> # preds shape change: (Batch_Size, Batch_Size) -> (Batch_Size*Batch_Size)
-        # True corresponds to diagonal elements in our case
-        # for larger examples we can use torch.eye(Batch_Size).flatten()
-        >>> target = torch.tensor([True, False, False, True])
-        # These are query ids. Metrics are computed after grouping by query id and then averaging.
-        # For large matrices we can use torch.repeat_interleave(torch.arange(Batch_Size))
-        >>> indexes = torch.tensor([0, 0, 1, 1], dtype=torch.long)
-        >>> metric.update(preds, target, indexes)
-        >>> metric.compute()
-        # tensor(1.) output: since the cosine similarity on the diagonals is the highest in their corresponding row
         """
 
         metrics = [
@@ -234,20 +192,3 @@ class SECSModule(LightningModule):
                     batch_size=self.per_device_batch_size * self.world_size,
                     sync_dist=self.world_size > 1,
                 )
-
-    def _treat_graph_batch(self, batch: Data) -> dict:
-        # pos is only in "structure" modality and otherwise "graph"
-        modality = batch.modality[0]
-        # this adjusts the shape of the central modality data to be compatible with the model
-        batch_size = len(batch.central_modality)
-        if not hasattr(batch, "input_ids"):
-            central_modality_data = batch.central_modality_data.reshape(batch_size, -1)
-        else:
-            central_modality_data = (
-                batch.input_ids.reshape(batch_size, -1),
-                batch.attention_mask.reshape(batch_size, -1),
-            )
-        return {
-            self.central_modality: central_modality_data,
-            modality: batch,
-        }
