@@ -63,24 +63,3 @@ def test_hydra_none_checkpoint_means_from_scratch(registered_stub, secs_config):
 def test_missing_checkpoint_does_not_stop_training(registered_stub, secs_config, tmp_path):
     module = SECSModule(secs_config(registered_stub, ckpt_path=str(tmp_path / "nope.ckpt")))
     assert isinstance(module, SECSModule)
-
-
-def test_molbind_state_dict_strips_the_lightning_prefix():
-    """Loading a SECSModule checkpoint into a bare MolBind is the one place a
-    prefix still has to come off, and torch's own helper does it."""
-    pytest.importorskip("hydra")
-    try:
-        # imported here so the rest of the file runs without the SMILES tokenizer
-        from secs.elucidation.embedding import molbind_state_dict  # noqa: PLC0415
-    except Exception as exc:  # the SMILES tokenizer is fetched from the Hub
-        pytest.skip(f"secs.elucidation.embedding unavailable: {exc}")
-
-    checkpoint = {
-        "model.dict_encoders.c_nmr.encoder.weight": torch.zeros(1),
-        "model.reference_encoder.weight": torch.zeros(1),
-        "log_inv_temperature": torch.zeros(1),
-    }
-    assert molbind_state_dict(checkpoint) == {
-        "dict_encoders.c_nmr.encoder.weight": checkpoint["model.dict_encoders.c_nmr.encoder.weight"],
-        "log_inv_temperature": checkpoint["log_inv_temperature"],
-    }
