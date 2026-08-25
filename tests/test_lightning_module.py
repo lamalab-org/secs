@@ -1,6 +1,5 @@
 """Checkpoints written by SECSModule must reload into SECSModule without key surgery."""
 
-import pytest
 import torch
 
 from secs.models import SECSModule
